@@ -1571,6 +1571,15 @@ DASHBOARD_TEMPLATE = r"""<!doctype html>
   .filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   .filters select, .filters input[type=text] { background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:7px 9px; font-size:13px; }
   .filters select { min-width:140px; }
+  /* The OPEN multi-select listbox is browser-native chrome — most browsers
+     render it on a light/white system background regardless of the
+     <select>'s own dark background, and an <option> inherits the select's
+     light --text color by default, which reads as washed-out gray-on-white
+     until you hover/select it. Forcing a dark, high-contrast option color
+     here (independent of the theme tokens above) fixes that everywhere —
+     the popup's background isn't reliably themeable cross-browser, but the
+     text color is. */
+  .filters select option { color:#0f1115; background:#fff; }
   .rangebtns { display:flex; gap:4px; }
   .rangebtns button, .threshbtns button { background:var(--panel-2); color:var(--text-dim); border:1px solid var(--border); border-radius:7px; padding:6px 10px; font-size:12px; cursor:pointer; }
   .rangebtns button.active, .threshbtns button.active { background:var(--accent); color:#fff; border-color:var(--accent); box-shadow:0 0 0 3px rgba(91,140,255,.18); }
