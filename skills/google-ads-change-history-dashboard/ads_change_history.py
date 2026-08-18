@@ -1859,6 +1859,26 @@ DASHBOARD_TEMPLATE = r"""<!doctype html>
     <div id="categoryDist"></div>
   </section>
   <section>
+    <h2>Rule Matches</h2>
+    <div class="section-caption">Deterministic, user-adjustable rules — a match means the change crossed a threshold you set, not that it was good or bad. Off by default; every match always shows the exact number and rule next to it.</div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ruleMatchesToggle"> Rule-based change highlighting
+      </label>
+      <details id="ruleMatchesConfig">
+        <summary style="cursor:pointer;">Configure rules</summary>
+        <div style="margin-top:10px;">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;">Magnitude (±% change)</div>
+          <div id="ruleMatchesMagnitudeInputs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px;"></div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;">Structural</div>
+          <div id="ruleMatchesStateInputs" style="display:flex;flex-wrap:wrap;gap:14px;"></div>
+        </div>
+      </details>
+    </div>
+    <div class="note" id="ruleMatchesCount"></div>
+    <div id="ruleMatches"></div>
+  </section>
+  <section>
     <h2>Campaign Last Changes</h2>
     <div class="section-caption">"Days since" is computed against the current time in your browser, not the moment this file was generated — it grows the longer this file stays open.</div>
     <div class="threshbtns" id="threshBtns" style="margin-bottom:10px;">
@@ -1879,7 +1899,7 @@ DASHBOARD_TEMPLATE = r"""<!doctype html>
       <thead><tr>
         <th data-key="timestamp_iso">Date</th><th data-key="user_name">User</th><th data-key="account_name">Account</th>
         <th data-key="campaign_name">Campaign</th><th data-key="ad_group_name">Ad Group</th><th data-key="category">Category</th>
-        <th data-key="field_name">Change</th><th data-key="old_value">Old Value</th><th data-key="new_value">New Value</th><th data-key="source">Source</th>
+        <th data-key="field_name">Change</th><th data-key="old_value">Old Value</th><th data-key="new_value">New Value</th><th>Matches</th><th data-key="source">Source</th>
       </tr></thead>
       <tbody id="explorerBody"></tbody>
     </table>
@@ -1935,6 +1955,72 @@ function categoryPillStyle(cat){
 const HUES = ['#5b8cff','#3ecfb2','#b48aff','#ff6b9d','#f0c040','#5bc8ff','#35c98f','#f5834a'];
 function barFillStyle(color, pct){
   return `width:${Math.max(2,pct)}%;background:linear-gradient(90deg,${color}cc,${color});box-shadow:0 0 8px ${color}40;`;
+}
+// =====================================================================
+// RULE MATCHES (V1: Magnitude + State) — deterministic, user-adjustable
+// thresholds. A match means "this row crossed a value you set," never a
+// verdict on whether the change was good, bad, or risky — no severity
+// labels, no danger-red color, and every match always renders with the
+// exact number and rule next to it so the reader judges for themselves.
+// Computed entirely client-side from fields already in every row (like
+// Category Distribution / User Activity / etc. already are) — no CLI flag,
+// no re-run needed to change a threshold. Off by default.
+// =====================================================================
+// Matched on category/subcategory, not field_name/resource_type — those two
+// are only populated for structured (field-column) sources. A text-summary
+// source (the Turkish legacy format, and the real native Google Ads UI
+// "Change history" CSV export — see docs/DOGFOODING-NOTES.md) leaves both
+// null, but categorize_changes() always resolves category/subcategory via
+// one path or the other, so it's the one signal reliable across every shape.
+const MAGNITUDE_RULES = [
+  { id:'budget_magnitude', label:'Budget change', defaultPct:50, match:c=>c.subcategory==='Budget changed' },
+  { id:'target_cpa_magnitude', label:'Target CPA change', defaultPct:30, match:c=>c.subcategory==='Target CPA' },
+  { id:'target_roas_magnitude', label:'Target ROAS change', defaultPct:30, match:c=>c.subcategory==='Target ROAS' },
+  { id:'bid_magnitude', label:'Bid/CPC change', defaultPct:50, match:c=>c.subcategory==='Bid changed' },
+];
+// PAUSED->ENABLED deliberately not included: pausing stops something that
+// was running (a structural event worth surfacing), re-enabling resumes
+// normal operation (less surprising) — an intentional asymmetry, not a gap.
+const STATE_RULES = [
+  // 'Paused' is shared by campaign/ad-group/keyword pause events in a
+  // text-summary source (no resource_type to key off), so when resource_type
+  // is genuinely absent this falls back to the same raw_summary phrasing
+  // categorize_changes() itself uses to tell them apart server-side.
+  { id:'campaign_paused', label:'Campaign paused', match:c=>{
+      if(c.subcategory!=='Paused') return false;
+      if(c.resource_type) return c.resource_type==='CAMPAIGN';
+      const s = c.raw_summary||'';
+      return /campaigns?\s+paused/i.test(s) && !/ad\s*groups?|match\s+keywords?/i.test(s);
+    } },
+  { id:'campaign_removed', label:'Campaign removed', match:c=> c.subcategory==='Campaign removed' },
+  { id:'ad_group_removed', label:'Ad group removed', match:c=> c.subcategory==='Ad group removed' },
+];
+const ruleState = {
+  enabled: false,
+  pct: Object.fromEntries(MAGNITUDE_RULES.map(r=>[r.id, r.defaultPct])),
+  stateOn: Object.fromEntries(STATE_RULES.map(r=>[r.id, true])),
+};
+function computeRuleMatches(c){
+  const out = [];
+  for(const r of MAGNITUDE_RULES){
+    if(!r.match(c)) continue;
+    const ov = c.old_value_num, nv = c.new_value_num;
+    if(ov==null || nv==null || ov===0) continue; // CREATE/REMOVE has no "before" — % change undefined, not zero
+    const pctChange = ((nv-ov)/Math.abs(ov))*100;
+    const threshold = ruleState.pct[r.id];
+    if(Math.abs(pctChange) >= threshold){
+      const sign = pctChange>=0 ? '+' : '';
+      out.push({ id:r.id, label:r.label, detail:`${sign}${pctChange.toFixed(0)}% · rule: ≥±${threshold}%` });
+    }
+  }
+  for(const r of STATE_RULES){
+    if(!ruleState.stateOn[r.id]) continue;
+    if(r.match(c)) out.push({ id:r.id, label:r.label, detail:`rule: ${r.label}` });
+  }
+  return out;
+}
+function ruleMatchPillsHtml(matches){
+  return matches.map(m=>`<span class="pill" style="color:#c084fc;border-color:#c084fc55;background:#c084fc18;" title="${escapeHtml(m.detail)}">${escapeHtml(m.label)}</span>`).join(' ');
 }
 const state = { accounts:new Set(), campaigns:new Set(), users:new Set(), actor:'', categories:new Set(), operations:new Set(), sources:new Set(), range:'all', search:'', page:1, pageSize:200, sortKey:'timestamp_iso', sortDir:-1 };
 function uniqSorted(arr){ return [...new Set(arr)].filter(Boolean).sort(); }
@@ -2166,6 +2252,53 @@ function renderCategories(filtered){
   const list = Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count,color:CATEGORY_COLORS[name]||'#8b93a8'}));
   barList(document.getElementById('categoryDist'), list, label=>{ state.categories = state.categories.has(label) && state.categories.size===1 ? new Set() : new Set([label]); render(); });
 }
+function renderRuleMatches(filtered){
+  const countEl = document.getElementById('ruleMatchesCount');
+  const el = document.getElementById('ruleMatches');
+  if(!ruleState.enabled){
+    countEl.textContent = '';
+    el.innerHTML = '<div class="empty">Rule-based change highlighting is off.</div>';
+    return;
+  }
+  const matched = filtered.map(c=>({c, matches:computeRuleMatches(c)})).filter(x=>x.matches.length);
+  countEl.textContent = `${matched.length.toLocaleString()} of ${filtered.length.toLocaleString()} changes in view match a rule`;
+  if(!matched.length){ el.innerHTML = '<div class="empty">No changes match the current rules.</div>'; return; }
+  const SHOWN = 500;
+  el.innerHTML = `<table><thead><tr><th>Date</th><th>Campaign</th><th>Field</th><th>Matched rule(s)</th></tr></thead><tbody>${
+    matched.slice(0, SHOWN).map(({c,matches})=>`<tr class="datarow" data-id="${escapeHtml(c.change_id)}">
+      <td>${c.timestamp_iso ? new Date(c.timestamp_iso).toLocaleString() : escapeHtml(c.timestamp)}</td>
+      <td>${escapeHtml(c.campaign_name || (c.campaign_id ? `Campaign ${c.campaign_id}` : '—'))}</td>
+      <td>${escapeHtml(c.field_name || c.subcategory || '—')}</td>
+      <td>${ruleMatchPillsHtml(matches)}</td>
+    </tr>`).join('')
+  }</tbody></table>${matched.length > SHOWN ? `<div class="note">Showing first ${SHOWN} of ${matched.length} matches (still counted correctly above) — narrow with the top filters to see the rest.</div>` : ''}`;
+  el.querySelectorAll('tr.datarow').forEach(row=> row.addEventListener('click', ()=> openDetail(row.dataset.id)));
+}
+function initRuleMatchesConfig(){
+  const magEl = document.getElementById('ruleMatchesMagnitudeInputs');
+  magEl.innerHTML = MAGNITUDE_RULES.map(r=>`
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-dim);">
+      ${escapeHtml(r.label)}
+      <span style="display:flex;align-items:center;gap:6px;">±<input type="number" class="ctl" min="1" max="500" step="1" value="${r.defaultPct}" data-rule-id="${r.id}" style="width:70px;">%</span>
+    </label>`).join('');
+  magEl.querySelectorAll('input[type=number]').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      const v = parseFloat(e.target.value);
+      ruleState.pct[e.target.dataset.ruleId] = (isFinite(v) && v > 0) ? v : MAGNITUDE_RULES.find(r=>r.id===e.target.dataset.ruleId).defaultPct;
+      e.target.value = ruleState.pct[e.target.dataset.ruleId];
+      render();
+    });
+  });
+  const stateEl = document.getElementById('ruleMatchesStateInputs');
+  stateEl.innerHTML = STATE_RULES.map(r=>`
+    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;">
+      <input type="checkbox" checked data-rule-id="${r.id}"> ${escapeHtml(r.label)}
+    </label>`).join('');
+  stateEl.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change', e=>{ ruleState.stateOn[e.target.dataset.ruleId] = e.target.checked; render(); });
+  });
+  document.getElementById('ruleMatchesToggle').addEventListener('change', e=>{ ruleState.enabled = e.target.checked; render(); });
+}
 function renderUntouched(filtered){
   // Fixed 2026-08-18: was reading DASH_DATA.untouched directly (a static,
   // unfiltered, Python-precomputed list) — the top filters visibly did
@@ -2245,8 +2378,9 @@ function renderExplorer(filtered){
       <td><span class="pill"${categoryPillStyle(c.category)}>${escapeHtml(c.category)}</span></td><td>${escapeHtml(c.field_name || c.subcategory || '—')}</td>
       <td style="color:var(--bad);">${c.value_confidence==='parsed_from_summary' ? '~' : ''}${displayValue(c.old_value, c.old_value_display, c.value_unit)}</td>
       <td style="color:var(--good);">${c.value_confidence==='parsed_from_summary' ? '~' : ''}${displayValue(c.new_value, c.new_value_display, c.value_unit)}</td>
+      <td>${ruleState.enabled ? (ruleMatchPillsHtml(computeRuleMatches(c)) || '—') : '—'}</td>
       <td>${escapeHtml(c.source)}</td>
-    </tr>`).join('') : `<tr><td colspan="10" class="empty">No changes match current filters.</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="11" class="empty">No changes match current filters.</td></tr>`;
   body.querySelectorAll('tr.datarow').forEach(row=> row.addEventListener('click', ()=> openDetail(row.dataset.id)));
   document.getElementById('pagerInfo').textContent = `Page ${state.page} / ${totalPages} — ${sorted.length.toLocaleString()} rows`;
   document.getElementById('pagerPrev').disabled = state.page<=1;
@@ -2294,7 +2428,8 @@ function render(){
   const filtered = getFiltered();
   renderFilterContext();
   renderSummary(filtered); renderTimeline(filtered); renderUsers(filtered);
-  renderAccounts(filtered); renderCategories(filtered); renderUntouched(filtered); renderExplorer(filtered);
+  renderAccounts(filtered); renderCategories(filtered); renderRuleMatches(filtered);
+  renderUntouched(filtered); renderExplorer(filtered);
 }
 document.addEventListener('DOMContentLoaded', ()=>{
   const m = DASH_DATA.meta;
@@ -2316,6 +2451,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     document.getElementById('apiCaveat').innerHTML = caveats.map(c=>`<div class="warn-box">${escapeHtml(c)}</div>`).join('');
   }
   initFilters();
+  initRuleMatchesConfig();
   document.getElementById('threshBtns').addEventListener('click', e=>{
     if(e.target.tagName!=='BUTTON') return;
     [...e.target.parentElement.children].forEach(b=>b.classList.remove('active'));
@@ -2324,6 +2460,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('pagerPrev').addEventListener('click', ()=>{ state.page--; renderExplorer(getFiltered()); });
   document.getElementById('pagerNext').addEventListener('click', ()=>{ state.page++; renderExplorer(getFiltered()); });
   document.querySelectorAll('#explorerTable th').forEach(th=> th.addEventListener('click', ()=>{
+    if(!th.dataset.key) return; // e.g. the "Matches" column — a derived list, not a sortable field
     if(state.sortKey===th.dataset.key) state.sortDir *= -1; else { state.sortKey=th.dataset.key; state.sortDir=-1; }
     state.page=1; renderExplorer(getFiltered());
   }));
