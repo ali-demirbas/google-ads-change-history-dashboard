@@ -239,7 +239,13 @@ HEADER_ALIASES = {
         "field_name": ["changed_fields", "Field", "Alan", "Değişen Alan"],
         "old_value": ["old_resource", "Eski Teknik Veri", "Before", "Old value", "Önceki", "Old"],
         "new_value": ["new_resource", "Yeni Teknik Veri", "After", "New value", "Yeni", "New"],
-        "raw_summary": ["Değişiklik Özeti (Nereden -> Nereye)", "Değişiklik Özeti", "Change summary", "Summary", "Description"],
+        # "Changes" added 2026-08-18 — the real Google Ads UI's own
+        # "Change history report" CSV export (Campaigns > Change history >
+        # Download) uses this exact column name, verified against a real
+        # export this session. It's a multi-line free-text cell that can
+        # bundle several distinct changes into one row (see the module
+        # docstring's note on this format's limits).
+        "raw_summary": ["Değişiklik Özeti (Nereden -> Nereye)", "Değişiklik Özeti", "Change summary", "Summary", "Description", "Changes"],
     },
     "value_aliases": {
         "operation": {
@@ -284,7 +290,7 @@ CATEGORY_RULES = {
         "Audience": ["Audience added", "Audience removed", "Audience bid adjustment changed"],
         "Status": ["Enabled", "Paused", "Removed"],
         "Campaign": ["Campaign created", "Campaign name changed", "Campaign settings changed", "Campaign removed"],
-        "AdGroup": ["Ad group created", "Ad group name changed", "Ad group removed"],
+        "AdGroup": ["Ad group created", "Ad group name changed", "Ad group settings changed", "Ad group removed"],
         "Conversion": ["Conversion action created", "Conversion action changed", "Conversion tracking changed"],
         "Feed": ["Feed created", "Feed changed", "Feed removed", "Feed item added", "Feed item changed", "Feed item removed", "Feed attached to campaign", "Feed attached to ad group"],
         "Other": ["Other"],
@@ -369,6 +375,40 @@ CATEGORY_RULES = {
         {"pattern": r"^Durum Değişti.*(ENABLED|Etkin)", "category": "Status", "subcategory": "Enabled"},
         {"pattern": r"^Durum Değişti.*(PAUSED|Duraklat)", "category": "Status", "subcategory": "Paused"},
         {"pattern": r"^(Öğe Silindi|Kaldırıldı)", "category": "Status", "subcategory": "Removed"},
+        # Added 2026-08-18, found via a real native Google Ads UI export
+        # (Campaigns > Change history > Download) — that CSV has no
+        # field_name/resource_type column at all, only a free-text
+        # "Changes" cell whose first line is a headline like "Campaign
+        # changed" or "12 budget amount decreased". These patterns are
+        # taken from the actual first-line phrasings observed across 210
+        # real rows in that export (generalized — no product-specific text),
+        # covering ~94% of them; the remainder (rare account-admin events
+        # like "Customer manager changed", "Access level for user changed")
+        # are deliberately left uncovered rather than force-fit into an
+        # advertising category they don't belong to — they fall to Other,
+        # correctly.
+        {"pattern": r"^\d+ campaigns? paused", "category": "Status", "subcategory": "Paused"},
+        {"pattern": r"^\d+ campaigns? active", "category": "Status", "subcategory": "Enabled"},
+        {"pattern": r"^\d+ ad groups? paused", "category": "Status", "subcategory": "Paused"},
+        {"pattern": r"^\d+ ad groups? active", "category": "Status", "subcategory": "Enabled"},
+        {"pattern": r"^Campaign created", "category": "Campaign", "subcategory": "Campaign created"},
+        {"pattern": r"^Campaign removed", "category": "Campaign", "subcategory": "Campaign removed"},
+        {"pattern": r"^Campaign changed", "category": "Campaign", "subcategory": "Campaign settings changed"},
+        {"pattern": r"^Ad group created", "category": "AdGroup", "subcategory": "Ad group created"},
+        {"pattern": r"^Ad group removed", "category": "AdGroup", "subcategory": "Ad group removed"},
+        {"pattern": r"^Ad group changed", "category": "AdGroup", "subcategory": "Ad group settings changed"},
+        {"pattern": r"^Budget created", "category": "Budget", "subcategory": "Budget created"},
+        {"pattern": r"^Budget removed", "category": "Budget", "subcategory": "Budget removed"},
+        {"pattern": r"^(Budget changed|Budget set to|\d+ budget amount (increased|decreased))", "category": "Budget", "subcategory": "Budget changed"},
+        {"pattern": r"^\d+ (universal app (engagement )?ad|responsive search ad)s? created", "category": "Ad", "subcategory": "Ad created"},
+        {"pattern": r"^\d+ (universal app (engagement )?ad|responsive search ad)s? removed", "category": "Ad", "subcategory": "Ad removed"},
+        {"pattern": r"^\d+ (universal app (engagement )?ad|responsive search ad)s? changed", "category": "Ad", "subcategory": "Ad changed"},
+        {"pattern": r"^\d+ negative phrase match keywords? added", "category": "Keyword", "subcategory": "Negative keyword"},
+        {"pattern": r"^\d+ phrase match keywords? added", "category": "Keyword", "subcategory": "Keyword added"},
+        {"pattern": r"^\d+ data segments? added", "category": "Audience", "subcategory": "Audience added"},
+        {"pattern": r"^\d+ languages? (added|removed)", "category": "Targeting", "subcategory": "Language targeting changed"},
+        {"pattern": r"^\d+ countr(y|ies) (added|removed)", "category": "Targeting", "subcategory": "Location targeting changed"},
+        {"pattern": r"^(Conversion|Standard goals changed|Account-default goals)", "category": "Conversion", "subcategory": "Conversion tracking changed"},
     ],
     "fallback": {"category": "Other", "subcategory": "Other"},
 }
@@ -617,18 +657,38 @@ def detect_known_source(headers):
     return None
 
 
-def check_hard_required(mapping):
+def check_hard_required(mapping, default_account_name=None):
+    """Fixed 2026-08-18 (found via a real native Google Ads UI export —
+    Campaigns > Change history > Download): that export has no account
+    column at all — you're already scoped into one account when you export
+    it, so Google doesn't repeat it per row. That's a real, common shape,
+    not a malformed file — --account-name lets the caller supply the one
+    account this whole file belongs to as an explicit, human-confirmed
+    constant (never guessed silently: the flag has to be passed)."""
     missing = []
     if "timestamp" not in mapping:
         missing.append("timestamp")
-    if "account_name" not in mapping and "account_id" not in mapping:
-        missing.append("account_ref (account_name or account_id)")
-    if "resource_type" not in mapping:
-        missing.append("resource_type")
+    if "account_name" not in mapping and "account_id" not in mapping and not default_account_name:
+        missing.append("account_ref (account_name or account_id, or pass --account-name if the source has none)")
     has_structured = "old_value" in mapping and "new_value" in mapping
     has_summary = "raw_summary" in mapping
     if not has_structured and not has_summary:
         missing.append("change_info ((old_value+new_value) or raw_summary)")
+    # Fixed 2026-08-18 (found via the same real UI export): resource_type is
+    # only ever CONSUMED by match_structured(), which categorize_changes()
+    # only calls when a row has field_name — every text-only row (no
+    # field_name) already routes through match_summary() instead, which
+    # reads raw_summary and never touches resource_type. Requiring it
+    # unconditionally blocked a genuinely text-only source (raw_summary
+    # mapped, no field_name/resource_type column at all — the Google Ads
+    # UI's own native export is exactly this shape) from something its own
+    # categorization path doesn't need. Still required whenever raw_summary
+    # ISN'T mapped either — with neither, no row can be categorized as
+    # anything but "Other" regardless, so failing hard stays correct there
+    # (same "don't produce known-useless output" reasoning as the review
+    # gates elsewhere in this function).
+    if "resource_type" not in mapping and not has_summary:
+        missing.append("resource_type")
     return missing
 
 
@@ -676,7 +736,7 @@ def empty_fraction(rows, mapping, canonical_field):
     return empty / len(rows) if rows else 0.0
 
 
-def validate_source(input_path, mapping_file=None, force=False, save_profile=True):
+def validate_source(input_path, mapping_file=None, force=False, save_profile=True, default_account_name=None):
     """Returns dict. status=ok includes 'mapping'. Any other status means STOP —
     caller must resolve with a human before continuing."""
     try:
@@ -730,7 +790,7 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
             mapping, unmatched = try_alias_match(headers, rows)
             source_label = detect_known_source(headers) or "alias_match"
 
-    missing = check_hard_required(mapping)
+    missing = check_hard_required(mapping, default_account_name=default_account_name)
     if missing:
         return {
             "status": "needs_mapping",
@@ -826,12 +886,39 @@ def decimal_ambiguity_present(values):
     return False
 
 
+GOOGLE_UI_EN_DATETIME_RE = re.compile(r"^[A-Za-z]{3} \d{1,2}, \d{4}, \d{1,2}:\d{2}:\d{2} (AM|PM)$")
+# U+202F (narrow no-break space) and U+00A0 (no-break space) — confirmed
+# present in a real Google Ads UI export, sitting between the time and
+# AM/PM ("10:42:26 PM") instead of a plain ASCII space. Neither a
+# regex expecting " " nor strptime's %p match across these, so both get
+# normalized to a plain space before parsing. General enough (locale-
+# specific space variants are a known export quirk, not unique to this one
+# format) that it's applied unconditionally, not just for UI_EN.
+_NARROW_SPACES = (" ", " ")
+
+
+def _normalize_spaces(s):
+    for ch in _NARROW_SPACES:
+        s = s.replace(ch, " ")
+    return s
+
+
 def detect_date_format(values):
-    sample = [str(v) for v in values if v][:200]
+    sample = [_normalize_spaces(str(v)) for v in values if v][:200]
     if not sample:
         return "ISO"
     if all(re.match(r"^\d{4}-\d{2}-\d{2}", s) for s in sample):
         return "ISO"
+    # Fixed 2026-08-18 (found via a real native Google Ads UI export): the
+    # UI's own "Change history report" CSV timestamps this shape ("Aug 16,
+    # 2026, 10:42:26 PM") — previously unrecognized by any branch here,
+    # surfacing as needs_date_format with a misleading "DD/MM vs MM/DD"
+    # message for a format that was never numeric-ambiguous in the first
+    # place; the real problem was that no pattern matched it at all. A
+    # spelled-out month name has no day/month ordering to be ambiguous
+    # about, so — like ISO — this auto-detects rather than asking.
+    if all(GOOGLE_UI_EN_DATETIME_RE.match(s) for s in sample):
+        return "UI_EN"
     for s in sample:
         m = re.match(r"^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})", s)
         if m:
@@ -865,7 +952,7 @@ def parse_timestamp(raw, fmt):
     though the ISO branch's offset-preservation logic existed right next to
     it. The regex now captures an optional trailing offset/Z and applies it
     the same way the ISO branch does."""
-    s = str(raw).strip()
+    s = _normalize_spaces(str(raw).strip())
     if fmt == "ISO":
         iso_candidate = s.replace("Z", "+00:00") if s.endswith("Z") else s
         # Fixed 2026-08-18 (3rd audit round, confirmed): a slash-separated
@@ -888,6 +975,11 @@ def parse_timestamp(raw, fmt):
             except ValueError:
                 continue
         raise ValueError(f"unparseable ISO timestamp: {raw}")
+    if fmt == "UI_EN":
+        try:
+            return datetime.strptime(s, "%b %d, %Y, %I:%M:%S %p")
+        except ValueError:
+            raise ValueError(f"unparseable UI_EN timestamp: {raw}")
     m = DMY_OFFSET_RE.match(s)
     if not m:
         raise ValueError(f"unparseable timestamp: {raw}")
@@ -968,7 +1060,7 @@ def derive_resource_id_from_path(resource_path):
     return str(resource_path).rsplit("/", 1)[-1]
 
 
-def normalize_changes(input_path, mapping, source_label, date_format=None, decimal_style=None, tz="unknown"):
+def normalize_changes(input_path, mapping, source_label, date_format=None, decimal_style=None, tz="unknown", default_account_name=None):
     """Returns dict: status 'ok' with 'rows' (list of canonical dicts), or a
     needs_date_format / needs_decimal_style status to stop and ask."""
     try:
@@ -1091,7 +1183,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         user_name, user_email, client_type = g("user_name"), g("user_email"), g("client_type")
         actor_type = derive_actor_type(user_name or user_email, client_type)
         account_id = g("account_id")
-        account_name = g("account_name") or account_id
+        account_name = g("account_name") or account_id or default_account_name
         resource_type = g("resource_type")
         resource_path = g("resource_path")
         resource_id = g("resource_id") or derive_resource_id_from_path(resource_path)
@@ -2307,7 +2399,7 @@ def query_changes(rows, user=None, account=None, campaign=None, category=None, o
 # =====================================================================
 def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decimal_style=None,
                   tz="unknown", mask_users=False, allow_unknown_categories=False, force_review=False,
-                  extra_rules=None, open_browser=False, generated_at=None):
+                  extra_rules=None, open_browser=False, generated_at=None, account_name=None):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2316,12 +2408,12 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         if err:
             return {"status": "error", "message": err}
 
-    v = validate_source(input_path, mapping_file=mapping_file, force=force_review)
+    v = validate_source(input_path, mapping_file=mapping_file, force=force_review, default_account_name=account_name)
     if v["status"] != "ok":
         return v
     (out_dir / "resolved_mapping.json").write_text(json.dumps(v, ensure_ascii=False), encoding="utf-8")
 
-    n = normalize_changes(input_path, v["mapping"], v["source_label"], date_format=date_format, decimal_style=decimal_style, tz=tz)
+    n = normalize_changes(input_path, v["mapping"], v["source_label"], date_format=date_format, decimal_style=decimal_style, tz=tz, default_account_name=account_name)
     if n["status"] != "ok":
         return n
 
@@ -2726,6 +2818,37 @@ def self_test():
         assert ch_selfref["summary"]["changed_campaigns"] == 1, f"expected 1 changed campaign, got {ch_selfref['summary']}"
         assert ch_selfref["summary"]["changed_ad_groups"] == 1, f"expected 1 changed ad group, got {ch_selfref['summary']}"
         print(f"[PASS] a CAMPAIGN/AD_GROUP-type change with no separate attributed 'campaign'/'ad_group' field now falls back to the resource's own identity, instead of leaving campaign_id/ad_group_id empty and undercounting changed_campaigns/changed_ad_groups")
+
+        # Found 2026-08-18 via a real native Google Ads UI "Change history
+        # report" CSV export (Campaigns > Change history > Download) — not a
+        # pasted audit, not the ChangeEvent API. Genuinely different shape
+        # from every fixture above: Date & time / User / Campaign / Ad group
+        # / Changes, no account column, no field_name/resource_type column
+        # at all, a narrow-no-break-space (U+202F) before AM/PM, and a
+        # spelled-out-month timestamp format none of DMY/MDY/ISO covered.
+        ui_export_csv = (
+            "Date & time,User,Campaign,Ad group,Changes\n"
+            "\"Aug 16, 2026, 10:42:26 PM\",a@example.test,Campaign Alpha,,\"Campaign changed\n"
+            "  Status changed from paused to active\"\n"
+            "\"Aug 16, 2026, 5:01:31 PM\",a@example.test,Campaign Alpha,,\"1 campaign active\n"
+            "  Status changed from paused to active\"\n"
+            "\"Aug 16, 2026, 5:01:30 PM\",a@example.test,Campaign Alpha,Ad Group 1,\"Ad group created\n"
+            "  Status is enabled\"\n"
+            "\"Aug 16, 2026, 5:01:00 PM\",Google Ads System,Campaign Alpha,,\"12 budget amount decreased\n"
+            "  Budget is $5.00\"\n"
+        )
+        f_ui_export = td / "p4_ui_export.csv"
+        f_ui_export.write_text(ui_export_csv, encoding="utf-8")
+        r_ui_export = run_pipeline(f_ui_export, td / "out_ui_export", account_name="Test Account", generated_at="2026-08-17T00:00:00")
+        assert r_ui_export["status"] == "ok", f"native UI export fixture failed: {r_ui_export}"
+        assert r_ui_export["date_format_used"] == "UI_EN", f"expected UI_EN date format auto-detected, got {r_ui_export['date_format_used']}"
+        assert r_ui_export["other_pct"] == 0.0, f"expected all 4 rows to categorize (0% Other), got {r_ui_export['other_pct']}"
+        with open(td / "out_ui_export" / "changes.jsonl", encoding="utf-8") as fh:
+            ui_rows = [json.loads(l) for l in fh]
+        assert all(r["account_name"] == "Test Account" for r in ui_rows), "‑‑account-name must apply to every row when the source has no account column"
+        cats = {r["category"] for r in ui_rows}
+        assert cats == {"Campaign", "Status", "AdGroup", "Budget"}, f"unexpected category set: {cats}"
+        print(f"[PASS] a real native Google Ads UI 'Change history' CSV export (no account/field_name/resource_type column, narrow-no-break-space before AM/PM, spelled-out-month timestamps) now runs end to end — --account-name fills the missing account, UI_EN auto-detects the timestamp format, and the new English summary_text_rules categorize it instead of 100% falling to Other")
 
         # =================================================================
         # Regression guards for the 2026-08-18 forensic audit's findings.
@@ -3263,13 +3386,14 @@ def main():
     p_run.add_argument("input")
     p_run.add_argument("--out-dir", default="./out")
     p_run.add_argument("--mapping-file")
-    p_run.add_argument("--date-format", choices=["DMY", "MDY", "ISO"])
+    p_run.add_argument("--date-format", choices=["DMY", "MDY", "ISO", "UI_EN"])
     p_run.add_argument("--decimal-style", choices=["TR", "US"])
     p_run.add_argument("--timezone", default="unknown")
     p_run.add_argument("--mask-users", action="store_true")
     p_run.add_argument("--allow-unknown-categories", action="store_true")
     p_run.add_argument("--force-review", action="store_true")
     p_run.add_argument("--extra-rules", help="JSON file: list of extra structured_rules entries to apply on top of CATEGORY_RULES.")
+    p_run.add_argument("--account-name", help="Constant account name/id for every row, for a source with no account column at all (e.g. the Google Ads UI's own single-account Change history CSV export).")
     p_run.add_argument("--open", action="store_true")
 
     p_query = sub.add_parser("query", help="Deterministic filter over a changes.jsonl.")
@@ -3312,7 +3436,7 @@ def main():
             args.input, args.out_dir, mapping_file=args.mapping_file, date_format=args.date_format,
             decimal_style=args.decimal_style, tz=args.timezone, mask_users=args.mask_users,
             allow_unknown_categories=args.allow_unknown_categories, force_review=args.force_review,
-            extra_rules=extra_rules, open_browser=args.open,
+            extra_rules=extra_rules, open_browser=args.open, account_name=args.account_name,
         )
         print(json.dumps(result, indent=2, ensure_ascii=False))
         sys.exit(0 if result.get("status") == "ok" else 2)
