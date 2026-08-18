@@ -3,7 +3,7 @@
 [![validate](https://github.com/ali-demirbas/google-ads-change-history-dashboard/actions/workflows/validate.yml/badge.svg)](https://github.com/ali-demirbas/google-ads-change-history-dashboard/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 ![Single file](https://img.shields.io/badge/skill-single_file-blue)
-![Tests](https://img.shields.io/badge/self--tests-53_passing-brightgreen)
+![Tests](https://img.shields.io/badge/self--tests-54_passing-brightgreen)
 
 A Claude Code skill that turns a Google Ads change-history export (CSV, TSV, or a pre-flattened `ChangeEvent` JSON) into a filterable, offline, single-file HTML dashboard — who changed what, in which account/campaign/ad group, old value to new value, and what category it falls into.
 
@@ -62,7 +62,7 @@ When the input has a column the skill doesn't recognize, an ambiguous date/numbe
 
 ## How this repo is organized
 
-The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_change_history.py`](skills/google-ads-change-history-dashboard/ads_change_history.py) — canonical schema, source detection, category rules, the pipeline, the dashboard template, built-in synthetic sample data, and the self-test suite that *is* the test framework. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before making a change. `docs/` holds three rounds of self-audit history — every confirmed finding, how it was reproduced, and how it was fixed.
+The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_change_history.py`](skills/google-ads-change-history-dashboard/ads_change_history.py) — canonical schema, source detection, category rules, the pipeline, the dashboard template, built-in synthetic sample data, and the self-test suite that *is* the test framework. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before making a change. `docs/` holds four rounds of self-audit history plus real-usage dogfooding notes — every confirmed finding, how it was reproduced, and how it was fixed.
 
 ## License
 

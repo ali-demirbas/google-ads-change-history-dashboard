@@ -1092,6 +1092,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         actor_type = derive_actor_type(user_name or user_email, client_type)
         account_id = g("account_id")
         account_name = g("account_name") or account_id
+        resource_type = g("resource_type")
         resource_path = g("resource_path")
         resource_id = g("resource_id") or derive_resource_id_from_path(resource_path)
         resource_name = g("resource_name")
@@ -1106,6 +1107,25 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         ad_group_resource = g("ad_group_resource")
         campaign_id = g("campaign_id") or derive_resource_id_from_path(campaign_resource)
         ad_group_id = g("ad_group_id") or derive_resource_id_from_path(ad_group_resource)
+
+        # Fixed 2026-08-18 (found via a real API-connected user's export —
+        # not a pasted audit): a real ChangeEvent row whose changed resource
+        # IS the campaign/ad group itself (resource_type CAMPAIGN/AD_GROUP)
+        # doesn't always carry a separate "campaign"/"ad_group" attributed
+        # pointer — Google's own field only makes sense for a resource
+        # BELOW the campaign (a keyword, an ad, a budget), since a campaign
+        # doesn't point to itself. Confirmed dogfooding symptom: real rows
+        # correctly categorized as "Campaign"/"AdGroup" still showed
+        # campaign_id/ad_group_id empty, so "Changed Campaigns"/"Changed Ad
+        # Groups" undercounted despite dozens of real campaign/ad-group-level
+        # changes being present. The resource's own identity (already
+        # resolved above from change_resource_name) IS its campaign/ad-group
+        # identity in exactly this case.
+        rt_upper = str(resource_type or "").upper()
+        if not campaign_id and rt_upper == "CAMPAIGN":
+            campaign_id = resource_id
+        if not ad_group_id and rt_upper == "AD_GROUP":
+            ad_group_id = resource_id
 
         # Fixed 2026-08-18 (3rd audit round, confirmed): the hash used to key
         # off raw_ts (the source's own un-normalized timestamp string). Two
@@ -1123,7 +1143,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
             "timestamp_iso": dt.isoformat(), "timezone": row_timezone, "timestamp_utc": ts_utc,
             "account_id": account_id, "account_name": account_name, "user_id": None,
             "user_name": user_name, "user_email": user_email, "client_type": client_type,
-            "actor_type": actor_type, "resource_type": g("resource_type"), "resource_path": resource_path, "resource_id": resource_id,
+            "actor_type": actor_type, "resource_type": resource_type, "resource_path": resource_path, "resource_id": resource_id,
             "resource_name": resource_name, "campaign_id": campaign_id, "campaign_name": g("campaign_name"),
             "campaign_resource": campaign_resource, "ad_group_resource": ad_group_resource,
             "ad_group_id": ad_group_id, "ad_group_name": g("ad_group_name"), "operation": operation, "operation_confidence": operation_confidence,
@@ -2673,6 +2693,39 @@ def self_test():
         r_highskip_forced = run_pipeline(f_highskip, td / "out_highskip_forced", allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
         assert r_highskip_forced["status"] == "ok", f"--force-review must let a high unparseable-date rate proceed, got: {r_highskip_forced}"
         print(f"[PASS] a >20% unparseable-date rate now stops with needs_date_review instead of silently returning 'ok' with most of the dataset dropped (--force-review bypasses it once confirmed)")
+
+        # Found 2026-08-18 via a real API-connected user's export (not a
+        # pasted audit): a CAMPAIGN/AD_GROUP-type change whose row has no
+        # separate "campaign"/"ad_group" attributed field (Google's own
+        # field only makes sense for a resource BELOW the campaign — a
+        # campaign doesn't point to itself) left campaign_id/ad_group_id
+        # empty even though the resource's own identity (already resolved
+        # from change_resource_name) IS that identity. Symptom: real rows
+        # correctly categorized "Campaign"/"AdGroup" still didn't count
+        # toward changed_campaigns/changed_ad_groups.
+        self_ref_rows = [
+            {"change_date_time": "2026-08-17 09:28:28", "customer_id": "1", "resource_name": "sr1", "user_email": "a@example.test",
+             "client_type": "GOOGLE_ADS_WEB_CLIENT", "change_resource_type": "CAMPAIGN", "change_resource_name": "customers/1/campaigns/555",
+             "resource_change_operation": "UPDATE", "changed_fields": "status", "old_resource": "PAUSED", "new_resource": "ENABLED"},
+            {"change_date_time": "2026-08-17 09:29:00", "customer_id": "1", "resource_name": "sr2", "user_email": "a@example.test",
+             "client_type": "GOOGLE_ADS_WEB_CLIENT", "change_resource_type": "AD_GROUP", "change_resource_name": "customers/1/adGroups/777",
+             "resource_change_operation": "UPDATE", "changed_fields": "status", "old_resource": "PAUSED", "new_resource": "ENABLED"},
+        ]
+        f_selfref = td / "p4_self_referential.json"
+        f_selfref.write_text(json.dumps(self_ref_rows), encoding="utf-8")
+        r_selfref = run_pipeline(f_selfref, td / "out_selfref", allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
+        assert r_selfref["status"] == "ok", f"self-referential campaign/ad_group fixture failed: {r_selfref}"
+        with open(td / "out_selfref" / "changes.jsonl", encoding="utf-8") as fh:
+            selfref_rows = [json.loads(l) for l in fh]
+        camp_row = next(r for r in selfref_rows if r["resource_type"] == "CAMPAIGN")
+        ag_row = next(r for r in selfref_rows if r["resource_type"] == "AD_GROUP")
+        assert camp_row["campaign_id"] == "555", f"a CAMPAIGN-type row with no attributed 'campaign' field must fall back to its own resource_id, got {camp_row['campaign_id']!r}"
+        assert ag_row["ad_group_id"] == "777", f"an AD_GROUP-type row with no attributed 'ad_group' field must fall back to its own resource_id, got {ag_row['ad_group_id']!r}"
+        with open(td / "out_selfref" / "change_history.json", encoding="utf-8") as fh:
+            ch_selfref = json.load(fh)
+        assert ch_selfref["summary"]["changed_campaigns"] == 1, f"expected 1 changed campaign, got {ch_selfref['summary']}"
+        assert ch_selfref["summary"]["changed_ad_groups"] == 1, f"expected 1 changed ad group, got {ch_selfref['summary']}"
+        print(f"[PASS] a CAMPAIGN/AD_GROUP-type change with no separate attributed 'campaign'/'ad_group' field now falls back to the resource's own identity, instead of leaving campaign_id/ad_group_id empty and undercounting changed_campaigns/changed_ad_groups")
 
         # =================================================================
         # Regression guards for the 2026-08-18 forensic audit's findings.
