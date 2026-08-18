@@ -1,6 +1,13 @@
 # Runtime state — learned column-mapping profiles, regenerated per source
 skills/google-ads-change-history-dashboard/mapping-profiles/*.json
 
+# Google Ads API credentials (tools/fetch_live_data.py) — never committed,
+# environment variables only. Covered here in case anyone drops the
+# standard google-ads.yaml config-file convention in the repo by habit.
+google-ads.yaml
+*.google-ads.yaml
+tools/*.json
+
 # Python
 __pycache__/
 *.pyc

@@ -42,6 +42,8 @@ python3 ads_change_history.py run <your-export.csv> --out-dir ./out --open
 
 No dependencies beyond the Python 3 standard library.
 
+**Have real Google Ads API access?** [`tools/fetch_live_data.py`](tools/fetch_live_data.py) is an optional, separate script that pulls change history live via the API and writes it in the exact shape this skill reads — skips the manual export step. Doesn't touch the skill's zero-dependency promise; see [`tools/README.md`](tools/README.md).
+
 ## Usage
 
 ```bash
