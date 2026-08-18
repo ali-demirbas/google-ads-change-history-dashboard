@@ -3,7 +3,7 @@
 [![validate](https://github.com/ali-demirbas/google-ads-change-history-dashboard/actions/workflows/validate.yml/badge.svg)](https://github.com/ali-demirbas/google-ads-change-history-dashboard/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 ![Single file](https://img.shields.io/badge/skill-single_file-blue)
-![Tests](https://img.shields.io/badge/self--tests-56_passing-brightgreen)
+![Tests](https://img.shields.io/badge/self--tests-57_passing-brightgreen)
 
 A Claude Code skill that turns a Google Ads change-history export (CSV, TSV, or a pre-flattened `ChangeEvent` JSON) into a filterable, offline, single-file HTML dashboard — who changed what, in which account/campaign/ad group, old value to new value, and what category it falls into.
 
@@ -56,7 +56,9 @@ When the input has a column the skill doesn't recognize, an ambiguous date/numbe
 
 ## Output
 
-`changes.jsonl` (one row per canonical change), `change_history.json` (aggregated), a single-file `dashboard.html` (works fully offline, no CDN — Filters, Summary, Activity Timeline, User Activity split by human/automation, Account/Campaign drill-down, Category Distribution, Campaign Last Changes, and a sortable/searchable Change Explorer with a before/after detail panel), `coverage.txt`, and `unknown-fields.json` when applicable.
+`changes.jsonl` (one row per canonical change), `change_history.json` (aggregated), a single-file `dashboard.html` (works fully offline, no CDN — Filters, Summary, Activity Timeline, User Activity split by human/automation, Account/Campaign drill-down, Category Distribution, Rule Matches, Campaign Last Changes, and a sortable/searchable Change Explorer with a before/after detail panel), `coverage.txt`, and `unknown-fields.json` when applicable.
+
+**Rule Matches** — off by default. A visible toggle turns on user-adjustable magnitude thresholds (Budget/Target CPA/Target ROAS/Bid ±%) and structural rules (Campaign paused/removed, Ad group removed), computed entirely in the browser — no re-run needed to change a threshold. It never judges: a match means "crossed the threshold you set," always shown with the exact number and rule next to it, never a bare badge or severity color. A Filters dropdown lets you narrow the Explorer to matched rows, or to one specific rule.
 
 ## Privacy
 
@@ -64,7 +66,7 @@ When the input has a column the skill doesn't recognize, an ambiguous date/numbe
 
 ## How this repo is organized
 
-The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_change_history.py`](skills/google-ads-change-history-dashboard/ads_change_history.py) — canonical schema, source detection, category rules, the pipeline, the dashboard template, built-in synthetic sample data, and the self-test suite that *is* the test framework. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before making a change. `docs/` holds four rounds of self-audit history plus real-usage dogfooding notes — every confirmed finding, how it was reproduced, and how it was fixed.
+The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_change_history.py`](skills/google-ads-change-history-dashboard/ads_change_history.py) — canonical schema, source detection, category rules, the pipeline, the dashboard template, built-in synthetic sample data, and the self-test suite that *is* the test framework. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before making a change. `docs/` holds five rounds of self-audit history plus real-usage dogfooding notes — every confirmed finding, how it was reproduced, and how it was fixed.
 
 ## License
 

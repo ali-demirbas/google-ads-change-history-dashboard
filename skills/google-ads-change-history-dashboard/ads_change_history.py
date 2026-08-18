@@ -1817,6 +1817,10 @@ DASHBOARD_TEMPLATE = r"""<!doctype html>
       <select id="fCategory" multiple size="1"></select>
       <select id="fOperation" multiple size="1"></select>
       <select id="fSource" multiple size="1"></select>
+      <select id="fRuleMatch" size="1">
+        <option value="">All changes</option>
+        <option value="__matched__">Matched a rule</option>
+      </select>
       <div class="rangebtns" id="rangeBtns">
         <button data-range="all" class="active">All</button>
         <button data-range="30">30d</button>
@@ -1991,9 +1995,15 @@ const STATE_RULES = [
       if(c.resource_type) return c.resource_type==='CAMPAIGN';
       const s = c.raw_summary||'';
       return /campaigns?\s+paused/i.test(s) && !/ad\s*groups?|match\s+keywords?/i.test(s);
-    } },
-  { id:'campaign_removed', label:'Campaign removed', match:c=> c.subcategory==='Campaign removed' },
-  { id:'ad_group_removed', label:'Ad group removed', match:c=> c.subcategory==='Ad group removed' },
+    },
+    // Text-summary rows (no explicit before/after column) don't carry
+    // old_value/new_value for this phrasing — fall back to a still-factual
+    // statement rather than a fabricated ENABLED->PAUSED that wasn't stated.
+    fact:c=> (c.old_value && c.new_value) ? `${c.old_value} → ${c.new_value}` : 'status → PAUSED' },
+  { id:'campaign_removed', label:'Campaign removed', match:c=> c.subcategory==='Campaign removed',
+    fact:c=> `Operation: ${c.operation||'REMOVE'}` },
+  { id:'ad_group_removed', label:'Ad group removed', match:c=> c.subcategory==='Ad group removed',
+    fact:c=> `Operation: ${c.operation||'REMOVE'}` },
 ];
 const ruleState = {
   enabled: false,
@@ -2015,14 +2025,14 @@ function computeRuleMatches(c){
   }
   for(const r of STATE_RULES){
     if(!ruleState.stateOn[r.id]) continue;
-    if(r.match(c)) out.push({ id:r.id, label:r.label, detail:`rule: ${r.label}` });
+    if(r.match(c)) out.push({ id:r.id, label:r.label, detail:`${r.fact(c)} · rule: ${r.label}` });
   }
   return out;
 }
 function ruleMatchPillsHtml(matches){
   return matches.map(m=>`<span class="pill" style="color:#c084fc;border-color:#c084fc55;background:#c084fc18;" title="${escapeHtml(m.detail)}">${escapeHtml(m.label)}</span>`).join(' ');
 }
-const state = { accounts:new Set(), campaigns:new Set(), users:new Set(), actor:'', categories:new Set(), operations:new Set(), sources:new Set(), range:'all', search:'', page:1, pageSize:200, sortKey:'timestamp_iso', sortDir:-1 };
+const state = { accounts:new Set(), campaigns:new Set(), users:new Set(), actor:'', categories:new Set(), operations:new Set(), sources:new Set(), ruleMatch:'', range:'all', search:'', page:1, pageSize:200, sortKey:'timestamp_iso', sortDir:-1 };
 function uniqSorted(arr){ return [...new Set(arr)].filter(Boolean).sort(); }
 function fillMultiSelect(el, values, allLabel){
   el.innerHTML = '';
@@ -2048,6 +2058,21 @@ function initFilters(){
   fillMultiSelect(document.getElementById('fCategory'), uniqSorted(DASH_DATA.changes.map(c=>c.category)), 'All categories');
   fillMultiSelect(document.getElementById('fOperation'), uniqSorted(DASH_DATA.changes.map(c=>c.operation)), 'All types');
   fillMultiSelect(document.getElementById('fSource'), uniqSorted(DASH_DATA.changes.map(c=>c.source)), 'All sources');
+  const fRuleMatch = document.getElementById('fRuleMatch');
+  [...MAGNITUDE_RULES, ...STATE_RULES].forEach(r=>{
+    const opt = document.createElement('option'); opt.value = r.id; opt.textContent = r.label; fRuleMatch.appendChild(opt);
+  });
+  fRuleMatch.addEventListener('change', e=>{
+    state.ruleMatch = e.target.value; state.page = 1;
+    // Selecting an actual rule (not "All changes") is an explicit ask to see
+    // rule reasoning — turn the feature on so Explorer's Matches column and
+    // the Rule Matches section don't show a filtered-but-unexplained '—'.
+    if(state.ruleMatch && !ruleState.enabled){
+      ruleState.enabled = true;
+      document.getElementById('ruleMatchesToggle').checked = true;
+    }
+    render();
+  });
   ['fAccount','fCampaign','fUser','fCategory','fOperation','fSource'].forEach(id=>{
     document.getElementById(id).addEventListener('change', e=>{
       const sel = new Set([...e.target.selectedOptions].map(o=>o.value).filter(Boolean));
@@ -2065,8 +2090,8 @@ function initFilters(){
   document.getElementById('explorerSearch').addEventListener('input', e=>{ state.search=e.target.value.toLowerCase(); document.getElementById('fSearch').value=e.target.value; state.page=1; render(); });
   document.getElementById('clearFilters').addEventListener('click', ()=>{
     state.accounts=new Set(); state.campaigns=new Set(); state.users=new Set(); state.actor=''; state.categories=new Set(); state.operations=new Set(); state.sources=new Set();
-    state.range='all'; state.search=''; state.page=1;
-    document.getElementById('fSearch').value=''; document.getElementById('explorerSearch').value=''; document.getElementById('fActor').value='';
+    state.range='all'; state.search=''; state.page=1; state.ruleMatch='';
+    document.getElementById('fSearch').value=''; document.getElementById('explorerSearch').value=''; document.getElementById('fActor').value=''; document.getElementById('fRuleMatch').value='';
     document.querySelectorAll('#fAccount,#fCampaign,#fUser,#fCategory,#fOperation,#fSource').forEach(s=>[...s.options].forEach(o=>o.selected=false));
     [...document.getElementById('rangeBtns').children].forEach(b=>b.classList.remove('active'));
     document.getElementById('rangeBtns').children[0].classList.add('active');
@@ -2093,6 +2118,11 @@ function getFiltered(){
     if(state.categories.size && !state.categories.has(c.category)) return false;
     if(state.operations.size && !state.operations.has(c.operation)) return false;
     if(state.sources.size && !state.sources.has(c.source)) return false;
+    if(state.ruleMatch){
+      const matches = computeRuleMatches(c);
+      if(state.ruleMatch==='__matched__'){ if(!matches.length) return false; }
+      else if(!matches.some(m=>m.id===state.ruleMatch)) return false;
+    }
     if(!withinRange(c.timestamp_iso)) return false;
     if(state.search){
       const hay = [c.campaign_name,c.account_name,c.user_name,c.user_email,c.category,c.subcategory,
@@ -2692,6 +2722,148 @@ SAMPLE_UNKNOWN_FORMAT_CSV = """Modified On,Modified By Email,Ads Account,Camp Na
 2026-08-02 10:00:00,user.b@example.test,Account A,Campaign Alpha,Ad Group 1,Keyword added,,running shoes
 2026-08-03 11:00:00,user.c@example.test,Account B,Campaign Gamma,Ad Group 2,Budget changed,50000,45000
 """
+
+# Rule Matches (MAGNITUDE_RULES/STATE_RULES/computeRuleMatches/getFiltered's
+# rule-match filter) is dashboard-template client JS, not Python — self_test()
+# can't reach it via run_pipeline()/validate_source() like everything else in
+# this file. Extracted straight from DASHBOARD_TEMPLATE and run under Node so
+# it can never silently drift from what actually ships. Node-only, and
+# skipped (not failed) when Node isn't on PATH — the tool itself still needs
+# nothing beyond the Python standard library to run; this one regression
+# check is the sole exception, and it's opt-in by environment, not required.
+_JS_RULE_MATCHES_TEST_SUITE = r"""
+const assert = require('assert');
+let passed = 0, failures = 0;
+function check(desc, fn){
+  try { fn(); passed++; }
+  catch(e){ failures++; console.error('FAIL: ' + desc + '\n  ' + e.message); }
+}
+function mkRow(over){
+  return Object.assign({
+    subcategory: null, resource_type: null, operation: null,
+    old_value_num: null, new_value_num: null, old_value: null, new_value: null,
+    raw_summary: '',
+  }, over);
+}
+
+check('budget +49% under the 50% threshold does not match', () => {
+  ruleState.pct.budget_magnitude = 50;
+  const r = mkRow({ subcategory: 'Budget changed', old_value_num: 100, new_value_num: 149 });
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'budget_magnitude'), false);
+});
+check('budget +50% at a 50% threshold matches, detail shows the exact number', () => {
+  ruleState.pct.budget_magnitude = 50;
+  const r = mkRow({ subcategory: 'Budget changed', old_value_num: 100, new_value_num: 150 });
+  const m = computeRuleMatches(r).find(m => m.id === 'budget_magnitude');
+  assert.ok(m, 'expected a match');
+  assert.ok(m.detail.includes('+50%'), 'detail was: ' + m.detail);
+});
+check('budget -50% (a decrease) at a 50% threshold matches — symmetric on sign', () => {
+  ruleState.pct.budget_magnitude = 50;
+  const r = mkRow({ subcategory: 'Budget changed', old_value_num: 100, new_value_num: 50 });
+  assert.ok(computeRuleMatches(r).some(m => m.id === 'budget_magnitude'));
+});
+check('old_value_num 0 never matches (percent-of-zero is undefined, not treated as +Infinity%)', () => {
+  ruleState.pct.budget_magnitude = 50;
+  const r = mkRow({ subcategory: 'Budget changed', old_value_num: 0, new_value_num: 100 });
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'budget_magnitude'), false);
+});
+check('a CREATE (subcategory "Budget created", not "Budget changed") never hits the magnitude rule', () => {
+  const r = mkRow({ subcategory: 'Budget created', new_value_num: 100000 });
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'budget_magnitude'), false);
+});
+check('campaign ENABLED->PAUSED (structured, resource_type present) matches campaign_paused', () => {
+  const r = mkRow({ subcategory: 'Paused', resource_type: 'CAMPAIGN', old_value: 'ENABLED', new_value: 'PAUSED' });
+  const m = computeRuleMatches(r).find(m => m.id === 'campaign_paused');
+  assert.ok(m, 'expected a match');
+  assert.ok(m.detail.includes('ENABLED → PAUSED'), 'detail was: ' + m.detail);
+});
+check('campaign PAUSED->ENABLED (subcategory "Enabled") never matches — intentional asymmetry', () => {
+  const r = mkRow({ subcategory: 'Enabled', resource_type: 'CAMPAIGN', old_value: 'PAUSED', new_value: 'ENABLED' });
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'campaign_paused'), false);
+});
+check('campaign REMOVE matches campaign_removed with an "Operation: REMOVE" detail', () => {
+  const r = mkRow({ subcategory: 'Campaign removed', operation: 'REMOVE' });
+  const m = computeRuleMatches(r).find(m => m.id === 'campaign_removed');
+  assert.ok(m, 'expected a match');
+  assert.ok(m.detail.includes('Operation: REMOVE'), 'detail was: ' + m.detail);
+});
+check('ad group REMOVE matches ad_group_removed', () => {
+  const r = mkRow({ subcategory: 'Ad group removed', operation: 'REMOVE' });
+  assert.ok(computeRuleMatches(r).some(m => m.id === 'ad_group_removed'));
+});
+check('text-summary "N campaigns paused" (no resource_type column) matches campaign_paused', () => {
+  const r = mkRow({ subcategory: 'Paused', raw_summary: '2 campaigns paused' });
+  assert.ok(computeRuleMatches(r).some(m => m.id === 'campaign_paused'));
+});
+check('text-summary "N ad groups paused" does NOT match campaign_paused', () => {
+  const r = mkRow({ subcategory: 'Paused', raw_summary: '2 ad groups paused' });
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'campaign_paused'), false);
+});
+check('text-summary "N broad match keywords paused" does NOT match campaign_paused', () => {
+  const r = mkRow({ subcategory: 'Paused', raw_summary: '5 broad match keywords paused' });
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'campaign_paused'), false);
+});
+check('lowering the threshold live picks up a match that was excluded a moment ago', () => {
+  const r = mkRow({ subcategory: 'Budget changed', old_value_num: 100, new_value_num: 120 });
+  ruleState.pct.budget_magnitude = 50;
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'budget_magnitude'), false);
+  ruleState.pct.budget_magnitude = 10;
+  assert.ok(computeRuleMatches(r).some(m => m.id === 'budget_magnitude'));
+  ruleState.pct.budget_magnitude = 50;
+});
+check('unchecking a state rule\'s own box excludes it even though the row still matches structurally', () => {
+  const r = mkRow({ subcategory: 'Campaign removed', operation: 'REMOVE' });
+  ruleState.stateOn.campaign_removed = false;
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'campaign_removed'), false);
+  ruleState.stateOn.campaign_removed = true;
+});
+check('getFiltered(): "Matched a rule" keeps only rows with >=1 match at current thresholds', () => {
+  DASH_DATA = { changes: [
+    mkRow({ change_id: 'a', subcategory: 'Budget changed', old_value_num: 100, new_value_num: 200 }),
+    mkRow({ change_id: 'b', subcategory: 'Budget changed', old_value_num: 100, new_value_num: 110 }),
+  ], meta: {} };
+  state.ruleMatch = '__matched__';
+  assert.deepStrictEqual(getFiltered().map(c => c.change_id), ['a']);
+  state.ruleMatch = '';
+});
+check('getFiltered(): filtering by one specific rule id excludes rows matching a different rule', () => {
+  DASH_DATA = { changes: [
+    mkRow({ change_id: 'budget-hit', subcategory: 'Budget changed', old_value_num: 100, new_value_num: 200 }),
+    mkRow({ change_id: 'removed-hit', subcategory: 'Campaign removed', operation: 'REMOVE' }),
+  ], meta: {} };
+  state.ruleMatch = 'campaign_removed';
+  assert.deepStrictEqual(getFiltered().map(c => c.change_id), ['removed-hit']);
+  state.ruleMatch = '';
+});
+
+if (failures > 0) {
+  console.error(failures + ' of ' + (passed + failures) + ' Rule Matches JS assertions failed');
+  process.exit(1);
+}
+console.log(passed + ' Rule Matches JS assertions passed');
+"""
+
+
+def _run_js_rule_matches_regression():
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        print("[SKIP] Rule Matches JS regression suite (Node not found on PATH — install Node to run this check; not required to use the tool)")
+        return
+    match = re.search(r"<script>(.*?)</script>", DASHBOARD_TEMPLATE, re.S)
+    assert match, "DASHBOARD_TEMPLATE has no <script> block to extract"
+    # DASH_DATA ships as `const` (never reassigned in the real dashboard —
+    # it's baked in at generation time); the test suite needs to reassign it
+    # per-check, so relax it to `let` only inside this harness.
+    body = match.group(1).replace(
+        "const DASH_DATA = /*__DASH_DATA__*/null;", "let DASH_DATA = null;", 1
+    )
+    assert "let DASH_DATA = null;" in body, "DASH_DATA declaration line not found — DASHBOARD_TEMPLATE's opening const may have changed shape"
+    harness = "global.document = { addEventListener: function(){} };\n" + body + "\n" + _JS_RULE_MATCHES_TEST_SUITE
+    proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=15)
+    assert proc.returncode == 0, f"Rule Matches JS regression suite failed:\n{proc.stdout}\n{proc.stderr}"
+    print(f"[PASS] Rule Matches JS regression suite (Node): {proc.stdout.strip()}")
 
 
 def self_test():
@@ -3571,6 +3743,7 @@ def self_test():
         print(f"[PASS] unknown_format second run, no --mapping-file needed: fingerprint match reused the saved profile")
 
     PROFILES_DIR = real_profiles_dir
+    _run_js_rule_matches_regression()
     print("\nAll self-tests passed." if ok else "\nSome self-tests FAILED.")
     return ok
 
