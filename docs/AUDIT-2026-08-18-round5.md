@@ -46,9 +46,17 @@ from "keyword paused" text, three phrasings that collapse to the same
   ticking it is the one deciding it's worth watching). Left unimplemented
   this round: it wasn't one of the three items the audit asked to be acted
   on, and the existing PAUSED→ENABLED asymmetry was a deliberate Phase 1
-  scope decision from the original design review, not an oversight. Worth
-  revisiting alongside the already-planned V1.1 (Reversal)/V2 (Burst) work
-  rather than folding in unreviewed.
+  scope decision from the original design review, not an oversight.
+
+  **Update, same day:** applied on explicit request right after this round
+  shipped. `campaign_enabled` (subcategory `Enabled`, same resource-type/
+  text-fallback disambiguation as `campaign_paused`, `defaultOn: false`) —
+  the *only* default-off state rule, so nothing here changed the OFF-by-
+  default posture of the feature as a whole. 5 new regression assertions
+  (default-off state, matching once enabled, staying excluded while off,
+  the campaign-vs-ad-group text ambiguity). Self-test count unchanged (57
+  — one Python `[PASS]` line covers the whole JS suite regardless of how
+  many assertions it runs; 21 now, up from 16).
 
 ## What changed in scope during this round
 

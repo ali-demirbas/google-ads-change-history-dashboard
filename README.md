@@ -58,7 +58,7 @@ When the input has a column the skill doesn't recognize, an ambiguous date/numbe
 
 `changes.jsonl` (one row per canonical change), `change_history.json` (aggregated), a single-file `dashboard.html` (works fully offline, no CDN — Filters, Summary, Activity Timeline, User Activity split by human/automation, Account/Campaign drill-down, Category Distribution, Rule Matches, Campaign Last Changes, and a sortable/searchable Change Explorer with a before/after detail panel), `coverage.txt`, and `unknown-fields.json` when applicable.
 
-**Rule Matches** — off by default. A visible toggle turns on user-adjustable magnitude thresholds (Budget/Target CPA/Target ROAS/Bid ±%) and structural rules (Campaign paused/removed, Ad group removed), computed entirely in the browser — no re-run needed to change a threshold. It never judges: a match means "crossed the threshold you set," always shown with the exact number and rule next to it, never a bare badge or severity color. A Filters dropdown lets you narrow the Explorer to matched rows, or to one specific rule.
+**Rule Matches** — off by default. A visible toggle turns on user-adjustable magnitude thresholds (Budget/Target CPA/Target ROAS/Bid ±%) and structural rules (Campaign paused, Campaign removed, Ad group removed — each independently toggleable, plus an off-by-default Campaign enabled for the reverse), computed entirely in the browser — no re-run needed to change a threshold. It never judges: a match means "crossed the threshold you set," always shown with the exact number and rule next to it, never a bare badge or severity color. A Filters dropdown lets you narrow the Explorer to matched rows, or to one specific rule.
 
 ## Privacy
 

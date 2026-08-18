@@ -1990,7 +1990,7 @@ const STATE_RULES = [
   // text-summary source (no resource_type to key off), so when resource_type
   // is genuinely absent this falls back to the same raw_summary phrasing
   // categorize_changes() itself uses to tell them apart server-side.
-  { id:'campaign_paused', label:'Campaign paused', match:c=>{
+  { id:'campaign_paused', label:'Campaign paused', defaultOn:true, match:c=>{
       if(c.subcategory!=='Paused') return false;
       if(c.resource_type) return c.resource_type==='CAMPAIGN';
       const s = c.raw_summary||'';
@@ -2000,15 +2000,27 @@ const STATE_RULES = [
     // old_value/new_value for this phrasing — fall back to a still-factual
     // statement rather than a fabricated ENABLED->PAUSED that wasn't stated.
     fact:c=> (c.old_value && c.new_value) ? `${c.old_value} → ${c.new_value}` : 'status → PAUSED' },
-  { id:'campaign_removed', label:'Campaign removed', match:c=> c.subcategory==='Campaign removed',
+  { id:'campaign_removed', label:'Campaign removed', defaultOn:true, match:c=> c.subcategory==='Campaign removed',
     fact:c=> `Operation: ${c.operation||'REMOVE'}` },
-  { id:'ad_group_removed', label:'Ad group removed', match:c=> c.subcategory==='Ad group removed',
+  { id:'ad_group_removed', label:'Ad group removed', defaultOn:true, match:c=> c.subcategory==='Ad group removed',
     fact:c=> `Operation: ${c.operation||'REMOVE'}` },
+  // Default OFF, unlike the other three — "never judge" means pausing isn't
+  // inherently more watch-worthy than re-enabling (a dormant campaign coming
+  // back can matter just as much); this one's opt-in rather than opt-out so
+  // the feature itself doesn't make that call for the user (2026-08-18,
+  // 5th audit round — noted, not applied at the time; applied now).
+  { id:'campaign_enabled', label:'Campaign enabled', defaultOn:false, match:c=>{
+      if(c.subcategory!=='Enabled') return false;
+      if(c.resource_type) return c.resource_type==='CAMPAIGN';
+      const s = c.raw_summary||'';
+      return /campaigns?\s+active/i.test(s) && !/ad\s*groups?/i.test(s);
+    },
+    fact:c=> (c.old_value && c.new_value) ? `${c.old_value} → ${c.new_value}` : 'status → ENABLED' },
 ];
 const ruleState = {
   enabled: false,
   pct: Object.fromEntries(MAGNITUDE_RULES.map(r=>[r.id, r.defaultPct])),
-  stateOn: Object.fromEntries(STATE_RULES.map(r=>[r.id, true])),
+  stateOn: Object.fromEntries(STATE_RULES.map(r=>[r.id, r.defaultOn])),
 };
 function computeRuleMatches(c){
   const out = [];
@@ -2322,7 +2334,7 @@ function initRuleMatchesConfig(){
   const stateEl = document.getElementById('ruleMatchesStateInputs');
   stateEl.innerHTML = STATE_RULES.map(r=>`
     <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;">
-      <input type="checkbox" checked data-rule-id="${r.id}"> ${escapeHtml(r.label)}
+      <input type="checkbox" ${r.defaultOn ? 'checked' : ''} data-rule-id="${r.id}"> ${escapeHtml(r.label)}
     </label>`).join('');
   stateEl.querySelectorAll('input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('change', e=>{ ruleState.stateOn[e.target.dataset.ruleId] = e.target.checked; render(); });
@@ -2778,9 +2790,36 @@ check('campaign ENABLED->PAUSED (structured, resource_type present) matches camp
   assert.ok(m, 'expected a match');
   assert.ok(m.detail.includes('ENABLED → PAUSED'), 'detail was: ' + m.detail);
 });
-check('campaign PAUSED->ENABLED (subcategory "Enabled") never matches — intentional asymmetry', () => {
+check('campaign PAUSED->ENABLED (subcategory "Enabled") never matches campaign_paused — intentional asymmetry', () => {
   const r = mkRow({ subcategory: 'Enabled', resource_type: 'CAMPAIGN', old_value: 'PAUSED', new_value: 'ENABLED' });
   assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'campaign_paused'), false);
+});
+check('campaign_enabled defaults to OFF, unlike the other three state rules', () => {
+  assert.strictEqual(ruleState.stateOn.campaign_enabled, false);
+  assert.strictEqual(ruleState.stateOn.campaign_paused, true);
+  assert.strictEqual(ruleState.stateOn.campaign_removed, true);
+  assert.strictEqual(ruleState.stateOn.ad_group_removed, true);
+});
+check('campaign PAUSED->ENABLED matches campaign_enabled once turned on, with a factual detail', () => {
+  ruleState.stateOn.campaign_enabled = true;
+  const r = mkRow({ subcategory: 'Enabled', resource_type: 'CAMPAIGN', old_value: 'PAUSED', new_value: 'ENABLED' });
+  const m = computeRuleMatches(r).find(m => m.id === 'campaign_enabled');
+  assert.ok(m, 'expected a match');
+  assert.ok(m.detail.includes('PAUSED → ENABLED'), 'detail was: ' + m.detail);
+});
+check('campaign_enabled stays off by default even when a row would otherwise match', () => {
+  ruleState.stateOn.campaign_enabled = false;
+  const r = mkRow({ subcategory: 'Enabled', resource_type: 'CAMPAIGN', old_value: 'PAUSED', new_value: 'ENABLED' });
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'campaign_enabled'), false);
+  ruleState.stateOn.campaign_enabled = true; // leave on for the remaining checks below
+});
+check('text-summary "N campaigns active" matches campaign_enabled', () => {
+  const r = mkRow({ subcategory: 'Enabled', raw_summary: '2 campaigns active' });
+  assert.ok(computeRuleMatches(r).some(m => m.id === 'campaign_enabled'));
+});
+check('text-summary "N ad groups active" does NOT match campaign_enabled', () => {
+  const r = mkRow({ subcategory: 'Enabled', raw_summary: '2 ad groups active' });
+  assert.strictEqual(computeRuleMatches(r).some(m => m.id === 'campaign_enabled'), false);
 });
 check('campaign REMOVE matches campaign_removed with an "Operation: REMOVE" detail', () => {
   const r = mkRow({ subcategory: 'Campaign removed', operation: 'REMOVE' });
