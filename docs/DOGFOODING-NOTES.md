@@ -90,3 +90,40 @@ Targeting/Keyword.
 Regression test added (synthetic fixture reproducing the shape — column
 names, the narrow-no-break-space timestamp, no account column), self-test
 54 → 55.
+
+## 2026-08-18 — a second real UI export: no category for account-admin events, keyword patterns too narrow
+
+**Symptom:** a second real native UI export (a different account than the
+one above, same file shape) came back with `other_pct: 47.8%` — well over
+the 10% warning threshold, on a file that otherwise ran cleanly end to end.
+
+**Cause, two distinct gaps:**
+1. This account's history was heavier on customer/account-administration
+   events than the first one — identity verification, security settings,
+   user access grants/invitations, manager-account links, notification
+   preferences. None of Google's real `ChangeEventResourceType` values (or
+   this tool's existing category taxonomy) cover account-level admin
+   activity at all — every one of these fell to "Other" for lack of
+   anywhere else to go, even though they're common and real.
+2. The keyword patterns added in the previous entry only matched "phrase
+   match" — the actual match-type word varies (broad/phrase/exact), and
+   broad-match is the more common one in practice. Every broad-match
+   keyword event (added, paused, removed) fell to "Other" too.
+
+**Fix:** added a new **Account** category (Customer identity changed /
+Security settings changed / Access changed / Manager account changed /
+Notification settings changed / Account settings changed) — genuinely
+distinct from "Campaign," these are customer-level, not campaign-scoped.
+Broadened the keyword patterns to match any of broad/phrase/exact, and
+added a paused/removed variant (previously only "added" was covered). Also
+added a pattern for bare/Campaign/Customer "Asset created" lines, which
+already had a category (Asset) but no text pattern to reach it from a
+field_name-less source.
+
+**Result:** `other_pct` 47.8% → 0.0% on the real file this was found
+against, with no regression on the first file (0.5% → improved further, the
+new Account rules also caught a few of its stragglers).
+
+Regression test added (synthetic fixture covering account-admin events,
+Campaign asset creation, and broad-match keyword add/pause), self-test
+55 → 56.

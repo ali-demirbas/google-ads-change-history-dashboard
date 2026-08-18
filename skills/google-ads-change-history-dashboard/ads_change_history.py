@@ -293,6 +293,15 @@ CATEGORY_RULES = {
         "AdGroup": ["Ad group created", "Ad group name changed", "Ad group settings changed", "Ad group removed"],
         "Conversion": ["Conversion action created", "Conversion action changed", "Conversion tracking changed"],
         "Feed": ["Feed created", "Feed changed", "Feed removed", "Feed item added", "Feed item changed", "Feed item removed", "Feed attached to campaign", "Feed attached to ad group"],
+        # Added 2026-08-18, found via a second real native UI export — none
+        # of Google's own real ChangeEventResourceType values map to
+        # account/customer-administration events (identity verification,
+        # security settings, user access, manager-account links,
+        # notification preferences), so there was nowhere for these to go
+        # but "Other" even though they're common, real, and clearly not
+        # ad-campaign activity. Distinct from "Campaign", which is
+        # specifically campaign-scoped.
+        "Account": ["Customer identity changed", "Security settings changed", "Access changed", "Manager account changed", "Notification settings changed", "Account settings changed"],
         "Other": ["Other"],
     },
     "structured_rules": [
@@ -403,12 +412,31 @@ CATEGORY_RULES = {
         {"pattern": r"^\d+ (universal app (engagement )?ad|responsive search ad)s? created", "category": "Ad", "subcategory": "Ad created"},
         {"pattern": r"^\d+ (universal app (engagement )?ad|responsive search ad)s? removed", "category": "Ad", "subcategory": "Ad removed"},
         {"pattern": r"^\d+ (universal app (engagement )?ad|responsive search ad)s? changed", "category": "Ad", "subcategory": "Ad changed"},
-        {"pattern": r"^\d+ negative phrase match keywords? added", "category": "Keyword", "subcategory": "Negative keyword"},
-        {"pattern": r"^\d+ phrase match keywords? added", "category": "Keyword", "subcategory": "Keyword added"},
+        # Fixed 2026-08-18 (second real export): the match-type word varies
+        # (broad/phrase/exact) — only "phrase" was covered before, missing
+        # every broad-match keyword event, the more common match type in
+        # practice.
+        {"pattern": r"^\d+ negative (broad|phrase|exact) match keywords? added", "category": "Keyword", "subcategory": "Negative keyword"},
+        {"pattern": r"^\d+ (broad|phrase|exact) match keywords? added", "category": "Keyword", "subcategory": "Keyword added"},
+        {"pattern": r"^\d+ (broad|phrase|exact) match keywords? removed", "category": "Keyword", "subcategory": "Keyword removed"},
+        {"pattern": r"^\d+ (broad|phrase|exact) match keywords? paused", "category": "Status", "subcategory": "Paused"},
         {"pattern": r"^\d+ data segments? added", "category": "Audience", "subcategory": "Audience added"},
         {"pattern": r"^\d+ languages? (added|removed)", "category": "Targeting", "subcategory": "Language targeting changed"},
-        {"pattern": r"^\d+ countr(y|ies) (added|removed)", "category": "Targeting", "subcategory": "Location targeting changed"},
+        {"pattern": r"^\d+ (countr(y|ies)|regions?) (added|removed)", "category": "Targeting", "subcategory": "Location targeting changed"},
         {"pattern": r"^(Conversion|Standard goals changed|Account-default goals)", "category": "Conversion", "subcategory": "Conversion tracking changed"},
+        # Account/customer-administration events — see the "Account" entry
+        # in CATEGORY_RULES["categories"] above for why these have nowhere
+        # else to go. Each pattern's literal continuation after "Customer "
+        # is distinct (identity/security/manager/created/changed/asset),
+        # so match order between them doesn't matter.
+        {"pattern": r"^(Customer asset|Campaign asset|Asset) created", "category": "Asset", "subcategory": "Asset added"},
+        {"pattern": r"^Customer identity (created|changed)", "category": "Account", "subcategory": "Customer identity changed"},
+        {"pattern": r"^Customer security settings changed", "category": "Account", "subcategory": "Security settings changed"},
+        {"pattern": r"^Customer manager (created|changed)", "category": "Account", "subcategory": "Manager account changed"},
+        {"pattern": r"^Customer (created|changed)", "category": "Account", "subcategory": "Account settings changed"},
+        {"pattern": r"^(Access level for user|Access is activated|Sent invitation to access account)", "category": "Account", "subcategory": "Access changed"},
+        {"pattern": r"^Updated .+'s notification setting", "category": "Account", "subcategory": "Notification settings changed"},
+        {"pattern": r"^Location sync (created|changed)", "category": "Account", "subcategory": "Account settings changed"},
     ],
     "fallback": {"category": "Other", "subcategory": "Other"},
 }
@@ -1896,7 +1924,7 @@ function userIdentity(c){ return c.user_email || c.user_name; }
 const CATEGORY_COLORS = {
   Budget:'#5b8cff', Bidding:'#b48aff', Keyword:'#3ecfb2', Ad:'#f5834a', Asset:'#f0c040',
   Targeting:'#ff6b9d', Audience:'#5bc8ff', Status:'#35c98f', Campaign:'#8f6bff',
-  AdGroup:'#6bafff', Conversion:'#e8a33d', Feed:'#7fd992',
+  AdGroup:'#6bafff', Conversion:'#e8a33d', Feed:'#7fd992', Account:'#c084fc',
 };
 function categoryPillStyle(cat){
   const c = CATEGORY_COLORS[cat];
@@ -2849,6 +2877,41 @@ def self_test():
         cats = {r["category"] for r in ui_rows}
         assert cats == {"Campaign", "Status", "AdGroup", "Budget"}, f"unexpected category set: {cats}"
         print(f"[PASS] a real native Google Ads UI 'Change history' CSV export (no account/field_name/resource_type column, narrow-no-break-space before AM/PM, spelled-out-month timestamps) now runs end to end — --account-name fills the missing account, UI_EN auto-detects the timestamp format, and the new English summary_text_rules categorize it instead of 100% falling to Other")
+
+        # Found 2026-08-18 via a SECOND real native UI export (a different
+        # account than the one above) — heavier on account-administration
+        # events than the first, which surfaced two more gaps: no category
+        # existed at all for customer/account-level events (identity,
+        # security, access, manager, notifications), and the keyword
+        # patterns above only covered "phrase match," missing "broad match"
+        # entirely — the more common match type in practice. Other went
+        # from 47.8% to 0.0% on the real file this was found against.
+        account_events_csv = (
+            "Date & time,User,Campaign,Ad group,Changes\n"
+            "\"Aug 17, 2026, 6:47:08 PM\",a@example.test,,,\"Customer identity created\n  \"\n"
+            "\"Jul 30, 2026, 5:23:50 PM\",a@example.test,,,\"Customer security settings changed\n  Allowed domains changed\"\n"
+            "\"Jul 29, 2026, 11:47:16 PM\",a@example.test,,,\"Customer manager created\n  Status is Pending\"\n"
+            "\"Jul 29, 2026, 10:37:26 PM\",a@example.test,,,\"Sent invitation to access account with \"\"Standard access\"\" to \"\"b@example.test\"\"\n  \"\n"
+            "\"Jul 29, 2026, 10:00:00 PM\",a@example.test,,,\"Updated a@example.test's notification setting to not receive non-critical newsletter messages\n  \"\n"
+            "\"Jul 8, 2026, 3:05:41 PM\",a@example.test,Campaign Alpha,,\"Campaign asset created\n  Status is Enabled\"\n"
+            "\"Jul 16, 2026, 7:25:33 PM\",a@example.test,Campaign Alpha,Ad Group 1,\"1 broad match keyword added\n  running shoes\"\n"
+            "\"Jul 20, 2026, 9:00:00 PM\",a@example.test,Campaign Alpha,Ad Group 1,\"1 broad match keyword paused\n  discount shoes: Status changed from enabled to paused\"\n"
+        )
+        f_account_events = td / "p4_account_events.csv"
+        f_account_events.write_text(account_events_csv, encoding="utf-8")
+        r_account_events = run_pipeline(f_account_events, td / "out_account_events", account_name="Test Account", generated_at="2026-08-17T00:00:00")
+        assert r_account_events["status"] == "ok", f"account-events fixture failed: {r_account_events}"
+        assert r_account_events["other_pct"] == 0.0, f"expected all 8 rows to categorize, got other_pct={r_account_events['other_pct']}"
+        with open(td / "out_account_events" / "changes.jsonl", encoding="utf-8") as fh:
+            ae_rows = [json.loads(l) for l in fh]
+        cats = {r["category"] for r in ae_rows}
+        assert "Account" in cats, f"customer/account-administration events must categorize as Account, got categories: {cats}"
+        assert "Asset" in cats, f"'Campaign asset created' must categorize as Asset, got categories: {cats}"
+        broad_kw_added = next(r for r in ae_rows if "broad match keyword added" in (r["raw_summary"] or ""))
+        broad_kw_paused = next(r for r in ae_rows if "broad match keyword paused" in (r["raw_summary"] or ""))
+        assert broad_kw_added["category"] == "Keyword", f"broad match keyword added must categorize as Keyword, got {broad_kw_added['category']}"
+        assert broad_kw_paused["category"] == "Status", f"broad match keyword paused must categorize as Status, got {broad_kw_paused['category']}"
+        print(f"[PASS] a second real native UI export's gaps now covered: a new 'Account' category for customer/account-administration events (identity/security/access/manager/notifications), broad-match keywords (previously only phrase-match was covered), and bare/Campaign/Customer asset-creation lines")
 
         # =================================================================
         # Regression guards for the 2026-08-18 forensic audit's findings.

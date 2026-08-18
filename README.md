@@ -3,7 +3,7 @@
 [![validate](https://github.com/ali-demirbas/google-ads-change-history-dashboard/actions/workflows/validate.yml/badge.svg)](https://github.com/ali-demirbas/google-ads-change-history-dashboard/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 ![Single file](https://img.shields.io/badge/skill-single_file-blue)
-![Tests](https://img.shields.io/badge/self--tests-55_passing-brightgreen)
+![Tests](https://img.shields.io/badge/self--tests-56_passing-brightgreen)
 
 A Claude Code skill that turns a Google Ads change-history export (CSV, TSV, or a pre-flattened `ChangeEvent` JSON) into a filterable, offline, single-file HTML dashboard — who changed what, in which account/campaign/ad group, old value to new value, and what category it falls into.
 
