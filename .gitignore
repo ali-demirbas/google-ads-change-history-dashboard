@@ -1,0 +1,10 @@
+# Runtime state — learned column-mapping profiles, regenerated per source
+skills/google-ads-change-history-dashboard/mapping-profiles/*.json
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS
+.DS_Store

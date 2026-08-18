@@ -1,0 +1,21 @@
+{
+  "name": "google-ads-change-history-dashboard",
+  "version": "0.1.0",
+  "description": "Turns a Google Ads change-history export (CSV, TSV, or ChangeEvent JSON) into a factual, filterable offline dashboard — who changed what, when, old value to new value, which account/campaign/ad group. Never judges whether a change was good or risky.",
+  "author": {
+    "name": "Ali Demirbaş"
+  },
+  "homepage": "https://github.com/ali-demirbas/google-ads-change-history-dashboard",
+  "repository": "https://github.com/ali-demirbas/google-ads-change-history-dashboard",
+  "license": "MIT",
+  "keywords": [
+    "google-ads",
+    "change-history",
+    "audit-trail",
+    "dashboard",
+    "ppc",
+    "advertising",
+    "claude-code",
+    "claude-skills"
+  ]
+}

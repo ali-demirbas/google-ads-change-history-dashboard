@@ -1,0 +1,13 @@
+{
+  "name": "google-ads-change-history-dashboard",
+  "owner": {
+    "name": "Ali Demirbaş"
+  },
+  "plugins": [
+    {
+      "name": "google-ads-change-history-dashboard",
+      "source": "./",
+      "description": "Turns a Google Ads change-history export into a factual, filterable offline dashboard — who changed what, when, old value to new value. Never judges whether a change was good or risky."
+    }
+  ]
+}
