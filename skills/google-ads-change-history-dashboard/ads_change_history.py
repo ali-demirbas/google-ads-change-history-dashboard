@@ -409,6 +409,7 @@ SUMMARY_CHANGED_FROM_TO_RE = re.compile(
 # sufficient; the replace() calls downstream don't touch it.
 DIGIT_GROUP_3 = re.compile(r"^-?\d{1,3}([.,]\d{3})+$")
 DIGIT_GROUP_SHORT = re.compile(r"^-?\d+[.,]\d{1,2}$")
+SINCE_RE = re.compile(r"^\d+[dwm]$")
 
 
 # =====================================================================
@@ -704,8 +705,20 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
     unmatched = []
     source_label = "unmapped_confirmed"
     if mapping_file:
-        with open(mapping_file, encoding="utf-8") as f:
-            confirmed = json.load(f)
+        # Fixed 2026-08-18 (4th audit round, confirmed): read_rows() turns
+        # every malformed-INPUT case into a structured error, but this file
+        # — a config the caller supplies, not the data being analyzed — had
+        # no equivalent: a missing --mapping-file or invalid JSON in it
+        # crashed with a raw FileNotFoundError/JSONDecodeError instead of the
+        # same structured status every other failure mode in this function
+        # already uses.
+        try:
+            with open(mapping_file, encoding="utf-8") as f:
+                confirmed = json.load(f)
+        except FileNotFoundError:
+            return {"status": "error", "message": f"Mapping file not found: {mapping_file}"}
+        except json.JSONDecodeError as e:
+            return {"status": "error", "message": f"Mapping file is not valid JSON: {mapping_file} ({e})"}
         mapping = confirmed.get("mapping", confirmed)
         source_label = confirmed.get("source_label", "user_confirmed")
     else:
@@ -977,6 +990,21 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         return {"status": "needs_decimal_style", "message": "Numeric columns have an ambiguous separator (e.g. '150.000'). Ask the user, then pass decimal_style='TR'|'US'.", "sample_values": [v for v in numeric_values if v][:5]}
     resolved_decimal_style = decimal_style or "TR"
 
+    # Fixed 2026-08-18 (4th audit round, confirmed): an invalid --timezone
+    # (a typo like "Europe/Istanbull") wasn't validated anywhere — every row
+    # hit ZoneInfo(tz) inside the loop below, the exception was caught and
+    # silently swallowed per-row (ts_utc left None), and the row's own
+    # "timezone" field kept the invalid string as if it were real, with
+    # status "ok" and no warning anywhere. Validated once, upfront, the same
+    # way an ambiguous date format or decimal separator already stops the
+    # pipeline instead of guessing through it.
+    if tz != "unknown":
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo(tz)
+        except Exception as e:
+            return {"status": "error", "message": f"Unknown timezone: {tz!r} ({e}). Pass a valid IANA timezone name (e.g. 'Europe/Istanbul') via --timezone, or omit it."}
+
     out_rows, unparseable = [], 0
     for r in rows:
         def g(field):
@@ -1133,6 +1161,44 @@ def dedupe_rows(rows):
 # =====================================================================
 # STAGE 4: CATEGORIZATION
 # =====================================================================
+EXTRA_RULE_MATCHER_KEYS = {
+    "resource_type", "resource_type_in", "resource_type_contains",
+    "field_name_contains", "field_name_not_contains", "operation", "new_value_equals",
+}
+
+
+def validate_extra_rules(rules):
+    """Fixed 2026-08-18 (4th audit round, confirmed): match_structured()
+    trusted every extra_rules entry's shape completely — a rule missing
+    "category"/"subcategory" crashed with a raw KeyError the moment a row
+    matched it, deep inside categorization, not at load time. --extra-rules
+    is this tool's own documented, official path for resolving
+    needs_category_review, so a malformed rule here should stop with a clear
+    message up front — the same "never guess past a genuine ambiguity"
+    discipline applied to config, not just input data. Returns None if
+    valid, or a message describing the first problem found. Deliberately
+    does NOT require `category` to be one of CATEGORY_RULES's existing
+    names — needs_category_review's own instructions tell the user to
+    introduce a new category this way, so restricting to a closed set would
+    break the documented workflow."""
+    if not isinstance(rules, list):
+        return f"--extra-rules must be a JSON list of rule objects, got {type(rules).__name__}"
+    allowed_keys = EXTRA_RULE_MATCHER_KEYS | {"category", "subcategory"}
+    for i, rule in enumerate(rules):
+        if not isinstance(rule, dict):
+            return f"--extra-rules[{i}] must be an object, got {type(rule).__name__}"
+        if not isinstance(rule.get("category"), str) or not rule.get("category"):
+            return f"--extra-rules[{i}] is missing a non-empty 'category' string"
+        if not isinstance(rule.get("subcategory"), str) or not rule.get("subcategory"):
+            return f"--extra-rules[{i}] is missing a non-empty 'subcategory' string"
+        if not (EXTRA_RULE_MATCHER_KEYS & rule.keys()):
+            return f"--extra-rules[{i}] has no matcher key — needs at least one of {sorted(EXTRA_RULE_MATCHER_KEYS)}"
+        unknown = set(rule.keys()) - allowed_keys
+        if unknown:
+            return f"--extra-rules[{i}] has unsupported key(s) {sorted(unknown)} — supported: {sorted(allowed_keys)}"
+    return None
+
+
 def match_structured(row, extra_rules=None):
     rules = (extra_rules or []) + CATEGORY_RULES["structured_rules"]
     rt = (row.get("resource_type") or "").upper()
@@ -2168,7 +2234,16 @@ def query_changes(rows, user=None, account=None, campaign=None, category=None, o
     CLI ergonomics — see SKILL.md)."""
     cutoff = None
     if since:
-        n = int(since.rstrip("dwm"))
+        # Fixed 2026-08-18 (4th audit round, confirmed): int(since.rstrip("dwm"))
+        # crashed with a raw ValueError on garbage ("abc", "7x") and silently
+        # accepted a negative count ("-7d") — rstrip only strips the trailing
+        # unit letter, it doesn't validate what's in front of it, so "-7"
+        # parsed as int(-7) without complaint and produced a cutoff in the
+        # future instead of the past, silently returning wrong (usually
+        # empty) results rather than erroring.
+        if not SINCE_RE.match(since):
+            raise ValueError(f"Invalid --since value: {since!r}. Expected a positive number followed by d/w/m, e.g. '7d', '2w', '1m'.")
+        n = int(since[:-1])
         unit = since[-1]
         days = n if unit == "d" else n * 7 if unit == "w" else n * 30
         ref_times = [r["timestamp_iso"] for r in rows if r.get("timestamp_iso")]
@@ -2207,6 +2282,11 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    if extra_rules is not None:
+        err = validate_extra_rules(extra_rules)
+        if err:
+            return {"status": "error", "message": err}
+
     v = validate_source(input_path, mapping_file=mapping_file, force=force_review)
     if v["status"] != "ok":
         return v
@@ -2215,6 +2295,30 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     n = normalize_changes(input_path, v["mapping"], v["source_label"], date_format=date_format, decimal_style=decimal_style, tz=tz)
     if n["status"] != "ok":
         return n
+
+    # Fixed 2026-08-18 (4th audit round, confirmed): any unparseable-date
+    # rate, even 90%+, previously still returned status "ok" — just a
+    # WARNING line buried in coverage.txt that nothing forces a reader to
+    # see. Past a threshold this high, the date column itself is probably
+    # mismatched (wrong --date-format, or genuinely the wrong column), not a
+    # handful of bad rows — the same "stop and confirm" gate every other
+    # genuine ambiguity in this pipeline already gets, not silent output
+    # built from a fraction of the real dataset presented as the whole
+    # thing. 20% is a judgment call, not a measured constant; --force-review
+    # (the same flag the >30%-empty-required-field gate already uses)
+    # bypasses it once a human has actually looked and confirmed the rate is
+    # real.
+    input_total = len(n["rows"]) + n["rows_skipped_unparseable_date"]
+    date_skip_pct = round(100 * n["rows_skipped_unparseable_date"] / input_total, 1) if input_total else 0.0
+    if date_skip_pct > 20 and not force_review:
+        return {
+            "status": "needs_date_review",
+            "message": f"{n['rows_skipped_unparseable_date']} of {input_total} rows ({date_skip_pct}%) could not be parsed as dates under the resolved format ({n['date_format_used']}). This is high enough that the date column or --date-format is probably wrong, not just a few bad rows.",
+            "rows_skipped_unparseable_date": n["rows_skipped_unparseable_date"],
+            "rows_skipped_unparseable_date_pct": date_skip_pct,
+            "date_format_used": n["date_format_used"],
+            "instructions": "Confirm with the user whether this rate is genuinely expected (a source with a lot of malformed dates) or the wrong --date-format was resolved/passed. If it's real, re-run with --force-review.",
+        }
 
     deduped_rows, duplicate_count = dedupe_rows(n["rows"])
     n["rows"] = deduped_rows
@@ -2483,6 +2587,85 @@ def self_test():
         print(f"[PASS] check_hard_required() now runs for --mapping-file and cached-fingerprint mappings too, not just the fresh alias-match path — an incomplete mapping stops with needs_mapping instead of silently producing 100% 'Other' output")
 
         # =================================================================
+        # 4th audit round (2026-08-18) — every claim independently
+        # reproduced against this file's actual code before being fixed,
+        # same standing practice as the first three rounds.
+        # =================================================================
+
+        # An invalid --timezone (a typo) used to be silently swallowed per
+        # row, leaving timestamp_utc=None and the row's own "timezone" field
+        # holding the invalid string, with status "ok" throughout.
+        f_badtz = td / "p4_badtz.json"
+        f_badtz.write_text(json.dumps([
+            {"change_date_time": "2026-08-01 09:00:00", "customer_id": "1", "resource_name": "tz1", "user_email": "a@example.test",
+             "change_resource_type": "CAMPAIGN", "resource_change_operation": "UPDATE", "changed_fields": "status",
+             "old_resource": "ENABLED", "new_resource": "PAUSED"},
+        ]), encoding="utf-8")
+        r_badtz = run_pipeline(f_badtz, td / "out_badtz", tz="Europe/Istanbull", allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
+        assert r_badtz["status"] == "error", f"an invalid --timezone must stop the pipeline, got: {r_badtz}"
+        assert "Istanbull" in r_badtz["message"], f"error message should name the bad value: {r_badtz['message']}"
+        r_goodtz = run_pipeline(f_badtz, td / "out_goodtz", tz="Europe/Istanbul", allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
+        assert r_goodtz["status"] == "ok", f"a valid --timezone must still work: {r_goodtz}"
+        print(f"[PASS] an invalid --timezone (e.g. a typo) now stops the pipeline with a clear error instead of being silently swallowed per-row")
+
+        # A missing/invalid --mapping-file used to crash with a raw
+        # FileNotFoundError/JSONDecodeError instead of a structured status.
+        v_missing_map = validate_source(f_badtz, mapping_file=td / "does_not_exist.json", save_profile=False)
+        assert v_missing_map["status"] == "error", f"a missing --mapping-file must return a structured error, got: {v_missing_map}"
+        f_badjson_map = td / "p4_bad_mapping.json"
+        f_badjson_map.write_text("{not valid json", encoding="utf-8")
+        v_badjson_map = validate_source(f_badtz, mapping_file=f_badjson_map, save_profile=False)
+        assert v_badjson_map["status"] == "error", f"an invalid-JSON --mapping-file must return a structured error, got: {v_badjson_map}"
+        print(f"[PASS] a missing or invalid-JSON --mapping-file now returns a structured error instead of a raw traceback")
+
+        # extra_rules entries missing category/subcategory used to crash
+        # match_structured() with a raw KeyError the moment a row matched —
+        # --extra-rules is this tool's own documented fix for
+        # needs_category_review, so a malformed rule here must be validated
+        # up front, not crash mid-categorization.
+        assert validate_extra_rules([{"resource_type": "CAMPAIGN"}]) is not None, "a rule missing category/subcategory must fail validation"
+        assert validate_extra_rules([{"category": "X", "subcategory": "Y"}]) is not None, "a rule with no matcher key must fail validation"
+        assert validate_extra_rules("not a list") is not None, "a non-list extra_rules must fail validation"
+        assert validate_extra_rules([{"resource_type": "CAMPAIGN", "category": "X", "subcategory": "Y"}]) is None, "a well-formed rule must pass validation"
+        r_badrule = run_pipeline(f_badtz, td / "out_badrule", extra_rules=[{"resource_type": "CAMPAIGN"}], generated_at="2026-08-17T00:00:00")
+        assert r_badrule["status"] == "error", f"run_pipeline must reject a malformed extra_rules entry before touching the data, got: {r_badrule}"
+        print(f"[PASS] validate_extra_rules(): a malformed --extra-rules entry (missing category/subcategory, no matcher, wrong shape) now fails validation up front instead of crashing match_structured() with a raw KeyError")
+
+        # query's --since parser: int(since.rstrip("dwm")) crashed on garbage
+        # ("abc", "7x") and silently accepted a negative count ("-7d"),
+        # producing a future cutoff and silently-wrong (usually empty)
+        # results instead of an error.
+        for bad_since in ("abc", "7x", "-7d", "d", ""):
+            if not bad_since:
+                continue  # empty string is falsy, since=None path, not exercised here
+            try:
+                query_changes([{"timestamp_iso": "2026-08-01T00:00:00"}], since=bad_since)
+                raise AssertionError(f"--since {bad_since!r} should have raised ValueError")
+            except ValueError:
+                pass
+        assert query_changes([{"timestamp_iso": "2026-08-01T00:00:00"}], since="0d") == [{"timestamp_iso": "2026-08-01T00:00:00"}]
+        print(f"[PASS] query_changes(): --since now validates against ^\\d+[dwm]$ — garbage and negative values raise ValueError instead of crashing or silently returning wrong results")
+
+        # Any unparseable-date rate, even 90%+, previously still returned
+        # status "ok" with just a WARNING line in coverage.txt. Past 20% the
+        # pipeline now stops (mirrors the >30%-empty-required-field gate's
+        # force_review escape hatch).
+        f_highskip = td / "p4_high_date_skip.json"
+        f_highskip.write_text(json.dumps([
+            {"change_date_time": "2026-08-01 09:00:00", "customer_id": "1", "resource_name": "hs1", "user_email": "a@example.test",
+             "change_resource_type": "CAMPAIGN", "resource_change_operation": "UPDATE", "changed_fields": "status", "old_resource": "ENABLED", "new_resource": "PAUSED"},
+        ] + [
+            {"change_date_time": "2026-13-45 09:00:00", "customer_id": "1", "resource_name": f"hs{i}", "user_email": "a@example.test",
+             "change_resource_type": "CAMPAIGN", "resource_change_operation": "UPDATE", "changed_fields": "status", "old_resource": "ENABLED", "new_resource": "PAUSED"}
+            for i in range(2, 6)
+        ]), encoding="utf-8")
+        r_highskip = run_pipeline(f_highskip, td / "out_highskip", allow_unknown_categories=True, generated_at="2026-08-17T00:00:00")
+        assert r_highskip["status"] == "needs_date_review", f"a >20% unparseable-date rate must stop the pipeline, got: {r_highskip}"
+        r_highskip_forced = run_pipeline(f_highskip, td / "out_highskip_forced", allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
+        assert r_highskip_forced["status"] == "ok", f"--force-review must let a high unparseable-date rate proceed, got: {r_highskip_forced}"
+        print(f"[PASS] a >20% unparseable-date rate now stops with needs_date_review instead of silently returning 'ok' with most of the dataset dropped (--force-review bypasses it once confirmed)")
+
+        # =================================================================
         # Regression guards for the 2026-08-18 forensic audit's findings.
         # =================================================================
 
@@ -2712,7 +2895,11 @@ def self_test():
         ]
         f_mixdate = td / "p1_mixed_date.json"
         f_mixdate.write_text(json.dumps(mixed_date_rows), encoding="utf-8")
-        r_mixdate = run_pipeline(f_mixdate, td / "out_p1mixdate", allow_unknown_categories=True, generated_at="2026-08-17T00:00:00")
+        # force_review=True: this 2-row fixture is 50% unparseable by design
+        # (that's the point of the test) — legitimately trips the 4th-audit-
+        # round's >20% needs_date_review gate on a sample this small, same
+        # known-correct gate behavior as the other force_review fixtures.
+        r_mixdate = run_pipeline(f_mixdate, td / "out_p1mixdate", allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
         assert r_mixdate["rows_skipped_unparseable_date"] == 1
         coverage_text = (td / "out_p1mixdate" / "coverage.txt").read_text(encoding="utf-8")
         assert "Rows skipped (unparseable date): 1" in coverage_text, f"P1: coverage.txt must report the skip: {coverage_text}"
@@ -3045,8 +3232,20 @@ def main():
     if args.cmd == "run":
         extra_rules = None
         if args.extra_rules:
-            with open(args.extra_rules, encoding="utf-8") as f:
-                extra_rules = json.load(f)
+            # Fixed 2026-08-18 (4th audit round, confirmed): same structured-
+            # error contract as every other malformed-input case in this CLI
+            # — a missing/invalid --extra-rules file used to crash with a
+            # raw traceback instead of the JSON status envelope every other
+            # failure here already prints.
+            try:
+                with open(args.extra_rules, encoding="utf-8") as f:
+                    extra_rules = json.load(f)
+            except FileNotFoundError:
+                print(json.dumps({"status": "error", "message": f"--extra-rules file not found: {args.extra_rules}"}, indent=2, ensure_ascii=False))
+                sys.exit(2)
+            except json.JSONDecodeError as e:
+                print(json.dumps({"status": "error", "message": f"--extra-rules file is not valid JSON: {args.extra_rules} ({e})"}, indent=2, ensure_ascii=False))
+                sys.exit(2)
         result = run_pipeline(
             args.input, args.out_dir, mapping_file=args.mapping_file, date_format=args.date_format,
             decimal_style=args.decimal_style, tz=args.timezone, mask_users=args.mask_users,
@@ -3062,8 +3261,12 @@ def main():
             for line in f:
                 if line.strip():
                     rows.append(json.loads(line))
-        matched = query_changes(rows, user=args.user, account=args.account, campaign=args.campaign,
-                                 category=args.category, operation=args.operation, source=args.source, since=args.since)
+        try:
+            matched = query_changes(rows, user=args.user, account=args.account, campaign=args.campaign,
+                                     category=args.category, operation=args.operation, source=args.source, since=args.since)
+        except ValueError as e:
+            print(json.dumps({"status": "error", "message": str(e)}, indent=2, ensure_ascii=False))
+            sys.exit(2)
         if args.format == "json":
             print(json.dumps({"count": len(matched), "rows": matched}, indent=2, ensure_ascii=False))
         else:
