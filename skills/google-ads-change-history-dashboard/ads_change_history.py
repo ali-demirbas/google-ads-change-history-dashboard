@@ -519,6 +519,14 @@ SUMMARY_CHANGED_FROM_TO_RE = re.compile(
     r"(?:changed|increased|decreased)\s+from\s+\"?([^\"\n]{1,60}?)\"?\s+to\s+\"?([^\"\n]{1,60}?)\"?(?=\n|$)",
     re.IGNORECASE,
 )
+# Third fallback, Turkish native UI export phrasing: "OLD olan FIELD, NEW
+# olarak değiştirildi" (budget) / "OLD olan FIELD, NEW değerine artırıldı/
+# azaltıldı" (target CPA/ROAS, bids) — verified against a real 98-row export.
+# Currency symbol (₺) stripped along with the digit-group leader, same as the
+# other two patterns leave to normalize_number().
+SUMMARY_TR_OLAN_DEGERINE_RE = re.compile(
+    r"₺?(-?[\d.,]+)\s+olan\s+[^,\n]+,\s*₺?(-?[\d.,]+)\s+(?:olarak değiştirildi|değerine (?:artırıldı|azaltıldı))"
+)
 # -? prefix added 2026-08-18 (3rd audit round, confirmed): without it, a
 # negative value like "-150.00" or "-3,50" matched neither pattern (both
 # required the string to START with a digit), fell through to
@@ -1218,6 +1226,11 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
                 if m2:
                     old_value, new_value = m2.group(1).strip().rstrip("."), m2.group(2).strip().rstrip(".")
                     value_confidence = "parsed_from_summary"
+                else:
+                    m3 = SUMMARY_TR_OLAN_DEGERINE_RE.search(str(raw_summary))
+                    if m3:
+                        old_value, new_value = m3.group(1), m3.group(2)
+                        value_confidence = "parsed_from_summary"
 
         old_num = new_num = None
         try:
@@ -2045,7 +2058,11 @@ const STATE_RULES = [
       if(c.subcategory!=='Paused') return false;
       if(c.resource_type) return c.resource_type==='CAMPAIGN';
       const s = c.raw_summary||'';
-      return /campaigns?\s+paused/i.test(s) && !/ad\s*groups?|match\s+keywords?/i.test(s);
+      // Turkish native UI export alternative — mirrors the "^\d+ kampanya
+      // duraklat" summary_text_rule (Python) that assigns this subcategory
+      // in the first place; keep both in sync if either wording changes.
+      return (/campaigns?\s+paused/i.test(s) && !/ad\s*groups?|match\s+keywords?/i.test(s))
+        || /^\d+\s*kampanya\s+duraklat/i.test(s);
     },
     // Text-summary rows (no explicit before/after column) don't carry
     // old_value/new_value for this phrasing — fall back to a still-factual
@@ -2064,7 +2081,11 @@ const STATE_RULES = [
       if(c.subcategory!=='Enabled') return false;
       if(c.resource_type) return c.resource_type==='CAMPAIGN';
       const s = c.raw_summary||'';
-      return /campaigns?\s+active/i.test(s) && !/ad\s*groups?/i.test(s);
+      // Turkish native UI export alternative — mirrors the "^\d+ kampanya
+      // etkin" summary_text_rule (Python) that assigns this subcategory in
+      // the first place; keep both in sync if either wording changes.
+      return (/campaigns?\s+active/i.test(s) && !/ad\s*groups?/i.test(s))
+        || /^\d+\s*kampanya\s+etkin/i.test(s);
     },
     fact:c=> (c.old_value && c.new_value) ? `${c.old_value} → ${c.new_value}` : 'status → ENABLED' },
 ];
