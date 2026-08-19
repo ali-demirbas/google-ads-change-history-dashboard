@@ -8,6 +8,11 @@ google-ads.yaml
 *.google-ads.yaml
 tools/*.json
 
+# Run output/artifacts (contain real account data — never committed)
+skills/google-ads-change-history-dashboard/out/
+skills/google-ads-change-history-dashboard/*.csv
+skills/google-ads-change-history-dashboard/mapping.json
+
 # Python
 __pycache__/
 *.pyc

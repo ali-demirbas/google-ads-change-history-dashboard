@@ -437,6 +437,57 @@ CATEGORY_RULES = {
         {"pattern": r"^(Access level for user|Access is activated|Sent invitation to access account)", "category": "Account", "subcategory": "Access changed"},
         {"pattern": r"^Updated .+'s notification setting", "category": "Account", "subcategory": "Notification settings changed"},
         {"pattern": r"^Location sync (created|changed)", "category": "Account", "subcategory": "Account settings changed"},
+        # Added 2026-08-19, found via a real native Google Ads UI export in
+        # TURKISH (Kampanyalar > Değişiklik geçmişi > İndir): same shape as
+        # the English block above (no field_name/resource_type column, only
+        # a free-text "Değişiklik" cell whose first line is a headline), but
+        # the UI's own locale phrasing is different from both this block's
+        # English patterns and the "legacy_summary_tr" block above (which was
+        # a prior project's spreadsheet convention, not this native export's
+        # wording). Patterns taken from the actual first-line phrasings
+        # observed across ~98 real rows in that export, generalized — no
+        # account/campaign/keyword-list-specific text. The negative-
+        # keyword-list rule intentionally has no ^ anchor since the source
+        # prefixes it with a variable, quoted list name.
+        {"pattern": r"^Kampanya değiştirildi", "category": "Campaign", "subcategory": "Campaign settings changed"},
+        {"pattern": r"^Kampanya oluşturuldu", "category": "Campaign", "subcategory": "Campaign created"},
+        {"pattern": r"^Kampanya kaldırıldı", "category": "Campaign", "subcategory": "Campaign removed"},
+        {"pattern": r"^Kampanya öğesi oluşturuldu", "category": "Asset", "subcategory": "Asset added"},
+        {"pattern": r"^Kampanya öğesi değiştirildi", "category": "Asset", "subcategory": "Asset changed"},
+        {"pattern": r"^Kampanya öğesi kaldırıldı", "category": "Asset", "subcategory": "Asset removed"},
+        {"pattern": r"^\d+ kampanya etkin", "category": "Status", "subcategory": "Enabled"},
+        {"pattern": r"^\d+ kampanya duraklat", "category": "Status", "subcategory": "Paused"},
+        {"pattern": r"^Bütçe oluşturuldu", "category": "Budget", "subcategory": "Budget created"},
+        {"pattern": r"^Bütçe kaldırıldı", "category": "Budget", "subcategory": "Budget removed"},
+        {"pattern": r"^\d+ bütçenin tutarı (azaltıldı|artırıldı)", "category": "Budget", "subcategory": "Budget changed"},
+        {"pattern": r"^\d+ teklif ayarlama değişikliği", "category": "Bidding", "subcategory": "Bid changed"},
+        {"pattern": r"^Reklam grubu oluşturuldu", "category": "AdGroup", "subcategory": "Ad group created"},
+        {"pattern": r"^Reklam grubu değiştirildi", "category": "AdGroup", "subcategory": "Ad group settings changed"},
+        {"pattern": r"^Reklam grubu kaldırıldı", "category": "AdGroup", "subcategory": "Ad group removed"},
+        {"pattern": r"^\d+ duyarlı arama ağı reklamı oluşturuldu", "category": "Ad", "subcategory": "Ad created"},
+        {"pattern": r"^\d+ duyarlı arama ağı reklamı değiştirildi", "category": "Ad", "subcategory": "Ad changed"},
+        {"pattern": r"^\d+ duyarlı arama ağı reklamı kaldırıldı", "category": "Ad", "subcategory": "Ad removed"},
+        {"pattern": r"^\d+ [Dd]uyarlı görüntülü reklam oluşturuldu", "category": "Ad", "subcategory": "Ad created"},
+        {"pattern": r"^\d+ [Dd]uyarlı görüntülü reklam değiştirildi", "category": "Ad", "subcategory": "Ad changed"},
+        {"pattern": r"^\d+ [Dd]uyarlı görüntülü reklam kaldırıldı", "category": "Ad", "subcategory": "Ad removed"},
+        {"pattern": r"^Öğe oluşturuldu", "category": "Ad", "subcategory": "Ad created"},
+        {"pattern": r"negatif (anahtar kelime listesi uygulandı|sıralı eşlemeli anahtar kelime(ler)? (eklendi|listeye eklendi))", "category": "Keyword", "subcategory": "Negative keyword"},
+        {"pattern": r"^\d+ (geniş|sıralı|tam) eşlemeli anahtar kelime(ler)? eklendi", "category": "Keyword", "subcategory": "Keyword added"},
+        {"pattern": r"^\d+ (geniş|sıralı|tam) eşlemeli anahtar kelime(ler)? duraklatıldı", "category": "Status", "subcategory": "Paused"},
+        {"pattern": r"^\d+ dil (eklendi|kaldırıldı)", "category": "Targeting", "subcategory": "Language targeting changed"},
+        {"pattern": r"^\d+ (ülke(ler)?|bölge(ler)?) (eklendi|kaldırıldı)", "category": "Targeting", "subcategory": "Location targeting changed"},
+        {"pattern": r"^Dönüşüm hedefi oluşturuldu", "category": "Conversion", "subcategory": "Conversion action created"},
+        {"pattern": r"^Dönüşüm hedefi değiştirildi", "category": "Conversion", "subcategory": "Conversion action changed"},
+        # Second pass, 2026-08-19: 4 more real phrasings found in the same
+        # 98-row export after the first pass above. "yaş grubu" (age group)
+        # rows are demographic/audience exclusions, not location — Audience,
+        # not Targeting. The "adlı kampanya özel hedefi eklendi" (named
+        # custom-intent audience added) and the age-group rules have no fixed
+        # prefix (a quoted name or a leading count precedes them), so these
+        # use re.search without a ^ anchor, same reasoning as the negative-
+        # keyword-list rule above.
+        {"pattern": r"negatif yaş grubu (eklendi|değiştirildi|kaldırıldı)", "category": "Audience", "subcategory": "Audience added"},
+        {"pattern": r"adlı kampanya özel hedefi (eklendi|değiştirildi|kaldırıldı)", "category": "Audience", "subcategory": "Audience added"},
     ],
     "fallback": {"category": "Other", "subcategory": "Other"},
 }
