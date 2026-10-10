@@ -1,1 +1,4 @@
-google-ads
+# Lowest google-ads release that serves the API version fetch_live_data.py
+# asks for (API_VERSION = v25 -> 31.2.0, per Google's sunset-dates page).
+# A floor, not a pin: newer releases keep serving v25 until it is sunset.
+google-ads>=31.2.0

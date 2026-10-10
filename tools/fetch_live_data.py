@@ -58,6 +58,19 @@ VERIFIED vs BEST-EFFORT — read before trusting the output blindly:
 import argparse
 import json
 import sys
+from datetime import date
+
+# The Google Ads API version every request here is made against. Google
+# retires each version about a year after release, and a request to a
+# retired version fails outright — this script shipped pinned to v21 and
+# stopped working when v21 was sunset. Checked 2026-10-10 against
+# https://developers.google.com/google-ads/api/docs/sunset-dates : v25
+# (released 2026-07-22) sunsets August 2027 and needs google-ads >= 31.2.0
+# for Python — the lower bound in requirements.txt. Change all three
+# together; the skill's self-test fails once API_VERSION_SUNSET has passed.
+# --api-version overrides it for one run without editing this file.
+API_VERSION = "v25"
+API_VERSION_SUNSET = date(2027, 8, 1)
 
 
 def _to_dict(proto_plus_message):
@@ -140,7 +153,7 @@ LIMIT {limit}
 """
 
 
-def fetch(customer_id, days=30, limit=10000):
+def fetch(customer_id, days=30, limit=10000, api_version=API_VERSION):
     try:
         from google.ads.googleads.client import GoogleAdsClient
         from google.ads.googleads.errors import GoogleAdsException
@@ -156,7 +169,7 @@ def fetch(customer_id, days=30, limit=10000):
         days = 30
 
     try:
-        client = GoogleAdsClient.load_from_env(version="v21")
+        client = GoogleAdsClient.load_from_env(version=api_version)
     except Exception as e:
         print(json.dumps({
             "status": "error",
@@ -209,10 +222,11 @@ def main():
     ap.add_argument("--days", type=int, default=30, help="How many days back to fetch (capped at 30 — Google's own retention limit).")
     ap.add_argument("--limit", type=int, default=10000, help="Row cap (Google's own hard limit is 10,000 per query).")
     ap.add_argument("--out", required=True, help="Output JSON file path.")
+    ap.add_argument("--api-version", default=API_VERSION, help=f"Google Ads API version to call (default: {API_VERSION}). Must be one your installed google-ads library supports.")
     args = ap.parse_args()
 
     customer_id = args.customer_id.replace("-", "")
-    rows = fetch(customer_id, days=args.days, limit=args.limit)
+    rows = fetch(customer_id, days=args.days, limit=args.limit, api_version=args.api_version)
 
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(rows, f, ensure_ascii=False, indent=None)

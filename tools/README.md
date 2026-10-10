@@ -29,7 +29,19 @@ python3 skills/google-ads-change-history-dashboard/ads_change_history.py run cha
 **Never** put credentials in a command-line flag, a committed file, or this
 repo — environment variables only, set in your own shell/secret store.
 
-**Status: v1, needs a real account to fully verify.** The event-level
+**API version.** Requests go to Google Ads API **v25** (`API_VERSION` in the
+script; `--api-version` overrides it for one run). Google retires each
+version roughly a year after release and requests to a retired one fail, so
+this has to move forward over time: v25 sunsets in August 2027 per Google's
+[sunset schedule](https://developers.google.com/google-ads/api/docs/sunset-dates).
+`requirements.txt` sets the lowest `google-ads` release that serves v25
+(31.2.0) as a floor, not a pin. The skill's self-test starts failing once the
+recorded sunset date has passed, so a stale version can't sit unnoticed.
+
+**Status: needs a real account to fully verify.** The self-test runs this
+script against a mocked client with synthetic events — that proves the
+version it asks for and the shape it writes, not that Google's real response
+matches. The event-level
 fields (who/what/when/resource type) are pulled from Google's documented
 `change_event` fields directly and should be solid. `old_resource`/
 `new_resource` are the part most likely to need a follow-up fix — the real

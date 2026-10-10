@@ -148,17 +148,22 @@ SOURCE FORMATS REGISTERED IN KNOWN_SOURCES
     misapplying a guess.
 
 REPO / PRIVACY NOTES
-  Local-only for now (no repo visibility decided yet). --mask-users defaults
-  OFF (raw user identity shown) — pass --mask-users to replace human user
-  identities with "User A"/"User B" for external sharing. Account/campaign
-  names are never masked — that's the real user's own data, showing it is the
-  point of the tool.
+  --mask-users defaults OFF (raw user identity shown). With it, every
+  output file loses its e-mail addresses: a human actor becomes "User A"/
+  "User B" (stable across runs — the identity->label table is kept locally
+  in mapping-profiles/mask-labels.json, which is gitignored and must never
+  be shared), and an address sitting on an automation row is removed.
+  NOT masked, with or without the flag: account, campaign and ad group
+  names, account/campaign/ad-group IDs, resource paths, event IDs, and the
+  old/new values themselves. Showing those is the point of the tool; a
+  report that must hide the client's identity needs more than this flag.
 
 USAGE
   python3 ads_change_history.py run <input.csv|.json> --out-dir ./out \\
       [--timezone Europe/Istanbul] [--date-format DMY] [--decimal-style TR] \\
       [--currency TRY] \\
-      [--mapping-file confirmed_mapping.json] [--mask-users] [--open]
+      [--mapping-file confirmed_mapping.json | --map FIELD="Header" ...] \\
+      [--mask-users] [--open]
 
   python3 ads_change_history.py query <out/changes.jsonl> --user "User A" --since 7d
 
@@ -874,7 +879,19 @@ def empty_fraction(rows, mapping, canonical_field):
     return empty / len(rows) if rows else 0.0
 
 
-def validate_source(input_path, mapping_file=None, force=False, save_profile=True, default_account_name=None):
+def parse_column_map(entries):
+    """["timestamp=Modified On", ...] (the --map flag's values) -> dict.
+    Raises ValueError on an entry that isn't canonical_field=Column header."""
+    out = {}
+    for entry in entries or []:
+        field, sep, header = str(entry).partition("=")
+        if not sep or not field.strip() or not header.strip():
+            raise ValueError(f"Invalid --map value: {entry!r}. Expected canonical_field=Column header, e.g. --map timestamp=\"Modified On\".")
+        out[field.strip()] = header.strip()
+    return out
+
+
+def validate_source(input_path, mapping_file=None, force=False, save_profile=True, default_account_name=None, column_map=None):
     """Returns dict. status=ok includes 'mapping'. Any other status means STOP —
     caller must resolve with a human before continuing."""
     try:
@@ -928,6 +945,26 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
             mapping, unmatched = try_alias_match(headers, rows)
             source_label = detect_known_source(headers) or "alias_match"
 
+    # Added 2026-10-10: answering needs_mapping used to mean hand-writing a
+    # {"source_label": ..., "mapping": {...}} JSON file. --map field=Header
+    # gives the same answers on the command line, laid over whatever was
+    # auto-mapped. It is a human-confirmed mapping exactly like
+    # --mapping-file (and is cached the same way) — so it gets the same
+    # strictness: a field name this script doesn't have, or a header the
+    # file doesn't have, is an error, never a silent no-op.
+    if column_map:
+        mappable = set(HEADER_ALIASES["aliases"])
+        bad_fields = sorted(set(column_map) - mappable)
+        if bad_fields:
+            return {"status": "error", "message": f"--map: unknown canonical field(s) {bad_fields}. Mappable fields: {sorted(mappable)}"}
+        bad_headers = sorted(h for h in column_map.values() if h not in headers)
+        if bad_headers:
+            return {"status": "error", "message": f"--map: column header(s) {bad_headers} are not in this file. Its headers: {headers}"}
+        mapping = {**mapping, **column_map}
+        unmatched = [h for h in unmatched if h not in column_map.values()]
+        if source_label in ({"alias_match", "unmapped_confirmed"} | set(HEADER_ALIASES["known_sources"])):
+            source_label = "user_confirmed"
+
     missing = check_hard_required(mapping, default_account_name=default_account_name)
     if missing:
         return {
@@ -939,7 +976,7 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
             "unmapped_headers": unmatched,
             "sample_values": {h: sample_values(rows, h) for h in unmatched},
             "suggested_mapping": suggest_fuzzy_mapping(unmatched),
-            "instructions": "Show unmapped_headers + sample_values to the user in chat. Ask which canonical field each maps to (see module docstring: CANONICAL SCHEMA). Write the confirmed mapping to a JSON file ({'source_label': ..., 'mapping': {canonical: header}}) and re-run with --mapping-file <file>. If the source genuinely has no column for a missing field (e.g. no resource_type at all), that field cannot be satisfied by mapping alone — this input can't proceed until the data itself provides it.",
+            "instructions": "Show unmapped_headers + sample_values to the user in chat. Ask which canonical field each maps to (see module docstring: CANONICAL SCHEMA). Re-run with one --map canonical_field=\"Column header\" per answer (or put them in a JSON file, {'source_label': ..., 'mapping': {canonical: header}}, and pass --mapping-file <file>). If the source genuinely has no column for a missing field (e.g. no resource_type at all), that field cannot be satisfied by mapping alone — this input can't proceed until the data itself provides it.",
         }
 
     review_issues = []
@@ -957,16 +994,16 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
         return {
             "status": "needs_review",
             "input": str(input_path),
-            "message": "More than 30% of rows are missing a value in a required field even though the column exists — usually a wrong mapping, not genuinely sparse data. Confirm with the user; re-run with force=True if the data really is this sparse.",
+            "message": "More than 30% of rows are missing a value in a required field even though the column exists — usually a wrong mapping, not genuinely sparse data. Confirm with the user; re-run with --force-review if the data really is this sparse.",
             "issues": review_issues,
             "mapping": mapping,
         }
 
-    if save_profile and mapping_file:
+    if save_profile and (mapping_file or column_map):
         PROFILES_DIR.mkdir(parents=True, exist_ok=True)
         fp = fingerprint(headers)
         with open(PROFILES_DIR / f"{fp}.json", "w", encoding="utf-8") as f:
-            json.dump({"source_label": source_label, "confirmed_by": "mapping_file", "mapping": mapping, "headers_seen": headers}, f, indent=2, ensure_ascii=False)
+            json.dump({"source_label": source_label, "confirmed_by": "mapping_file" if mapping_file else "map_flag", "mapping": mapping, "headers_seen": headers}, f, indent=2, ensure_ascii=False)
 
     return {
         "status": "ok", "input": str(input_path), "row_count": len(rows),
@@ -1332,6 +1369,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         # going through validate_source() first — see F-16/F-17/F-18 fix note there.
         return {"status": "error", "message": str(e)}
 
+    source_row_count = len(rows)
     rows = expand_multi_field_rows(rows, mapping)
     ts_header = mapping.get("timestamp")
     ts_values = [r.get(ts_header) for r in rows] if ts_header else []
@@ -1343,12 +1381,12 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         # shown five ISO strings that have no such ambiguity. Same for the
         # decimal-style question below.
         ambiguous = [v for v in ts_values if v and not YEAR_FIRST_DATE_RE.match(_normalize_spaces(str(v)))]
-        return {"status": "needs_date_format", "message": "Timestamp column is ambiguous (DD/MM vs MM/DD). Ask the user, then pass date_format='DMY'|'MDY'|'ISO'.", "sample_values": (ambiguous or [v for v in ts_values if v])[:5]}
+        return {"status": "needs_date_format", "message": "Timestamp column is ambiguous (DD/MM vs MM/DD). Ask the user, then re-run with --date-format DMY|MDY|ISO.", "sample_values": (ambiguous or [v for v in ts_values if v])[:5]}
 
     numeric_cols = [mapping[c] for c in ("old_value", "new_value") if c in mapping]
     numeric_values = [r.get(h) for h in numeric_cols for r in rows]
     if decimal_style is None and decimal_ambiguity_present(numeric_values):
-        return {"status": "needs_decimal_style", "message": "Numeric columns have an ambiguous separator (e.g. '150.000'). Ask the user, then pass decimal_style='TR'|'US'.", "sample_values": [v for v in numeric_values if decimal_ambiguity_present([v])][:5]}
+        return {"status": "needs_decimal_style", "message": "Numeric columns have an ambiguous separator (e.g. '150.000'). Ask the user, then re-run with --decimal-style TR|US.", "sample_values": [v for v in numeric_values if decimal_ambiguity_present([v])][:5]}
     resolved_decimal_style = decimal_style or "TR"
 
     # Fixed 2026-08-18 (4th audit round, confirmed): an invalid --timezone
@@ -1545,7 +1583,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
             "category_confidence": None, "source": source_label, "raw_summary": raw_summary,
         })
 
-    return {"status": "ok", "rows": out_rows, "rows_skipped_unparseable_date": unparseable, "orphan_names_dropped": orphan_names, "date_format_used": resolved_date_fmt, "decimal_style_used": resolved_decimal_style}
+    return {"status": "ok", "rows": out_rows, "rows_skipped_unparseable_date": unparseable, "orphan_names_dropped": orphan_names, "input_rows": source_row_count, "rows_added_by_field_split": len(rows) - source_row_count, "date_format_used": resolved_date_fmt, "decimal_style_used": resolved_decimal_style}
 
 
 def dedupe_rows(rows):
@@ -1772,6 +1810,18 @@ def mask_rows(rows, masked_users):
             ident = r.get("user_email") or r.get("user_name")
             r["user_name"] = mask_map.get(ident, r.get("user_name"))
             r["user_email"] = None
+        else:
+            # Fixed 2026-10-10: only human-actor rows were touched, but a
+            # ChangeEvent made through a script, a bulk upload or a rule
+            # still names the person it ran as in user_email. Those rows
+            # kept the raw address in every output of a --mask-users run.
+            # The row stays what it is (an automation row, shown by its
+            # client_type); the address is removed, and so is a user_name
+            # that is itself an address. A system name ("ads-budget-system")
+            # is not a person and is kept.
+            r["user_email"] = None
+            if "@" in str(r.get("user_name") or ""):
+                r["user_name"] = None
         out.append(r)
     return out
 
@@ -1946,7 +1996,7 @@ def build_aggregation(rows, sources, other_pct, masked_users, generated_at, date
             "masked_users": masked_users, "timeline_reference_tz": "UTC",
             "rows_excluded_from_timeline_unknown_tz": excluded_from_timeline,
             "rows_skipped_unparseable_date": unparseable, "rows_skipped_unparseable_date_pct": unparseable_pct,
-            "untouched_scope_note": "Based only on campaigns that appear in this change log. A campaign never in the log may not exist, not just be untouched.",
+            "untouched_scope_note": "Lists only campaigns with at least one change in this export. A campaign that doesn't appear in the export is not listed: it may have had no change in the export's date range, or may not exist — this report can't tell which.",
         },
         "summary": {
             "total_changes": total, "active_accounts": len(account_counter), "active_users": len(human_counter),
@@ -2449,6 +2499,7 @@ body.lab {
 <header>
   <h1>Ads Change History</h1>
   <div class="meta" id="metaLine"></div>
+  <div class="meta" id="dataQuality"></div>
   <div id="apiCaveat"></div>
   <!-- Permanent, run-independent disclosure — unlike apiCaveat above (which
        only fires for conditions specific to THIS run), this always shows.
@@ -2460,6 +2511,7 @@ body.lab {
     <summary style="cursor:pointer;">What this report can't do</summary>
     <ul style="margin:6px 0 0 18px;padding:0;">
       <li>Only knows what's in the input file — doesn't call the Google Ads API live, doesn't know about changes made after the export or outside its date range.</li>
+      <li>A campaign that doesn't appear in the input isn't reported as "unchanged": no row means no evidence either way, including whether it exists.</li>
       <li>Reports what changed and when — never whether a change was good, risky, or should have happened differently. That judgment isn't in scope for this tool.</li>
       <li>If the input includes Google Ads ChangeEvent API data: that API keeps only 30 days of history, caps at 10,000 rows per query, can lag up to ~3 minutes behind a very recent change, and may not include every entry the Google Ads UI's own Change History page shows.</li>
     </ul>
@@ -2548,7 +2600,7 @@ body.lab {
   </section>
   <section>
     <h2>Campaign Last Changes</h2>
-    <div class="section-caption">"Days since" is computed against the current time in your browser, not the moment this file was generated — it grows the longer this file stays open.</div>
+    <div class="section-caption">Lists only campaigns with at least one change in this export. A campaign that doesn't appear in the export is not listed: it may have had no change in the export's date range, or may not exist — this report can't tell which. "Days since" is counted to the current time in your browser and under the current filters, not to the moment this file was generated.</div>
     <div class="threshbtns" id="threshBtns" style="margin-bottom:10px;">
       <button data-min="0" class="active">All</button>
       <button data-min="7">7+ days</button>
@@ -3066,7 +3118,7 @@ function renderUntouched(filtered){
   if(!rows.length){ el.innerHTML='<div class="empty">No campaigns match this threshold (or current filters).</div>'; return; }
   el.innerHTML = `<table><thead><tr><th>Campaign</th><th>Account</th><th>Last Change</th><th>Days Since (today)</th></tr></thead><tbody>${
     rows.map(u=>`<tr><td>${escapeHtml(u.campaign_name)}</td><td>${escapeHtml(u.account_name||'')}</td><td>${new Date(u.last_change_ts).toLocaleDateString()}</td><td>${u.days_since}</td></tr>`).join('')
-  }</tbody></table><div class="note">${escapeHtml(DASH_DATA.meta.untouched_scope_note)} Reflects current filters and today's date in your browser.</div>`;
+  }</tbody></table>`;
 }
 // Fixed 2026-08-18 (3rd audit round, confirmed): sorting the Old/New Value
 // columns compared them as raw strings — old_value/new_value are stored as
@@ -3128,10 +3180,10 @@ function openDetail(changeId){
     ['Date', c.timestamp_iso ? new Date(c.timestamp_iso).toLocaleString() : c.timestamp],
     ['User', c.actor_type==='human' ? (c.user_name||c.user_email||'—') : `${c.client_type||'Automation'} (automation)`],
     ['Account', c.account_name||'—'], ['Campaign', c.campaign_name||'—'], ['Ad Group', c.ad_group_name||'—'],
-    ['Category', `${c.category} — ${c.subcategory}`], ['Field', c.field_name || '—'],
+    ['Category', `${c.category} — ${c.subcategory}${c.category_confidence==='fallback_other' ? ' (no rule matched)' : ''}`], ['Field', c.field_name || '—'],
     ['Previous', prevVal], ['New', newVal],
     ['Operation', c.operation_confidence==='inferred' ? `${c.operation} (inferred, not stated by source)` : c.operation],
-    ['Source', c.source], ['Confidence', c.value_confidence],
+    ['Source', c.source], ['Value read from', c.value_confidence==='parsed_from_summary' ? 'summary text (parsed, not a structured field)' : 'structured field'],
     ['Resource', c.resource_path || c.resource_id || '—'],
     ['Event ID', c.source_event_id || `${c.change_id} (derived, not from source)`],
   ];
@@ -3178,6 +3230,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   if(m.rows_skipped_unparseable_date_pct > 5){
     caveats.push(`${m.rows_skipped_unparseable_date} row(s) (${m.rows_skipped_unparseable_date_pct}% of input) were silently excluded — their date column didn't parse under the format this run resolved. See coverage.txt.`);
+  }
+  // What the run read vs. what is shown here — counts only, no verdict.
+  const dq = m.data_quality;
+  if(dq){
+    const n = x => Number(x).toLocaleString();
+    const lim = dq.in_report_with_limits;
+    const flags = [['category_other','categorized "Other"'],['timezone_unknown','no timezone'],['operation_inferred','operation inferred'],
+      ['value_parsed_from_summary','value read from summary text'],['multi_field_unsplit','several fields in one row']]
+      .filter(([k])=>lim[k]>0).map(([k,label])=>`${n(lim[k])} ${label}`);
+    document.getElementById('dataQuality').textContent =
+      `Input: ${n(dq.input_rows)} rows · in this report: ${n(dq.rows_in_report)} · left out: ${n(dq.left_out.unreadable_date)} unreadable date, ${n(dq.left_out.duplicate)} duplicate`
+      + (flags.length ? ` · of the rows shown: ${flags.join(', ')}` : '')
+      + (dq.ignored_headers.length ? ` · source columns not used: ${dq.ignored_headers.join(', ')}` : '');
   }
   const tzUnknown = m.rows_excluded_from_timeline_unknown_tz || 0;
   if(m.row_count && tzUnknown / m.row_count > 0.05){
@@ -3239,13 +3304,15 @@ def pack_changes(rows):
     return {"n": len(rows), "keys": keys, "cols": cols}
 
 
-def build_dashboard(rows, out_path, mask_users=False, generated_at=None, json_out=None, rows_skipped_unparseable_date=0):
+def build_dashboard(rows, out_path, mask_users=False, generated_at=None, json_out=None, rows_skipped_unparseable_date=0, data_quality=None):
     sources = {r.get("source", "unknown") for r in rows}
     other_pct = round(100 * sum(1 for r in rows if r["category"] == "Other") / len(rows), 1) if rows else 0.0
     generated_at = generated_at or datetime.now().isoformat()
     if len(rows) > SCALE_WARN_THRESHOLD:
         print(f"WARNING: {len(rows)} rows exceeds the {SCALE_WARN_THRESHOLD} single-file guideline. Consider a date-range split.")
     data = build_aggregation(rows, sources, other_pct, mask_users, generated_at, date_parse_stats={"rows_skipped_unparseable_date": rows_skipped_unparseable_date})
+    if data_quality is not None:
+        data["meta"]["data_quality"] = data_quality
     marker = "/*__DASH_DATA__*/null"
     # Fixed 2026-08-19 (2nd audit, script-context XSS): escapeHtml() only ever
     # protected the JS side's innerHTML rendering — it did nothing for THIS
@@ -3331,7 +3398,7 @@ def query_changes(rows, user=None, account=None, campaign=None, category=None, o
 # =====================================================================
 def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decimal_style=None,
                   tz="unknown", mask_users=False, allow_unknown_categories=False, force_review=False,
-                  extra_rules=None, open_browser=False, generated_at=None, account_name=None, currency=None):
+                  extra_rules=None, open_browser=False, generated_at=None, account_name=None, currency=None, column_map=None):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -3343,7 +3410,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         if err:
             return {"status": "error", "message": err}
 
-    v = validate_source(input_path, mapping_file=mapping_file, force=force_review, default_account_name=account_name)
+    v = validate_source(input_path, mapping_file=mapping_file, force=force_review, default_account_name=account_name, column_map=column_map)
     if v["status"] != "ok":
         return v
     (out_dir / "resolved_mapping.json").write_text(json.dumps(v, ensure_ascii=False), encoding="utf-8")
@@ -3401,7 +3468,40 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     with open(out_dir / "changes.jsonl", "w", encoding="utf-8") as f:
         for row in c["rows"]:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    # Added 2026-10-10. status "ok" means nothing was ambiguous — not that
+    # every input row is in the report, or that every row in it is fully
+    # usable. The individual counts existed (some only in coverage.txt, some
+    # only in the result, one only as a dashboard footnote); this is the one
+    # place that states all of them, and they add up:
+    #   input_rows + rows_added_by_field_split - left_out = rows_in_report
+    # "in_report_with_limits" rows ARE in the report; each count names one
+    # way a row is less than complete. Nothing here is a verdict on the data
+    # — no threshold, no pass/fail. The existing stop-and-ask gates (>20%
+    # unreadable dates, >30% empty required column) are unchanged.
+    data_quality = {
+        "input_rows": n["input_rows"],
+        "rows_added_by_field_split": n["rows_added_by_field_split"],
+        "left_out": {"unreadable_date": n["rows_skipped_unparseable_date"], "duplicate": duplicate_count},
+        "rows_in_report": len(c["rows"]),
+        "in_report_with_limits": {
+            "category_other": sum(1 for row in c["rows"] if row.get("category") == "Other"),
+            "timezone_unknown": tz_unknown,
+            "operation_inferred": sum(1 for row in c["rows"] if row.get("operation_confidence") == "inferred"),
+            "value_parsed_from_summary": sum(1 for row in c["rows"] if row.get("value_confidence") == "parsed_from_summary"),
+            "multi_field_unsplit": sum(1 for row in c["rows"] if row.get("multi_field")),
+            "name_without_reference_dropped": n["orphan_names_dropped"],
+        },
+        "ignored_headers": v["ignored_headers"],
+    }
     with open(out_dir / "coverage.txt", "w", encoding="utf-8") as f:
+        dq_left = data_quality["left_out"]
+        f.write(f"Input rows: {data_quality['input_rows']}\n")
+        if data_quality["rows_added_by_field_split"]:
+            f.write(f"Rows added by splitting multi-field events: {data_quality['rows_added_by_field_split']}\n")
+        f.write(f"Left out: {sum(dq_left.values())} (unreadable date: {dq_left['unreadable_date']}, duplicate: {dq_left['duplicate']})\n")
+        f.write(f"In the report: {data_quality['rows_in_report']}\n")
+        f.write("In the report, with a limit: " + ", ".join(f"{k.replace('_', ' ')}: {val}" for k, val in data_quality["in_report_with_limits"].items()) + "\n")
+        f.write(f"Source columns not used: {', '.join(data_quality['ignored_headers']) or 'none'}\n\n")
         f.write(f"Total rows: {len(c['rows'])}\n")
         if duplicate_count:
             f.write(f"Duplicates removed (identical change_id): {duplicate_count}\n")
@@ -3423,7 +3523,8 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
             f.write(f"  {cat}: {cnt}\n")
 
     data = build_dashboard(c["rows"], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at,
-                            json_out=out_dir / "change_history.json", rows_skipped_unparseable_date=n["rows_skipped_unparseable_date"])
+                            json_out=out_dir / "change_history.json", rows_skipped_unparseable_date=n["rows_skipped_unparseable_date"],
+                            data_quality=data_quality)
 
     result = {
         "status": "ok", "out": str(out_dir / "dashboard.html"), "row_count": len(c["rows"]),
@@ -3435,6 +3536,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         "duplicates_removed": duplicate_count,
         "date_format_used": n["date_format_used"], "decimal_style_used": n["decimal_style_used"],
         "ignored_headers": v["ignored_headers"],
+        "data_quality": data_quality,
     }
     if open_browser:
         webbrowser.open(f"file://{(out_dir / 'dashboard.html').resolve()}")
@@ -3947,6 +4049,169 @@ def _run_round7_cases(td):
         assert '"changes_packed"' in html and not re.search(r'"changes"\s*:\s*\[', html), "the shipped dashboard must embed the packed form only"
         assert isinstance(json.loads((td / "out_r7" / "change_history.json").read_text(encoding="utf-8"))["changes"], list), "change_history.json stays plain rows"
         print(f"[PASS] dashboard payload: changes are embedded column-packed and unpack in the browser's own JS to the identical rows (Node) — {round(100 * small / plain)}% of the plain size on this fixture")
+
+
+class _FakeEnum:
+    def __init__(self, name):
+        self.name = name
+
+
+class _FakeResource:
+    """Stands in for a proto-plus ChangedResource: only to_dict() is used."""
+    def __init__(self, data):
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+def _fake_change_event(n, rtype, rname, op, paths, old, new, campaign=""):
+    import types
+    return types.SimpleNamespace(change_event=types.SimpleNamespace(
+        resource_name=f"customers/9990001/changeEvents/178565760000000{n}~{n}~0", change_date_time=f"2026-08-0{n} 10:00:00.000000",
+        change_resource_type=_FakeEnum(rtype), change_resource_name=rname, client_type=_FakeEnum("GOOGLE_ADS_WEB_CLIENT"),
+        user_email="user.a@example.test", resource_change_operation=_FakeEnum(op), changed_fields=types.SimpleNamespace(paths=paths),
+        old_resource=_FakeResource(old), new_resource=_FakeResource(new), campaign=campaign, ad_group="", feed="", feed_item="", asset=""))
+
+
+def _run_round8_cases(td):
+    """2026-10-10, third pass: the live-fetch tool's API version, the scope
+    wording around "campaigns with no change", one data-quality summary for
+    an ok run, and answering needs_mapping without hand-writing JSON."""
+    tool_path = SCRIPT_DIR.parent.parent / "tools" / "fetch_live_data.py"
+    if not tool_path.exists():
+        print("[SKIP] tools/fetch_live_data.py is not shipped next to this copy of the skill — its cases need the repo checkout")
+    else:
+        import importlib.util
+        import types
+        spec = importlib.util.spec_from_file_location("fetch_live_data_under_test", tool_path)
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        with _test_case("fetch tool: requests one named, still-served Google Ads API version, and requirements.txt can supply it"):
+            src = tool_path.read_text(encoding="utf-8")
+            assert re.fullmatch(r"v\d+", getattr(tool, "API_VERSION", "")), "the API version must be one named constant, API_VERSION"
+            literals = set(re.findall(r'version\s*=\s*["\'](v\d+)["\']', src))
+            assert not literals, f"hard-coded API version literal(s) {literals} — use API_VERSION so the sunset check below covers every call"
+            assert date.today() < tool.API_VERSION_SUNSET, (
+                f"Google Ads API {tool.API_VERSION} was scheduled to sunset in {tool.API_VERSION_SUNSET:%B %Y} — requests to a sunset version fail. "
+                "Check https://developers.google.com/google-ads/api/docs/sunset-dates, then update API_VERSION, API_VERSION_SUNSET and tools/requirements.txt together.")
+            req = (tool_path.parent / "requirements.txt").read_text(encoding="utf-8")
+            assert re.search(r"^google-ads>=\d+\.\d+", req, re.M), f"requirements.txt must set the minimum google-ads release that serves {tool.API_VERSION}: {req!r}"
+            print(f"[PASS] fetch tool: requests one named, still-served Google Ads API version ({tool.API_VERSION}), and requirements.txt can supply it")
+
+        with _test_case("fetch tool (mocked client, no credentials): asks for API_VERSION and writes rows the skill reads end to end"):
+            seen = {}
+            events = [
+                _fake_change_event(1, "CAMPAIGN_BUDGET", "customers/9990001/campaignBudgets/1001", "UPDATE", ["amount_micros"],
+                                   {"campaign_budget": {"amount_micros": 50000000}}, {"campaign_budget": {"amount_micros": 75000000}}),
+                _fake_change_event(2, "CAMPAIGN", "customers/9990001/campaigns/2001", "UPDATE", ["status", "name"],
+                                   {"campaign": {"status": "ENABLED", "name": "Campaign Alpha"}}, {"campaign": {"status": "PAUSED", "name": "Campaign Beta"}},
+                                   campaign="customers/9990001/campaigns/2001"),
+            ]
+
+            class FakeClient:
+                @classmethod
+                def load_from_env(cls, version=None):
+                    seen["version"] = version
+                    return cls()
+
+                def get_service(self, name):
+                    return types.SimpleNamespace(search=lambda customer_id, query: seen.update(query=query) or events)
+
+            fakes = {"google": types.ModuleType("google"), "google.ads": types.ModuleType("google.ads"), "google.ads.googleads": types.ModuleType("google.ads.googleads"),
+                     "google.ads.googleads.client": types.ModuleType("google.ads.googleads.client"), "google.ads.googleads.errors": types.ModuleType("google.ads.googleads.errors")}
+            fakes["google.ads.googleads.client"].GoogleAdsClient = FakeClient
+            fakes["google.ads.googleads.errors"].GoogleAdsException = type("GoogleAdsException", (Exception,), {})
+            saved = {k: sys.modules.get(k) for k in fakes}
+            sys.modules.update(fakes)
+            try:
+                fetched = tool.fetch("9990001", days=7, limit=50)
+            finally:
+                for k, v in saved.items():
+                    sys.modules.pop(k, None) if v is None else sys.modules.__setitem__(k, v)
+            assert seen["version"] == tool.API_VERSION, f"client was created for {seen['version']!r}, not API_VERSION"
+            assert "LAST_7_DAYS" in seen["query"] and "LIMIT 50" in seen["query"]
+            assert (fetched[0]["changed_fields"], fetched[0]["old_resource"], fetched[0]["new_resource"]) == ("amount_micros", "50000000", "75000000"), f"single-field flatten: {fetched[0]}"
+            ff = td / "fetched.json"
+            ff.write_text(json.dumps(fetched), encoding="utf-8")
+            r_f = run_pipeline(ff, td / "out_r8_fetch", generated_at="2026-08-17T00:00:00")
+            assert r_f["status"] == "ok" and r_f["row_count"] == 3, f"1 single-field + 1 two-field event must give 3 rows: {r_f}"
+            print("[PASS] fetch tool (mocked client, no credentials): asks for API_VERSION and writes rows the skill reads end to end — synthetic shapes only, NOT a live-API verification")
+
+    dq_rows = [dict(row) for _ in range(3) for row in SAMPLE_API_WITH_NAMES_ROWS]
+    for i, row in enumerate(dq_rows):
+        row["resource_name"] = f"customers/9990001/changeEvents/17856576000000{i:02d}~{i}~0"
+    dq_rows[5]["change_date_time"] = "N/A"                                   # unreadable date -> left out
+    dq_rows[6]["resource_name"] = dq_rows[2]["resource_name"]                # exact re-import of row 2 -> duplicate
+    dq_rows[7] = {**dq_rows[7], "change_resource_type": "CAMPAIGN_CRITERION", "changed_fields": "proximity_target"}   # no rule -> Other
+    fq = td / "api_data_quality.json"
+    fq.write_text(json.dumps(dq_rows), encoding="utf-8")
+    with _test_case("data_quality: one summary of what an ok run read, left out and could not classify — in the result, coverage.txt and the JSON"):
+        r_q = run_pipeline(fq, td / "out_r8_dq", allow_unknown_categories=True, generated_at="2026-08-17T00:00:00")
+        assert r_q["status"] == "ok", f"data-quality fixture failed: {r_q}"
+        dq = r_q.get("data_quality")
+        assert dq, "run result has no data_quality block"
+        assert (dq["input_rows"], dq["rows_in_report"], dq["left_out"]) == (12, 10, {"unreadable_date": 1, "duplicate": 1}), f"counts: {dq}"
+        assert dq["input_rows"] + dq["rows_added_by_field_split"] - sum(dq["left_out"].values()) == dq["rows_in_report"], "the counts must add up"
+        assert dq["in_report_with_limits"]["category_other"] == 1 and dq["in_report_with_limits"]["timezone_unknown"] == 2, f"flags: {dq['in_report_with_limits']}"
+        assert dq["ignored_headers"] == ["feed"]
+        cov = (td / "out_r8_dq" / "coverage.txt").read_text(encoding="utf-8")
+        assert "Input rows: 12" in cov and "In the report: 10" in cov and "Left out: 2" in cov, f"coverage.txt lacks the summary:\n{cov}"
+        meta = json.loads((td / "out_r8_dq" / "change_history.json").read_text(encoding="utf-8"))["meta"]
+        assert meta["data_quality"] == dq, "change_history.json must carry the same block"
+        html = (td / "out_r8_dq" / "dashboard.html").read_text(encoding="utf-8")
+        assert 'id="dataQuality"' in html and '"data_quality"' in html, "dashboard must show the data-quality line"
+        print("[PASS] data_quality: one summary of what an ok run read, left out and could not classify — in the result, coverage.txt and the JSON")
+
+    with _test_case("dashboard: 'Campaign Last Changes' says up front that it only covers campaigns with a change in this export"):
+        section = html[html.index("<h2>Campaign Last Changes</h2>"):html.index('<div id="untouched">')]
+        assert "at least one change in this export" in section and "can't tell" in section, "scope sentence missing from the section itself"
+        assert "at least one change in this export" in meta["untouched_scope_note"]
+        assert "What this report can't do" in html and "A campaign that doesn't appear" in html, "limitations list must name the absent-campaign case"
+        assert "category_confidence" in html[html.index("function openDetail"):], "detail panel must show how the category was assigned"
+        print("[PASS] dashboard: 'Campaign Last Changes' says up front that it only covers campaigns with a change in this export")
+
+    with _test_case("--mask-users: no e-mail address survives in any output file — including one sitting on an automation row"):
+        m_rows = [dict(row) for row in SAMPLE_API_WITH_NAMES_ROWS]
+        m_rows[1]["user_email"] = "script.owner@example.test"      # client_type GOOGLE_ADS_SCRIPTS -> actor_type automation
+        fmk = td / "api_mask_automation.json"
+        fmk.write_text(json.dumps(m_rows), encoding="utf-8")
+        r_mk = run_pipeline(fmk, td / "out_r8_mask", mask_users=True, generated_at="2026-08-17T00:00:00")
+        assert r_mk["status"] == "ok", f"mask fixture failed: {r_mk}"
+        leaks = {f.name: sorted(set(re.findall(r"[\w.]+@example\.test", f.read_text(encoding="utf-8")))) for f in (td / "out_r8_mask").iterdir()}
+        assert not any(leaks.values()), f"e-mail address left in masked output: { {k: v for k, v in leaks.items() if v} }"
+        with open(td / "out_r8_mask" / "changes.jsonl", encoding="utf-8") as fh:
+            mk = {(x["resource_type"], x["operation"]): x for x in (json.loads(line) for line in fh)}
+        assert mk[("CAMPAIGN", "UPDATE")]["actor_type"] == "automation" and mk[("CAMPAIGN", "UPDATE")]["client_type"] == "GOOGLE_ADS_SCRIPTS", "the row stays an automation row"
+        assert re.fullmatch(r"User [A-Z]+", mk[("AD_GROUP_AD", "UPDATE")]["user_name"]) and mk[("AD_GROUP_AD", "UPDATE")]["account_name"] == "Account A", "humans get a label; account names are not masked"
+        print("[PASS] --mask-users: no e-mail address survives in any output file — including one sitting on an automation row")
+
+    fu = td / "unknown_cols.csv"
+    fu.write_text(SAMPLE_UNKNOWN_FORMAT_CSV, encoding="utf-8")
+    answers = {"timestamp": "Modified On", "user_email": "Modified By Email", "account_name": "Ads Account", "campaign_name": "Camp Name",
+               "ad_group_name": "AdGroup Name", "raw_summary": "What Changed", "old_value": "Was", "new_value": "Now", "resource_type": "What Changed"}
+    with _test_case("--map: needs_mapping can be answered column by column on the command line, no JSON file to write"):
+        saved_dir = globals()["PROFILES_DIR"]
+        globals()["PROFILES_DIR"] = td / "profiles-map"
+        try:
+            assert run_pipeline(fu, td / "out_r8_map0", generated_at="2026-08-17T00:00:00")["status"] == "needs_mapping"
+            r_m = run_pipeline(fu, td / "out_r8_map", column_map=answers, allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
+            assert r_m["status"] == "ok" and r_m["row_count"] == 3, f"--map run failed: {r_m}"
+            again = run_pipeline(fu, td / "out_r8_map2", allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
+            assert again["status"] == "ok", "an answer given with --map is a human-confirmed mapping: it must be remembered like --mapping-file"
+            bad_field = run_pipeline(fu, td / "out_r8_map3", column_map={"when": "Modified On"})
+            assert bad_field["status"] == "error" and "when" in bad_field["message"], f"unknown canonical field must be rejected: {bad_field}"
+            bad_header = run_pipeline(fu, td / "out_r8_map4", column_map={"timestamp": "Changed On"})
+            assert bad_header["status"] == "error" and "Changed On" in bad_header["message"], f"a header the file doesn't have must be rejected: {bad_header}"
+            assert parse_column_map(["timestamp=Modified On", "old_value=Was"]) == {"timestamp": "Modified On", "old_value": "Was"}
+            try:
+                parse_column_map(["timestamp"])
+                raise AssertionError("an entry without '=' must be rejected")
+            except ValueError:
+                pass
+        finally:
+            globals()["PROFILES_DIR"] = saved_dir
+        print("[PASS] --map: needs_mapping can be answered column by column on the command line, no JSON file to write")
 
 
 def self_test():
@@ -4902,6 +5167,7 @@ def _run_pipeline_cases(td):
 
     _run_round6_regressions(td)
     _run_round7_cases(td)
+    _run_round8_cases(td)
 
 
 # =====================================================================
@@ -4915,6 +5181,7 @@ def main():
     p_run.add_argument("input")
     p_run.add_argument("--out-dir", default="./out")
     p_run.add_argument("--mapping-file")
+    p_run.add_argument("--map", action="append", metavar="FIELD=HEADER", help="Answer a needs_mapping question on the command line: canonical_field=Column header, repeatable (--map timestamp=\"Modified On\" --map old_value=Was). Same effect as --mapping-file, without writing a JSON file.")
     p_run.add_argument("--date-format", choices=["DMY", "MDY", "ISO", "UI_EN"])
     p_run.add_argument("--decimal-style", choices=["TR", "US"])
     p_run.add_argument("--timezone", default="unknown")
@@ -4962,8 +5229,13 @@ def main():
             except json.JSONDecodeError as e:
                 print(json.dumps({"status": "error", "message": f"--extra-rules file is not valid JSON: {args.extra_rules} ({e})"}, indent=2, ensure_ascii=False))
                 sys.exit(2)
+        try:
+            column_map = parse_column_map(args.map)
+        except ValueError as e:
+            print(json.dumps({"status": "error", "message": str(e)}, indent=2, ensure_ascii=False))
+            sys.exit(2)
         result = run_pipeline(
-            args.input, args.out_dir, mapping_file=args.mapping_file, date_format=args.date_format,
+            args.input, args.out_dir, mapping_file=args.mapping_file, column_map=column_map or None, date_format=args.date_format,
             decimal_style=args.decimal_style, tz=args.timezone, mask_users=args.mask_users,
             allow_unknown_categories=args.allow_unknown_categories, force_review=args.force_review,
             extra_rules=extra_rules, open_browser=args.open, account_name=args.account_name, currency=args.currency,

@@ -13,7 +13,7 @@ A Claude Code skill that turns a Google Ads change-history export (CSV, TSV, or 
 
 - Who changed this campaign's budget last week, and what was it before?
 - What changed in the last 7 days / 24 hours, across which accounts?
-- Which campaigns haven't been touched in 30+ days?
+- Of the campaigns in this export, which had their last change 30+ days ago?
 - Was this change made by a person or an automation (a script, a bidding rule, a Recommendation)?
 - Which category of change is most common right now — budget, bidding, status, keywords?
 
@@ -21,6 +21,8 @@ A Claude Code skill that turns a Google Ads change-history export (CSV, TSV, or 
 
 - Won't tell you if a change was a *good* one.
 - Won't read XLSX or a Google Sheets URL directly, and won't call the Google Ads API live — export to CSV/JSON first.
+- Won't say anything about a campaign that isn't in the export. No row means no evidence — not "unchanged", and not even that the campaign exists.
+- Won't categorize a UI export in a language it has no patterns for (today: English and Turkish). The columns still map; the rows it can't read land in "Other", and the run says how many.
 - Won't guess past a genuine ambiguity (an unrecognized column, an ambiguous date format like `03/04/2026`, an unrecognized category combination) — it stops and asks instead of silently picking an answer.
 
 ## Install
@@ -54,7 +56,7 @@ python3 ads_change_history.py self-test
 
 Two optional facts only you know, never guessed: `--timezone Europe/Istanbul` for a source whose timestamps carry no offset (without it those rows are left out of the timeline, and the run says how many), and `--currency TRY` to show budget/bid amounts with their unit.
 
-When the input has a column the skill doesn't recognize, an ambiguous date/number format, or an uncategorized combination of resource type + field + operation, it exits non-zero with a structured JSON `status` instead of guessing — read that JSON, answer the question it's asking, and re-run with the flag it names (`--mapping-file`, `--date-format`, `--decimal-style`, or `--allow-unknown-categories`).
+When the input has a column the skill doesn't recognize, an ambiguous date/number format, or an uncategorized combination of resource type + field + operation, it exits non-zero with a structured JSON `status` instead of guessing — read that JSON, answer the question it's asking, and re-run with the flag it names (`--map`, `--date-format`, `--decimal-style`, `--extra-rules`, or `--force-review`). A successful run ends with a `data_quality` block: how many input rows are in the report, how many were left out and why, and how many are in it with a limitation (no timezone, categorized "Other", …).
 
 ## Output
 
@@ -66,11 +68,11 @@ The dashboard stays one file at any size: the rows are embedded column-packed (a
 
 ## Privacy
 
-`--mask-users` (default off) replaces human user names/emails with `User A`/`User B` for external sharing — labels are persisted across runs so the same person keeps the same label. Account and campaign names are never masked; that's your own data.
+`--mask-users` (default off) removes e-mail addresses from every output file: a person becomes `User A`/`User B` (the same label on every later run), and an address attached to a script, bulk-upload or rule change is dropped. It does **not** mask account, campaign or ad group names, IDs, resource paths, or the old/new values — a report that has to hide whose account it is needs more than this flag. The identity-to-label table is kept locally in `mapping-profiles/mask-labels.json` (gitignored); don't share it.
 
 ## How this repo is organized
 
-The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_change_history.py`](skills/google-ads-change-history-dashboard/ads_change_history.py) — canonical schema, source detection, category rules, the pipeline, the dashboard template, built-in synthetic sample data, and the self-test suite that *is* the test framework. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before making a change. `docs/` holds five rounds of self-audit history plus real-usage dogfooding notes — every confirmed finding, how it was reproduced, and how it was fixed.
+The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_change_history.py`](skills/google-ads-change-history-dashboard/ads_change_history.py) — canonical schema, source detection, category rules, the pipeline, the dashboard template, built-in synthetic sample data, and the self-test suite that *is* the test framework. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before making a change. `docs/` holds the first five rounds of self-audit history plus real-usage dogfooding notes — every confirmed finding, how it was reproduced, and how it was fixed. Later rounds are recorded where the fixes are: in the commit messages and in the dated notes beside the code and its test cases.
 
 ## License
 
