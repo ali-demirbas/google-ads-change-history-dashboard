@@ -54,7 +54,10 @@ answer:
   proceed anyway.
 - `needs_date_format` / `needs_decimal_style` — genuinely ambiguous date
   (`03/04/2026`) or number (`150.000`). Ask, then pass
-  `--date-format DMY|MDY|ISO` / `--decimal-style TR|US`.
+  `--date-format DMY|MDY|ISO` / `--decimal-style TR|US`. `sample_values` holds
+  the ambiguous values themselves — show those. In a file that mixes ISO rows
+  with slash dates, answer `DMY` or `MDY`, not `ISO`: year-first rows parse
+  under either, slash rows are dropped under `ISO`.
 - `needs_category_review` — an unrecognized `(resource_type, field_name,
   operation)` combination. Ask the user which category/subcategory it
   belongs to, add a rule to `CATEGORY_RULES["structured_rules"]` in the
@@ -64,13 +67,36 @@ Don't skip past any of these by guessing — that's the one rule this skill
 can't bend on. `--allow-unknown-categories` / `--force-review` exist for
 deliberate, user-confirmed overrides, not for convenience.
 
+## After an `ok` run — three fields to read before reporting back
+
+`status: ok` means nothing was ambiguous, not that nothing was left out:
+
+- `ignored_headers` — source columns no canonical field matched. Usually
+  harmless (`feed`, `asset`), but if one is clearly a name, ID or value column,
+  say so and offer a `--mapping-file` rather than presenting the dashboard as
+  complete.
+- `rows_timezone_unknown` — rows whose timestamp carried no offset and no
+  `--timezone` was passed. They're in every view except the Activity Timeline.
+  If the count is material, ask which zone the source's naive timestamps are
+  in and re-run with `--timezone`.
+- `orphan_names_dropped` — rows that carried a campaign/ad-group *name* while
+  the source's own campaign/ad-group reference column was empty. The name is
+  ignored (it would otherwise invent an entity). Non-zero usually means the
+  export's name columns were joined loosely — worth telling the user.
+
+Amounts are shown without a currency unless the user states one: ask, then
+pass `--currency TRY` (one ISO code for the whole file; skip it for a
+multi-currency MCC export).
+
 ## Output
 
 `changes.jsonl` (canonical rows), `change_history.json` (aggregated), a
 single-file `dashboard.html` (no CDN, works offline — Filters, Summary,
 Activity Timeline, User Activity split by human/automation, Account/Campaign
 drill-down, Category Distribution, Campaign Last Changes, Change Explorer with
-detail panel), `coverage.txt`, `unknown-fields.json` when applicable.
+detail panel), `coverage.txt`, `unknown-fields.json` when applicable. The
+dashboard prints cleanly (browser Print → Save as PDF: landscape A4, the
+Explorer's current page with every column wrapped instead of clipped).
 
 When the dataset includes API-sourced rows, the dashboard shows a caveat
 banner: ChangeEvent may not include every entry the Google Ads UI's own

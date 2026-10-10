@@ -47,7 +47,10 @@ VERIFIED vs BEST-EFFORT — read before trusting the output blindly:
     doesn't resolve cleanly (multiple changed_fields paths at once, or a
     path shape this hasn't been tested against), it falls back to the whole
     serialized resource as a JSON string rather than guessing wrong or
-    dropping data. This is the part most likely to need refinement against
+    dropping data. For the multiple-paths case that fallback is exactly
+    what the skill wants: ads_change_history.py splits such an event into
+    one row per changed field, reading each field's value out of that
+    serialized resource itself. This is the part most likely to need refinement against
     real output — if a row's old_value/new_value looks like a big JSON blob
     instead of a clean value, that's this fallback firing; it's a real
     finding worth reporting back, not a crash.

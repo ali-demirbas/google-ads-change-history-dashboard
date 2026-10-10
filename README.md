@@ -52,11 +52,15 @@ python3 ads_change_history.py query ./out/changes.jsonl --user "User A" --since 
 python3 ads_change_history.py self-test
 ```
 
+Two optional facts only you know, never guessed: `--timezone Europe/Istanbul` for a source whose timestamps carry no offset (without it those rows are left out of the timeline, and the run says how many), and `--currency TRY` to show budget/bid amounts with their unit.
+
 When the input has a column the skill doesn't recognize, an ambiguous date/number format, or an uncategorized combination of resource type + field + operation, it exits non-zero with a structured JSON `status` instead of guessing — read that JSON, answer the question it's asking, and re-run with the flag it names (`--mapping-file`, `--date-format`, `--decimal-style`, or `--allow-unknown-categories`).
 
 ## Output
 
 `changes.jsonl` (one row per canonical change), `change_history.json` (aggregated), a single-file `dashboard.html` (works fully offline, no CDN — Filters, Summary, Activity Timeline, User Activity split by human/automation, Account/Campaign drill-down, Category Distribution, Rule Matches, Campaign Last Changes, and a sortable/searchable Change Explorer with a before/after detail panel), `coverage.txt`, and `unknown-fields.json` when applicable.
+
+The dashboard stays one file at any size: the rows are embedded column-packed (about a quarter of the plain-JSON size — 25,000 changes is roughly 9 MB) and it has a print stylesheet, so the browser's *Print → Save as PDF* gives a landscape report with no clipped columns.
 
 **Rule Matches** — off by default. A visible toggle turns on user-adjustable magnitude thresholds (Budget/Target CPA/Target ROAS/Bid ±%) and structural rules (Campaign paused, Campaign removed, Ad group removed — each independently toggleable, plus an off-by-default Campaign enabled for the reverse), computed entirely in the browser — no re-run needed to change a threshold. It never judges: a match means "crossed the threshold you set," always shown with the exact number and rule next to it, never a bare badge or severity color. A Filters dropdown lets you narrow the Explorer to matched rows, or to one specific rule.
 

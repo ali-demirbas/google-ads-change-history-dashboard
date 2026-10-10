@@ -15,7 +15,9 @@ cd skills/google-ads-change-history-dashboard
 python3 ads_change_history.py self-test
 ```
 
-Every behavioral change needs a matching assertion added to `self_test()`, in the same style as the existing ones: a small synthetic fixture, a `run_pipeline()`/`validate_source()` call, an assertion with a message naming what would break and why, and a `print(f"[PASS] ...")` line describing what was verified. Look at an existing block before adding a new one.
+Every behavioral change needs a matching case, in the same style as the existing ones: a `with _test_case("what is being proven"):` block holding a small synthetic fixture, a `run_pipeline()`/`validate_source()` call, an assertion with a message naming what would break and why, and a `print(f"[PASS] ...")` line describing what was verified. Look at an existing block before adding a new one.
+
+A failing case is reported as `[FAIL]` and the run continues, so one run lists every failure (exit code 1 if any). Cases share fixtures with the ones before them, so a case that depends on an earlier, failed one fails too, usually with a `NameError` — fix the first failure listed and re-run. Write the case first and watch it fail for the reason you expect before changing the code.
 
 **Exception — dashboard-template JS.** Client-side-only behavior (e.g. Rule Matches' `MAGNITUDE_RULES`/`STATE_RULES`/`computeRuleMatches()`/`getFiltered()`) lives inside `DASHBOARD_TEMPLATE`'s `<script>`, not in Python — `run_pipeline()`/`validate_source()` can't reach it. `self_test()` extracts that script verbatim and runs a Node-executed assertion suite (`_JS_RULE_MATCHES_TEST_SUITE`) against it, so the check can never silently drift from what ships. This is the one place `self_test()` needs something beyond the Python standard library — it degrades to a `[SKIP]` (not a failure) when `node` isn't on `PATH`, so the tool's zero-dependency promise for actually *running* the skill stays true either way. Add new assertions to that suite the same way — a synthetic row via `mkRow()`, an `assert`, one `check(...)` block per behavior.
 

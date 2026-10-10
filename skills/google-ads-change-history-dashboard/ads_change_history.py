@@ -67,11 +67,16 @@ CANONICAL SCHEMA (one row = one (resource, field, operation) change)
   campaign/ad_group fields (resource-name/path strings) verbatim;
   campaign_id/ad_group_id are the path tail parsed from them when no
   separate bare-ID column exists — see API_EXACT_CASE_RESOURCE_ALIASES.
-  multi_field is true when the source's changed_fields arrived as a real
-  JSON list (Google's FieldMask is a repeated field) — field_name is then a
-  comma-joined string, and old_value/new_value represent the WHOLE changed
-  resource, not a single field's before/after (this codebase has no clean
-  way to split a flat old/new string per field). resource_name is currently
+  A source event that changed several fields (Google's FieldMask is a
+  repeated field) becomes one row PER FIELD whenever its old/new values are
+  the resource snapshot itself (a JSON object, or its JSON string) — each
+  row gets that field's own before/after, all sharing one source_event_id
+  (expand_multi_field_rows()). When old/new are flat strings there is
+  nothing to split by: the event stays one row, field_name a comma-joined
+  string, old_value/new_value the WHOLE change, and multi_field is true.
+  campaign_name/ad_group_name are dropped (and counted) on a row whose own
+  campaign/ad-group reference column is empty — a name can't attach a row to
+  an entity the source says it doesn't belong to. resource_name is currently
   always null: no known source maps anything to it (parallel to user_id —
   both declared, neither populated by any of the 3 registered sources).
 
@@ -84,9 +89,16 @@ VALUE PARSING RULES
   - Micros: when field_name contains "micros" (the Google Ads API convention,
     1,000,000 = 1 unit), old_value_display/new_value_display hold the divided,
     human-readable number; old_value/new_value keep the untouched raw string.
-    No currency symbol is invented — none is known here.
+    No currency is invented — no source says which one. --currency TRY states
+    it for the whole file: budget/bid/target-CPA rows then carry it in
+    `currency` and show it as their unit (ratios and multipliers don't).
+  - A value is a number only when ALL of it is one number, optionally with a
+    currency marker or short unit ("₺150,00", "150.000 TL", "%20", "5km").
+    Text that merely contains a digit ("Search | Generic | v1") is text.
   - Dates: DD/MM vs MM/DD is ambiguous unless some value's day exceeds 12.
     Ambiguous columns require --date-format DMY|MDY|ISO — never guessed.
+    Every row is examined, not a sample. A year-first (ISO) row parses under
+    DMY/MDY too, so a file mixing both shapes loses neither.
   - Timezone: never invented, but never discarded either — if the source
     string itself carries an offset ('+03:00', 'Z'), that's used directly for
     timestamp_utc regardless of whether --timezone was passed (fixed
@@ -145,14 +157,17 @@ REPO / PRIVACY NOTES
 USAGE
   python3 ads_change_history.py run <input.csv|.json> --out-dir ./out \\
       [--timezone Europe/Istanbul] [--date-format DMY] [--decimal-style TR] \\
+      [--currency TRY] \\
       [--mapping-file confirmed_mapping.json] [--mask-users] [--open]
 
   python3 ads_change_history.py query <out/changes.jsonl> --user "User A" --since 7d
 
   python3 ads_change_history.py self-test
-      Writes the 3 built-in sample fixtures to a temp dir, runs the full
+      Writes the built-in synthetic fixtures to a temp dir, runs the full
       pipeline on each, asserts expected shape. This is the test suite —
-      no external test framework needed.
+      no external test framework needed. A failing case is reported and
+      the run continues, so one run lists every failure; exit code 1 if
+      any case failed.
 """
 import argparse
 import csv
@@ -203,7 +218,13 @@ HEADER_ALIASES = {
     "aliases": {
         "timestamp": ["Tarih", "Change Date", "Change Date/Time", "Date", "change_date_time", "Değişiklik Tarihi", "Date & time", "Change date", "Zaman"],
         "account_id": ["Hesap ID", "Account ID", "Customer ID", "customer_id", "external_customer_id"],
-        "account_name": ["Hesap Adı", "Account", "Account name", "Client", "Hesap"],
+        # Fixed 2026-10-10 (6th audit round): account_name/campaign_name/
+        # ad_group_name were each missing their own literal snake_case name —
+        # the same gap "user_name" had below. A ChangeEvent export joined
+        # with display names (customer_id + account_name, campaign +
+        # campaign_name, ...) mapped the ID/path columns and silently dropped
+        # all three name columns, so every row rendered as "Campaign <id>".
+        "account_name": ["account_name", "Hesap Adı", "Account", "Account name", "Client", "Hesap"],
         # Fixed 2026-08-18 (found via a synthetic-dataset dry run, not a
         # pasted audit): "user_name" itself was missing from its own alias
         # list — user_email/client_type both already self-reference (their
@@ -232,9 +253,9 @@ HEADER_ALIASES = {
         # effectively API-source-specific.
         "source_event_id": ["resource_name"],
         "campaign_id": ["Campaign ID", "Kampanya ID", "campaign.id"],
-        "campaign_name": ["Campaign", "Kampanya", "campaign.name"],
+        "campaign_name": ["campaign_name", "Campaign", "Kampanya", "campaign.name"],
         "ad_group_id": ["Ad group ID", "Reklam Grubu ID", "ad_group.id"],
-        "ad_group_name": ["Ad group", "Reklam Grubu", "ad_group.name"],
+        "ad_group_name": ["ad_group_name", "Ad group", "Reklam Grubu", "ad_group.name"],
         "operation": ["resource_change_operation", "Change", "Değişiklik", "Operation"],
         "field_name": ["changed_fields", "Field", "Alan", "Değişen Alan"],
         "old_value": ["old_resource", "Eski Teknik Veri", "Before", "Old value", "Önceki", "Old"],
@@ -314,10 +335,22 @@ CATEGORY_RULES = {
         {"resource_type": "CAMPAIGN", "field_name_contains": "target_cpa", "category": "Bidding", "subcategory": "Target CPA"},
         {"resource_type": "CAMPAIGN", "field_name_contains": "target_roas", "category": "Bidding", "subcategory": "Target ROAS"},
         {"resource_type": "AD_GROUP_CRITERION", "field_name_contains": "keyword", "operation": "CREATE", "field_name_not_contains": "negative", "category": "Keyword", "subcategory": "Keyword added"},
-        {"resource_type": "AD_GROUP_CRITERION", "field_name_contains": "keyword", "operation": "CREATE", "field_name_contains": "negative", "category": "Keyword", "subcategory": "Negative keyword"},
+        # Fixed 2026-10-10: this rule was written with "field_name_contains"
+        # twice in one dict literal ("keyword", then "negative") — Python
+        # keeps only the last, so it matched ANY negative ad-group criterion
+        # (a negative placement, a negative audience) as a negative keyword.
+        # A list means every entry must be present.
+        {"resource_type": "AD_GROUP_CRITERION", "field_name_contains": ["keyword", "negative"], "operation": "CREATE", "category": "Keyword", "subcategory": "Negative keyword"},
         {"resource_type": "AD_GROUP_CRITERION", "field_name_contains": "keyword", "operation": "REMOVE", "category": "Keyword", "subcategory": "Keyword removed"},
         {"resource_type": "CAMPAIGN_CRITERION", "field_name_contains": "negative", "category": "Keyword", "subcategory": "Negative keyword"},
         {"resource_type_in": ["AD", "AD_GROUP_AD"], "operation": "CREATE", "category": "Ad", "subcategory": "Ad created"},
+        # Fixed 2026-10-10 (6th audit round): these two sat with the other
+        # status rules further down, after the generic AD UPDATE rule below —
+        # first-match-wins, so pausing/enabling an ad was always "Ad changed"
+        # and never reached Status, unlike the same change on a campaign, ad
+        # group or keyword. After CREATE on purpose: a new ad stays "Ad created".
+        {"resource_type": "AD_GROUP_AD", "field_name_contains": "status", "new_value_equals": "ENABLED", "category": "Status", "subcategory": "Enabled"},
+        {"resource_type": "AD_GROUP_AD", "field_name_contains": "status", "new_value_equals": "PAUSED", "category": "Status", "subcategory": "Paused"},
         {"resource_type_in": ["AD", "AD_GROUP_AD"], "operation": "UPDATE", "category": "Ad", "subcategory": "Ad changed"},
         {"resource_type_in": ["AD", "AD_GROUP_AD"], "operation": "REMOVE", "category": "Ad", "subcategory": "Ad removed"},
         {"resource_type_in": ["ASSET", "ASSET_SET", "ASSET_SET_ASSET", "CAMPAIGN_ASSET", "AD_GROUP_ASSET", "CUSTOMER_ASSET"], "operation": "CREATE", "category": "Asset", "subcategory": "Asset added"},
@@ -330,14 +363,18 @@ CATEGORY_RULES = {
         {"resource_type": "CAMPAIGN_CRITERION", "field_name_contains": "user_list", "category": "Audience", "subcategory": "Audience added"},
         {"resource_type": "AD_GROUP_CRITERION", "field_name_contains": "user_list", "category": "Audience", "subcategory": "Audience added"},
         {"resource_type": "CAMPAIGN_CRITERION", "field_name_contains": "bid_modifier", "category": "Audience", "subcategory": "Audience bid adjustment changed"},
+        # Moved above the status rules 2026-10-10 (same first-match-wins trap
+        # as the AD_GROUP_AD rules above): a campaign or ad group CREATED with
+        # "status" among its changed fields was reported as Status/Enabled —
+        # a state change of something that didn't exist a moment earlier.
+        {"resource_type": "CAMPAIGN", "operation": "CREATE", "category": "Campaign", "subcategory": "Campaign created"},
+        {"resource_type": "AD_GROUP", "operation": "CREATE", "category": "AdGroup", "subcategory": "Ad group created"},
         {"resource_type": "CAMPAIGN", "field_name_contains": "status", "new_value_equals": "ENABLED", "category": "Status", "subcategory": "Enabled"},
         {"resource_type": "CAMPAIGN", "field_name_contains": "status", "new_value_equals": "PAUSED", "category": "Status", "subcategory": "Paused"},
         {"resource_type": "AD_GROUP", "field_name_contains": "status", "new_value_equals": "ENABLED", "category": "Status", "subcategory": "Enabled"},
         {"resource_type": "AD_GROUP", "field_name_contains": "status", "new_value_equals": "PAUSED", "category": "Status", "subcategory": "Paused"},
         {"resource_type": "AD_GROUP_CRITERION", "field_name_contains": "status", "new_value_equals": "ENABLED", "category": "Status", "subcategory": "Enabled"},
         {"resource_type": "AD_GROUP_CRITERION", "field_name_contains": "status", "new_value_equals": "PAUSED", "category": "Status", "subcategory": "Paused"},
-        {"resource_type": "AD_GROUP_AD", "field_name_contains": "status", "new_value_equals": "ENABLED", "category": "Status", "subcategory": "Enabled"},
-        {"resource_type": "AD_GROUP_AD", "field_name_contains": "status", "new_value_equals": "PAUSED", "category": "Status", "subcategory": "Paused"},
         # These two must come BEFORE the generic REMOVE catch-all below —
         # first-match-wins, and the catch-all previously intercepted every
         # CAMPAIGN/AD_GROUP removal into Status/Removed, making the
@@ -346,11 +383,14 @@ CATEGORY_RULES = {
         # Fixed 2026-08-19 (2nd audit).
         {"resource_type": "CAMPAIGN", "operation": "REMOVE", "category": "Campaign", "subcategory": "Campaign removed"},
         {"resource_type": "AD_GROUP", "operation": "REMOVE", "category": "AdGroup", "subcategory": "Ad group removed"},
+        # Same shadowing, found 2026-10-10 (6th audit round): FEED/FEED_ITEM
+        # removals were declared with the other feed rules below the
+        # catch-all and never reached.
+        {"resource_type": "FEED", "operation": "REMOVE", "category": "Feed", "subcategory": "Feed removed"},
+        {"resource_type": "FEED_ITEM", "operation": "REMOVE", "category": "Feed", "subcategory": "Feed item removed"},
         {"operation": "REMOVE", "category": "Status", "subcategory": "Removed"},
-        {"resource_type": "CAMPAIGN", "operation": "CREATE", "category": "Campaign", "subcategory": "Campaign created"},
         {"resource_type": "CAMPAIGN", "field_name_contains": "name", "operation": "UPDATE", "category": "Campaign", "subcategory": "Campaign name changed"},
         {"resource_type": "CAMPAIGN", "operation": "UPDATE", "category": "Campaign", "subcategory": "Campaign settings changed"},
-        {"resource_type": "AD_GROUP", "operation": "CREATE", "category": "AdGroup", "subcategory": "Ad group created"},
         {"resource_type": "AD_GROUP", "field_name_contains": "name", "operation": "UPDATE", "category": "AdGroup", "subcategory": "Ad group name changed"},
         # These two rules can only ever be reached via --extra-rules or a
         # non-ChangeEvent source: verified 2026-08-18 that none of Google's 21
@@ -365,10 +405,8 @@ CATEGORY_RULES = {
         # values had zero structured_rules coverage — any real event of these
         # types always needed manual category review before this fix.
         {"resource_type": "FEED", "operation": "CREATE", "category": "Feed", "subcategory": "Feed created"},
-        {"resource_type": "FEED", "operation": "REMOVE", "category": "Feed", "subcategory": "Feed removed"},
         {"resource_type": "FEED", "operation": "UPDATE", "category": "Feed", "subcategory": "Feed changed"},
         {"resource_type": "FEED_ITEM", "operation": "CREATE", "category": "Feed", "subcategory": "Feed item added"},
-        {"resource_type": "FEED_ITEM", "operation": "REMOVE", "category": "Feed", "subcategory": "Feed item removed"},
         {"resource_type": "FEED_ITEM", "operation": "UPDATE", "category": "Feed", "subcategory": "Feed item changed"},
         {"resource_type": "CAMPAIGN_FEED", "category": "Feed", "subcategory": "Feed attached to campaign"},
         {"resource_type": "AD_GROUP_FEED", "category": "Feed", "subcategory": "Feed attached to ad group"},
@@ -650,7 +688,18 @@ def try_fingerprint_match(headers):
     profile_path = PROFILES_DIR / f"{fp}.json"
     if profile_path.exists():
         with open(profile_path, encoding="utf-8") as f:
-            return json.load(f)
+            profile = json.load(f)
+        # Fixed 2026-10-10 (6th audit round): every "ok" run used to save a
+        # profile, including one derived purely from the alias table. That
+        # froze the table's state at the time — a later alias fix never
+        # reached a file that had been seen once, because this lookup wins
+        # before try_alias_match() runs. Only a human-confirmed mapping is
+        # worth caching (re-deriving an alias match costs nothing); profiles
+        # left behind by the old behavior are recognizable by their
+        # auto-assigned source_label and skipped rather than trusted.
+        auto_derived = profile.get("source_label") in ({"alias_match"} | set(HEADER_ALIASES["known_sources"]))
+        if profile.get("confirmed_by") or not auto_derived:
+            return profile
     return None
 
 
@@ -785,7 +834,9 @@ def soft_warnings(mapping):
         warnings.append("No user identity column found — actor_type will default to 'unknown' unless client_type infers automation.")
     if "operation" not in mapping:
         warnings.append("No structured 'operation' column — inferred from raw_summary text, else defaults to UPDATE.")
-    if "campaign_name" not in mapping and "campaign_id" not in mapping:
+    # campaign_resource counts too (6th audit round, 2026-10-10): campaign_id
+    # is derived from its path tail, so campaign-level views are populated.
+    if not any(c in mapping for c in ("campaign_name", "campaign_id", "campaign_resource")):
         warnings.append("No campaign reference column — campaign-level views will be empty.")
     return warnings
 
@@ -911,16 +962,21 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
             "mapping": mapping,
         }
 
-    if save_profile:
+    if save_profile and mapping_file:
         PROFILES_DIR.mkdir(parents=True, exist_ok=True)
         fp = fingerprint(headers)
         with open(PROFILES_DIR / f"{fp}.json", "w", encoding="utf-8") as f:
-            json.dump({"source_label": source_label, "mapping": mapping, "headers_seen": headers}, f, indent=2, ensure_ascii=False)
+            json.dump({"source_label": source_label, "confirmed_by": "mapping_file", "mapping": mapping, "headers_seen": headers}, f, indent=2, ensure_ascii=False)
 
     return {
         "status": "ok", "input": str(input_path), "row_count": len(rows),
         "fingerprint": fingerprint(headers), "source_label": source_label,
         "mapping": mapping,
+        # Fixed 2026-10-10 (6th audit round): unmapped_headers was only ever
+        # reported on the needs_mapping path. On an "ok" run a source column
+        # no alias matched just vanished — which is how three fully-populated
+        # name columns went missing with nothing anywhere saying so.
+        "ignored_headers": [h for h in headers if h not in set(mapping.values())],
         "warnings": soft_warnings(mapping) + ([f"Duplicate column header(s) detected: {dup_headers} — only the last occurrence of each is used (stdlib csv.DictReader behavior), earlier columns of the same name are silently discarded."] if dup_headers else []),
     }
 
@@ -928,14 +984,34 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
 # =====================================================================
 # STAGE 3: NORMALIZATION
 # =====================================================================
-def normalize_number(raw, decimal_style):
+# Fixed 2026-10-10 (6th audit round): normalize_number() used to delete every
+# non-numeric character and parse whatever digits were left, so any text with
+# a digit in it became a number — a campaign named "Search | Generic | v1"
+# got old_value_num 1.0, "feed/100" got 100.0, a resource path got its IDs
+# concatenated. Those values feed table sorting and old/new_value_display. A
+# value is numeric only when the WHOLE of it is one number, optionally
+# wrapped in a currency marker and/or a short unit ("₺150,00", "150.000 TL",
+# "%20", "TRY100.00/day", "5km"). A letter directly before the digits
+# ("v1", "Q3") is an identifier, not a quantity, so no free-form prefix.
+NUMERIC_VALUE_RE = re.compile(
+    r"^([+-])?\s*(?:[₺$€£¥%]|TRY|TL|USD|EUR|GBP)?\s*(-?\d[\d.,]*)\s*(?:%|[^\W\d_]{1,4})?(?:/[^\W\d_]{1,5})?$"
+)
+
+
+def _numeric_core(raw):
+    """The bare digits/separators/sign of a numeric-looking value, or None
+    when the value is text that merely contains digits."""
     if raw is None:
         return None
-    s = str(raw).strip()
-    if not s:
+    m = NUMERIC_VALUE_RE.match(str(raw).strip())
+    if not m:
         return None
-    s = re.sub(r"[^\d.,-]", "", s)
-    if not s:
+    return ("-" if m.group(1) == "-" else "") + m.group(2)
+
+
+def normalize_number(raw, decimal_style):
+    s = _numeric_core(raw)
+    if s is None:
         return None
     has_dot, has_comma = "." in s, "," in s
     if has_dot and has_comma:
@@ -962,9 +1038,9 @@ def normalize_number(raw, decimal_style):
 
 def decimal_ambiguity_present(values):
     for v in values:
-        if v is None:
+        s = _numeric_core(v)
+        if s is None:
             continue
-        s = re.sub(r"[^\d.,-]", "", str(v))
         has_dot, has_comma = "." in s, "," in s
         if has_dot and has_comma:
             continue
@@ -990,30 +1066,45 @@ def _normalize_spaces(s):
     return s
 
 
+YEAR_FIRST_DATE_RE = re.compile(r"^\d{4}[-/]\d{2}[-/]\d{2}")
+SLASH_DATE_RE = re.compile(r"^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})")
+
+
 def detect_date_format(values):
-    sample = [_normalize_spaces(str(v)) for v in values if v][:200]
+    """ISO / UI_EN / DMY / MDY when the column itself settles it, else None
+    (stop and ask).
+
+    Fixed 2026-10-10 (follow-up to the 6th audit round), two gaps:
+    (1) only the first 200 values were sampled. A file whose slash dates
+        start at row 201 resolved as "ISO" without asking, and every slash
+        row was then skipped as unparseable.
+    (2) ISO/UI_EN required EVERY value to match, so a single unreadable cell
+        ("N/A") in an otherwise clean ISO column fell through to the "DD/MM
+        vs MM/DD?" question — about a column with no slash date in it. Only
+        slash-shaped values raise that question now; a stray unreadable
+        value is left for parse_timestamp() to count as skipped
+        (run_pipeline still stops when that passes 20%).
+
+    UI_EN is the Google Ads UI's own "Change history report" CSV shape
+    ("Aug 16, 2026, 10:42:26 PM", added 2026-08-18 from a real export): a
+    spelled-out month has no day/month order to be ambiguous about, so —
+    like ISO — it auto-detects rather than asking."""
+    sample = [_normalize_spaces(str(v)) for v in values if v]
     if not sample:
         return "ISO"
-    if all(re.match(r"^\d{4}-\d{2}-\d{2}", s) for s in sample):
-        return "ISO"
-    # Fixed 2026-08-18 (found via a real native Google Ads UI export): the
-    # UI's own "Change history report" CSV timestamps this shape ("Aug 16,
-    # 2026, 10:42:26 PM") — previously unrecognized by any branch here,
-    # surfacing as needs_date_format with a misleading "DD/MM vs MM/DD"
-    # message for a format that was never numeric-ambiguous in the first
-    # place; the real problem was that no pattern matched it at all. A
-    # spelled-out month name has no day/month ordering to be ambiguous
-    # about, so — like ISO — this auto-detects rather than asking.
-    if all(GOOGLE_UI_EN_DATETIME_RE.match(s) for s in sample):
-        return "UI_EN"
-    for s in sample:
-        m = re.match(r"^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})", s)
-        if m:
-            a, b = int(m.group(1)), int(m.group(2))
-            if a > 12:
-                return "DMY"
-            if b > 12:
-                return "MDY"
+    slash = [m for m in (SLASH_DATE_RE.match(s) for s in sample) if m]
+    if not slash:
+        iso = sum(1 for s in sample if YEAR_FIRST_DATE_RE.match(s))
+        ui_en = sum(1 for s in sample if GOOGLE_UI_EN_DATETIME_RE.match(s))
+        if not (iso or ui_en):
+            return None
+        return "ISO" if iso >= ui_en else "UI_EN"
+    for m in slash:
+        a, b = int(m.group(1)), int(m.group(2))
+        if a > 12:
+            return "DMY"
+        if b > 12:
+            return "MDY"
     return None
 
 
@@ -1040,7 +1131,12 @@ def parse_timestamp(raw, fmt):
     it. The regex now captures an optional trailing offset/Z and applies it
     the same way the ISO branch does."""
     s = _normalize_spaces(str(raw).strip())
-    if fmt == "ISO":
+    # Fixed 2026-10-10 (6th audit round): --date-format DMY/MDY only answers
+    # "which of the first two numbers is the day" — a year-first string has
+    # no such question. A file mixing ISO rows with slash-date rows used to
+    # be a dead end: ISO dropped the slash rows, DMY/MDY dropped every ISO
+    # row, and no flag value kept both.
+    if fmt == "ISO" or (fmt in ("DMY", "MDY") and YEAR_FIRST_DATE_RE.match(s)):
         iso_candidate = s.replace("Z", "+00:00") if s.endswith("Z") else s
         # Fixed 2026-08-18 (3rd audit round, confirmed): a slash-separated
         # ISO-shaped date ("2026/08/01...") failed to parse even with
@@ -1139,6 +1235,85 @@ def make_change_id(account_ref, ts, user_ref, resource_ref, field_name, old_valu
     return hashlib.sha1(key.encode("utf-8")).hexdigest()[:20]
 
 
+_MISSING = object()
+
+
+def _resource_snapshot(value):
+    """A changed-resource snapshot as a dict (given as a dict or as its JSON
+    string), else None — a flat value like "ENABLED" is not a snapshot."""
+    if isinstance(value, str):
+        text = value.strip()
+        if not text.startswith("{"):
+            return None
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return None
+    return value if isinstance(value, dict) else None
+
+
+def _walk_field_path(node, path):
+    """The value at a FieldMask path ("campaign_budget.amount_micros"), or
+    _MISSING. Tries snake_case and camelCase at each step (which one a
+    serialized protobuf uses depends on the client), and looks one level
+    down as well: ChangedResource is a oneof, so the real resource usually
+    sits under a single key named after its type ({"campaign": {...}})."""
+    def walk(start):
+        cur = start
+        for part in path.split("."):
+            if not isinstance(cur, dict):
+                return _MISSING
+            head, *rest = part.split("_")
+            camel = head + "".join(w.capitalize() for w in rest)
+            if part in cur:
+                cur = cur[part]
+            elif camel in cur:
+                cur = cur[camel]
+            else:
+                return _MISSING
+        return cur
+    found = walk(node)
+    if found is _MISSING and len(node) == 1 and isinstance(next(iter(node.values())), dict):
+        found = walk(next(iter(node.values())))
+    return found
+
+
+def expand_multi_field_rows(rows, mapping):
+    """Added 2026-10-10. One ChangeEvent that changed several fields used to
+    stay one row, its field_name the paths joined ("status, name") and its
+    old/new value the whole serialized resource — nothing downstream could
+    categorize, sort or threshold it per field. That was deliberate while
+    the per-field values weren't available: splitting would have stamped the
+    same whole-resource blob onto every field (see audit F-02).
+
+    They ARE available whenever old/new arrive as the resource snapshot
+    itself (tools/fetch_live_data.py emits exactly that for a multi-field
+    event). Such a row becomes one row per changed field, each with that
+    field's own old/new value, all sharing the event's source_event_id. A
+    row is split only if EVERY path resolves in at least one of the two
+    snapshots (a CREATE has no "old") — otherwise it is left exactly as it
+    was, joined and flagged multi_field, rather than half-split on a guess."""
+    fh, oh, nh = mapping.get("field_name"), mapping.get("old_value"), mapping.get("new_value")
+    if not (fh and oh and nh):
+        return rows
+    out = []
+    for r in rows:
+        paths = r.get(fh)
+        if isinstance(paths, str) and "," in paths:
+            paths = [x.strip() for x in paths.split(",") if x.strip()]
+        old_node, new_node = _resource_snapshot(r.get(oh)), _resource_snapshot(r.get(nh))
+        if not isinstance(paths, list) or len(paths) < 2 or (old_node is None and new_node is None):
+            out.append(r)
+            continue
+        pairs = [tuple(_MISSING if node is None else _walk_field_path(node, str(path)) for node in (old_node, new_node)) for path in paths]
+        if any(o is _MISSING and n is _MISSING for o, n in pairs):
+            out.append(r)
+            continue
+        text = lambda v: "" if v is _MISSING or v is None else v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+        out.extend({**r, fh: str(path), oh: text(o), nh: text(n)} for path, (o, n) in zip(paths, pairs))
+    return out
+
+
 def derive_resource_id_from_path(resource_path):
     """'customers/1/campaignBudgets/456' -> '456'. Best-effort only — used
     when no separate bare-ID column exists."""
@@ -1157,16 +1332,23 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         # going through validate_source() first — see F-16/F-17/F-18 fix note there.
         return {"status": "error", "message": str(e)}
 
+    rows = expand_multi_field_rows(rows, mapping)
     ts_header = mapping.get("timestamp")
     ts_values = [r.get(ts_header) for r in rows] if ts_header else []
     resolved_date_fmt = date_format or detect_date_format(ts_values)
     if resolved_date_fmt is None:
-        return {"status": "needs_date_format", "message": "Timestamp column is ambiguous (DD/MM vs MM/DD). Ask the user, then pass date_format='DMY'|'MDY'|'ISO'.", "sample_values": [v for v in ts_values if v][:5]}
+        # Fixed 2026-10-10 (6th audit round): sample_values was the first 5
+        # timestamps, whatever they were. In a mostly-ISO file with a handful
+        # of slash dates, the human was asked "DD/MM or MM/DD?" while being
+        # shown five ISO strings that have no such ambiguity. Same for the
+        # decimal-style question below.
+        ambiguous = [v for v in ts_values if v and not YEAR_FIRST_DATE_RE.match(_normalize_spaces(str(v)))]
+        return {"status": "needs_date_format", "message": "Timestamp column is ambiguous (DD/MM vs MM/DD). Ask the user, then pass date_format='DMY'|'MDY'|'ISO'.", "sample_values": (ambiguous or [v for v in ts_values if v])[:5]}
 
     numeric_cols = [mapping[c] for c in ("old_value", "new_value") if c in mapping]
     numeric_values = [r.get(h) for h in numeric_cols for r in rows]
     if decimal_style is None and decimal_ambiguity_present(numeric_values):
-        return {"status": "needs_decimal_style", "message": "Numeric columns have an ambiguous separator (e.g. '150.000'). Ask the user, then pass decimal_style='TR'|'US'.", "sample_values": [v for v in numeric_values if v][:5]}
+        return {"status": "needs_decimal_style", "message": "Numeric columns have an ambiguous separator (e.g. '150.000'). Ask the user, then pass decimal_style='TR'|'US'.", "sample_values": [v for v in numeric_values if decimal_ambiguity_present([v])][:5]}
     resolved_decimal_style = decimal_style or "TR"
 
     # Fixed 2026-08-18 (4th audit round, confirmed): an invalid --timezone
@@ -1184,7 +1366,18 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         except Exception as e:
             return {"status": "error", "message": f"Unknown timezone: {tz!r} ({e}). Pass a valid IANA timezone name (e.g. 'Europe/Istanbul') via --timezone, or omit it."}
 
-    out_rows, unparseable = [], 0
+    # Added 2026-10-10. When the source HAS a campaign / ad-group reference
+    # column and it is empty on a row, that row belongs to no campaign / ad
+    # group as far as the source itself says. A display name sitting on the
+    # same row then can't be allowed to invent one: on a 25k-row export,
+    # campaign- and budget-level rows carrying a stray ad_group_name turned
+    # 300 real ad groups into 2,381 "changed ad groups" (identity falls back
+    # to the name when there is no id). The name is dropped and counted. A
+    # source with no reference column at all (names only, e.g. the legacy TR
+    # export) is untouched — there the name IS the identity.
+    campaign_ref_mapped = "campaign_id" in mapping or "campaign_resource" in mapping
+    ad_group_ref_mapped = "ad_group_id" in mapping or "ad_group_resource" in mapping
+    out_rows, unparseable, orphan_names = [], 0, 0
     for r in rows:
         def g(field):
             h = mapping.get(field)
@@ -1248,12 +1441,13 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         # real JSON list (e.g. ["status","name"]) crashed match_structured()
         # ('list' object has no attribute 'lower') since field_name was
         # assumed to always be a string. Joined into one string here rather
-        # than split into per-field rows: old_value/new_value in this script's
-        # model represent the WHOLE changed resource as one flat string, not a
-        # per-field breakdown, so splitting into N rows would force the same
-        # whole-resource old/new value onto each field — an invented
-        # per-field value this codebase doesn't actually have. multi_field
-        # flags this rather than silently presenting it as a single clean field.
+        # than split into per-field rows: a row that reaches this point with
+        # several paths has old/new values that are flat strings, not a
+        # per-field breakdown, so splitting would force the same value onto
+        # each field — an invented per-field value. multi_field flags this
+        # rather than silently presenting it as a single clean field. (A row
+        # whose old/new DO carry per-field values never gets here as a list:
+        # expand_multi_field_rows() already split it, before this loop.)
         raw_field_name = g("field_name")
         multi_field = isinstance(raw_field_name, list)
         field_name = ", ".join(str(x) for x in raw_field_name) if multi_field else raw_field_name
@@ -1310,6 +1504,11 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
             campaign_id = resource_id
         if not ad_group_id and rt_upper == "AD_GROUP":
             ad_group_id = resource_id
+        campaign_name, ad_group_name = g("campaign_name") or None, g("ad_group_name") or None
+        if campaign_name and campaign_ref_mapped and not campaign_id:
+            campaign_name, orphan_names = None, orphan_names + 1
+        if ad_group_name and ad_group_ref_mapped and not ad_group_id:
+            ad_group_name, orphan_names = None, orphan_names + 1
 
         # Fixed 2026-08-18 (3rd audit round, confirmed): the hash used to key
         # off raw_ts (the source's own un-normalized timestamp string). Two
@@ -1322,15 +1521,22 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         change_id = make_change_id(account_id or account_name, ts_utc or dt.isoformat(), user_email or user_name, resource_id or resource_path or resource_name or g("campaign_name"), field_name, old_value, new_value, source_event_id=source_event_id)
         event_id = source_event_id or change_id
 
+        # Fixed 2026-10-10 (6th audit round): an empty source cell came out
+        # as "" for these identity/reference fields while the *_id derived
+        # from the very same cell came out None (user_email "" next to
+        # user_id None, ad_group_resource "" next to ad_group_id None) — a
+        # consumer had to test for both. Normalized here, at output only:
+        # everything above already treats "" and None alike via `or`, so
+        # change_id hashes and derived values are unchanged.
         out_rows.append({
             "change_id": change_id, "event_id": event_id, "source_event_id": source_event_id, "timestamp": str(raw_ts),
             "timestamp_iso": dt.isoformat(), "timezone": row_timezone, "timestamp_utc": ts_utc,
             "account_id": account_id, "account_name": account_name, "user_id": None,
-            "user_name": user_name, "user_email": user_email, "client_type": client_type,
-            "actor_type": actor_type, "resource_type": resource_type, "resource_path": resource_path, "resource_id": resource_id,
-            "resource_name": resource_name, "campaign_id": campaign_id, "campaign_name": g("campaign_name"),
-            "campaign_resource": campaign_resource, "ad_group_resource": ad_group_resource,
-            "ad_group_id": ad_group_id, "ad_group_name": g("ad_group_name"), "operation": operation, "operation_confidence": operation_confidence,
+            "user_name": user_name or None, "user_email": user_email or None, "client_type": client_type or None,
+            "actor_type": actor_type, "resource_type": resource_type, "resource_path": resource_path or None, "resource_id": resource_id,
+            "resource_name": resource_name or None, "campaign_id": campaign_id, "campaign_name": campaign_name,
+            "campaign_resource": campaign_resource or None, "ad_group_resource": ad_group_resource or None,
+            "ad_group_id": ad_group_id, "ad_group_name": ad_group_name, "operation": operation, "operation_confidence": operation_confidence,
             "field_name": field_name, "multi_field": multi_field, "old_value": old_value, "new_value": new_value,
             "old_value_num": old_num, "new_value_num": new_num,
             "old_value_display": old_value_display, "new_value_display": new_value_display,
@@ -1339,7 +1545,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
             "category_confidence": None, "source": source_label, "raw_summary": raw_summary,
         })
 
-    return {"status": "ok", "rows": out_rows, "rows_skipped_unparseable_date": unparseable, "date_format_used": resolved_date_fmt, "decimal_style_used": resolved_decimal_style}
+    return {"status": "ok", "rows": out_rows, "rows_skipped_unparseable_date": unparseable, "orphan_names_dropped": orphan_names, "date_format_used": resolved_date_fmt, "decimal_style_used": resolved_decimal_style}
 
 
 def dedupe_rows(rows):
@@ -1403,12 +1609,29 @@ def validate_extra_rules(rules):
     return None
 
 
+# Added 2026-10-10. No source this script reads says which currency an
+# amount is in (ChangeEvent carries micros, not a currency; the account's
+# currency lives on the customer resource), so none is ever assumed. When
+# the caller states it (--currency TRY), the rows that hold money get it as
+# their unit; ratios and multipliers (target ROAS, bid modifiers) don't.
+MONETARY_SUBCATEGORIES = {"Budget changed", "Budget created", "Budget removed", "Bid changed", "Target CPA"}
+CURRENCY_CODE_RE = re.compile(r"^[A-Z]{3}$")
+
+
+def apply_currency(rows, currency):
+    for row in rows:
+        monetary = "micros" in str(row.get("field_name") or "").lower() or row.get("subcategory") in MONETARY_SUBCATEGORIES
+        if monetary and (row.get("old_value_num") is not None or row.get("new_value_num") is not None):
+            row["currency"] = row["value_unit"] = currency
+    return rows
+
+
 def match_structured(row, extra_rules=None):
     rules = (extra_rules or []) + CATEGORY_RULES["structured_rules"]
     rt = (row.get("resource_type") or "").upper()
     fn = (row.get("field_name") or "").lower()
     op = (row.get("operation") or "").upper()
-    nv = (row.get("new_value") or "").upper()
+    nv = str(row.get("new_value") or "").upper()
     for rule in rules:
         if "resource_type" in rule and rule["resource_type"] != rt:
             continue
@@ -1416,8 +1639,10 @@ def match_structured(row, extra_rules=None):
             continue
         if "resource_type_contains" in rule and rule["resource_type_contains"].upper() not in rt:
             continue
-        if "field_name_contains" in rule and rule["field_name_contains"].lower() not in fn:
-            continue
+        if "field_name_contains" in rule:
+            needles = rule["field_name_contains"]
+            if not all(n.lower() in fn for n in ([needles] if isinstance(needles, str) else needles)):
+                continue
         if "field_name_not_contains" in rule and rule["field_name_not_contains"].lower() in fn:
             continue
         if "operation" in rule and rule["operation"] != op:
@@ -2189,6 +2414,35 @@ body.lab {
     .detail-card dl { grid-template-columns: 1fr; gap: 2px; }
     .detail-card dd { margin-bottom: 8px; }
   }
+  /* Print / "Save as PDF". The screen layout clips: the Explorer scrolls
+     sideways and its cells are single-line with an ellipsis, so on paper the
+     right-hand columns (old/new value, matches, source) were simply cut off.
+     On paper the table gets the full landscape width and its cells wrap. */
+  @media print {
+    @page { size: A4 landscape; margin: 10mm; }
+    header { padding: 0 0 6px; }
+    /* block, not the screen's flex column: Chrome won't break a page between
+       flex items cleanly and pushed whole sections to the next page */
+    main { display: block; padding: 0; }
+    /* a real border, not the screen's 1px ring shadow: a shadow isn't part
+       of the box, so its top hairline printed on the PREVIOUS page */
+    section { margin: 0 0 10px; padding: 12px 14px; border: 1px solid #dfe3ec; box-shadow: none; break-inside: avoid; }
+    .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .stat { padding: 10px 12px; }
+    .stat .n { font-size: 1.1rem; overflow-wrap: anywhere; }
+    section:last-of-type { break-inside: auto; }
+    .filters, .explorer-search, .pager button, #detailOverlay { display: none !important; }
+    #filterContext { margin: 0; }
+    .timeline { overflow: visible; }
+    section > div[style*="overflow-x"] { overflow: visible !important; }
+    table { font-size: 9.5px; table-layout: auto; }
+    th, td { max-width: none; padding: 4px 6px; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; vertical-align: top; }
+    th { position: static; font-size: 9px; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; }
+    .pill { padding: 0 6px; font-size: 9px; white-space: nowrap; }
+    td .note { font-size: inherit; }
+  }
 </style>
 </head>
 <body class="lab">
@@ -2332,6 +2586,22 @@ body.lab {
 </div>
 <script>
 const DASH_DATA = /*__DASH_DATA__*/null;
+// The rows ship column-packed (see pack_changes() in the generator): rebuild
+// the plain row objects once, here, so everything below reads DASH_DATA.changes
+// exactly as before.
+function unpackChanges(packed){
+  const rows = Array.from({length: packed.n}, ()=>({}));
+  for(const k of packed.keys){
+    const col = packed.cols[k];
+    if(col.v){ for(let i=0;i<packed.n;i++) rows[i][k] = col.v[i]; }
+    else { for(let i=0;i<packed.n;i++) rows[i][k] = col.d[col.i[i]]; }
+  }
+  return rows;
+}
+if(DASH_DATA && DASH_DATA.changes_packed){
+  DASH_DATA.changes = unpackChanges(DASH_DATA.changes_packed);
+  delete DASH_DATA.changes_packed;
+}
 // Fixed 2026-08-18: campaign/account/user/field names come from the source
 // file, not from a closed set — nothing here was escaped before, so a
 // campaign named e.g. "<img src=x onerror=...>" would have executed. Every
@@ -2820,13 +3090,15 @@ function renderExplorer(filtered){
   state.page = Math.min(state.page, totalPages);
   const pageRows = sorted.slice((state.page-1)*state.pageSize, state.page*state.pageSize);
   const body = document.getElementById('explorerBody');
-  function displayValue(raw, display, unit){
+  function displayValue(raw, display, unit, currency){
     // Fixed 2026-08-18 (3rd audit round, confirmed): `display` reached the
     // DOM unescaped here. Not currently exploitable — the only caller that
     // sets `unit` (the micros-conversion branch) always passes a computed
     // number/null, never raw source text — but escaping it defensively costs
     // nothing and removes the gap for whatever sets old_value_display next.
-    const prefix = unit ? `${escapeHtml(display ?? '—')} ` : '';
+    // `currency` is only ever the run's own --currency code (validated
+    // ^[A-Z]{3}$ before it reaches a row) — escaped anyway, same reasoning.
+    const prefix = unit ? `${escapeHtml(display ?? '—')}${currency ? ' ' + escapeHtml(currency) : ''} ` : '';
     const suffix = unit ? `(raw: ${escapeHtml(raw ?? '—')})` : escapeHtml(raw ?? '—');
     return unit ? `${prefix}<span class="note" style="margin:0;">${suffix}</span>` : suffix;
   }
@@ -2836,8 +3108,8 @@ function renderExplorer(filtered){
       <td>${c.actor_type==='human' ? escapeHtml(c.user_name||c.user_email||'—') : `<span class="pill pill-auto">${escapeHtml(c.client_type||'automation')}</span>`}</td>
       <td>${escapeHtml(c.account_name||'')}</td><td>${escapeHtml(c.campaign_name||'—')}</td><td>${escapeHtml(c.ad_group_name||'—')}</td>
       <td><span class="pill"${categoryPillStyle(c.category)}>${escapeHtml(c.category)}</span></td><td>${escapeHtml(c.field_name || c.subcategory || '—')}</td>
-      <td style="color:var(--bad);">${c.value_confidence==='parsed_from_summary' ? '~' : ''}${displayValue(c.old_value, c.old_value_display, c.value_unit)}</td>
-      <td style="color:var(--good);">${c.value_confidence==='parsed_from_summary' ? '~' : ''}${displayValue(c.new_value, c.new_value_display, c.value_unit)}</td>
+      <td style="color:var(--bad);">${c.value_confidence==='parsed_from_summary' ? '~' : ''}${displayValue(c.old_value, c.old_value_display, c.value_unit, c.currency)}</td>
+      <td style="color:var(--good);">${c.value_confidence==='parsed_from_summary' ? '~' : ''}${displayValue(c.new_value, c.new_value_display, c.value_unit, c.currency)}</td>
       <td>${ruleState.enabled ? (ruleMatchPillsHtml(computeRuleMatches(c)) || '—') : '—'}</td>
       <td>${escapeHtml(c.source)}</td>
     </tr>`).join('') : `<tr><td colspan="11" class="empty">No changes match current filters.</td></tr>`;
@@ -2907,6 +3179,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if(m.rows_skipped_unparseable_date_pct > 5){
     caveats.push(`${m.rows_skipped_unparseable_date} row(s) (${m.rows_skipped_unparseable_date_pct}% of input) were silently excluded — their date column didn't parse under the format this run resolved. See coverage.txt.`);
   }
+  const tzUnknown = m.rows_excluded_from_timeline_unknown_tz || 0;
+  if(m.row_count && tzUnknown / m.row_count > 0.05){
+    caveats.push(`${tzUnknown.toLocaleString()} row(s) (${(100*tzUnknown/m.row_count).toFixed(1)}%) carry a timestamp with no timezone and are left out of the Activity Timeline — every other view still includes them. Re-run with --timezone <IANA name> if those timestamps share one known zone.`);
+  }
   if(caveats.length){
     document.getElementById('apiCaveat').innerHTML = caveats.map(c=>`<div class="warn-box">${escapeHtml(c)}</div>`).join('');
   }
@@ -2934,6 +3210,35 @@ document.addEventListener('DOMContentLoaded', ()=>{
 """
 
 
+def pack_changes(rows):
+    """Column-oriented form of the canonical rows, for embedding in the
+    dashboard. Added 2026-10-10: the rows were embedded as a plain JSON
+    array of objects — 42 key names repeated on every row, and the same few
+    account/campaign/category/source strings repeated thousands of times.
+    25,000 rows made a 33 MB HTML file. Here each key appears once, and a
+    column whose values repeat is stored as a table of its distinct values
+    plus one small index per row; a column of mostly-unique values (ids,
+    timestamps) is stored as-is. Same data, about a quarter of the bytes;
+    unpackChanges() in the template rebuilds the identical row objects, so
+    nothing else in the dashboard knows the difference. changes.jsonl and
+    change_history.json keep the plain row form."""
+    keys = list(dict.fromkeys(k for r in rows for k in r))
+    cols = {}
+    for k in keys:
+        table, index, per_row = [], {}, []
+        for r in rows:
+            v = r.get(k)
+            # type name in the key: 1, 1.0 and True are equal as dict keys
+            ident = ("json", json.dumps(v, sort_keys=True)) if isinstance(v, (list, dict)) else (type(v).__name__, v)
+            i = index.get(ident)
+            if i is None:
+                i = index[ident] = len(table)
+                table.append(v)
+            per_row.append(i)
+        cols[k] = {"d": table, "i": per_row} if len(table) * 2 <= len(rows) else {"v": [r.get(k) for r in rows]}
+    return {"n": len(rows), "keys": keys, "cols": cols}
+
+
 def build_dashboard(rows, out_path, mask_users=False, generated_at=None, json_out=None, rows_skipped_unparseable_date=0):
     sources = {r.get("source", "unknown") for r in rows}
     other_pct = round(100 * sum(1 for r in rows if r["category"] == "Other") / len(rows), 1) if rows else 0.0
@@ -2957,7 +3262,9 @@ def build_dashboard(rows, out_path, mask_users=False, generated_at=None, json_ou
     # JSON and decodes back to "<" at JS parse time — so DASH_DATA's actual
     # value is unaffected; only the raw HTML text can no longer contain a
     # literal "<", ">", or "&".
-    payload = json.dumps(data, ensure_ascii=False)
+    embedded = {k: v for k, v in data.items() if k != "changes"}
+    embedded["changes_packed"] = pack_changes(data["changes"])
+    payload = json.dumps(embedded, ensure_ascii=False, separators=(",", ":"))
     payload = payload.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     html = DASHBOARD_TEMPLATE.replace(marker, f"/*__DASH_DATA__*/{payload}")
     Path(out_path).write_text(html, encoding="utf-8")
@@ -3024,9 +3331,12 @@ def query_changes(rows, user=None, account=None, campaign=None, category=None, o
 # =====================================================================
 def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decimal_style=None,
                   tz="unknown", mask_users=False, allow_unknown_categories=False, force_review=False,
-                  extra_rules=None, open_browser=False, generated_at=None, account_name=None):
+                  extra_rules=None, open_browser=False, generated_at=None, account_name=None, currency=None):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if currency is not None and not CURRENCY_CODE_RE.match(currency):
+        return {"status": "error", "message": f"Invalid --currency value: {currency!r}. Expected a 3-letter ISO 4217 code in capitals, e.g. 'TRY', 'USD', 'EUR'."}
 
     if extra_rules is not None:
         err = validate_extra_rules(extra_rules)
@@ -3077,7 +3387,16 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     # Fixed 2026-08-18 (audit F-04): masked BEFORE any output file is written,
     # so changes.jsonl and the dashboard are never inconsistent and neither
     # can leak an identity --mask-users was asked to hide.
+    if currency:
+        apply_currency(c["rows"], currency)
     c["rows"] = mask_rows(c["rows"], mask_users)
+
+    # Fixed 2026-10-10 (6th audit round): a naive timestamp with no
+    # --timezone can't be placed on the UTC timeline, so the row is left out
+    # of it (correctly — no zone is guessed). But the only trace of that was
+    # a footnote under the timeline chart: on a 25k-row export 17.7% of rows
+    # were missing from it while this function's own summary said nothing.
+    tz_unknown = sum(1 for row in c["rows"] if not row.get("timestamp_utc"))
 
     with open(out_dir / "changes.jsonl", "w", encoding="utf-8") as f:
         for row in c["rows"]:
@@ -3092,6 +3411,10 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
             f.write(f"Rows skipped (unparseable date): {n['rows_skipped_unparseable_date']} ({skip_pct}%)\n")
             if skip_pct > 5:
                 f.write("WARNING: unparseable-date skip rate exceeds 5% — check the source's date column for a format this run didn't expect.\n")
+        if n["orphan_names_dropped"]:
+            f.write(f"Campaign/ad group names ignored on rows without a matching reference: {n['orphan_names_dropped']} — the source's own campaign/ad_group column is empty on those rows, so the name can't say which entity the row belongs to.\n")
+        if tz_unknown:
+            f.write(f"Rows with unknown timezone: {tz_unknown} ({round(100 * tz_unknown / len(c['rows']), 1)}%) — excluded from the timeline; pass --timezone <IANA name> if the source's naive timestamps share one known zone.\n")
         f.write(f"Other: {c['other_pct']}%\n")
         if c["other_pct"] > 10:
             f.write("WARNING: Other exceeds 10% — check for a structured_rules gap.\n")
@@ -3107,12 +3430,46 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         "other_pct": c["other_pct"], "accounts": len(data["accounts"]),
         "human_users": len(data["users"]["human"]), "automation_actors": len(data["users"]["automation"]),
         "rows_skipped_unparseable_date": n["rows_skipped_unparseable_date"],
+        "rows_timezone_unknown": tz_unknown,
+        "orphan_names_dropped": n["orphan_names_dropped"],
         "duplicates_removed": duplicate_count,
         "date_format_used": n["date_format_used"], "decimal_style_used": n["decimal_style_used"],
+        "ignored_headers": v["ignored_headers"],
     }
     if open_browser:
         webbrowser.open(f"file://{(out_dir / 'dashboard.html').resolve()}")
     return result
+
+
+# =====================================================================
+# SELF-TEST
+# This is the test suite — no external framework. Each case is a
+# `with _test_case("what is being proven"):` block: a small synthetic
+# fixture, a real run_pipeline()/validate_source() call, assertions whose
+# messages name what would break, and a [PASS] line.
+# =====================================================================
+_SELF_TEST_FAILURES = []
+
+
+class _test_case:
+    """Wraps one test case: an exception inside the `with` block is recorded
+    as a failure of that case instead of ending the run."""
+
+    def __init__(self, label):
+        self.label = label
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is None or not issubclass(exc_type, Exception):
+            return False
+        import traceback
+        line = traceback.extract_tb(tb)[-1].lineno
+        detail = (str(exc).strip().splitlines() or [""])[0] or exc_type.__name__
+        _SELF_TEST_FAILURES.append(self.label)
+        print(f"[FAIL] {self.label}\n       line {line}: {exc_type.__name__}: {detail[:300]}")
+        return True
 
 
 # =====================================================================
@@ -3323,18 +3680,307 @@ def _run_js_rule_matches_regression():
     print(f"[PASS] Rule Matches JS regression suite (Node): {proc.stdout.strip()}")
 
 
+# Fixture for the 6th audit round (2026-10-10): the ChangeEvent header set
+# plus the three display-name columns a joined export carries next to it
+# (account_name/campaign_name/ad_group_name) and one column no alias covers
+# ("feed"). Row 1 is deliberately the awkward one — naive timestamp, empty
+# user_email, empty ad_group, and a free-text value with a digit in it.
+def _r6_row(n, ts, rtype, rpath, op, field, old, new, email="user.a@example.test", client="GOOGLE_ADS_WEB_CLIENT", ad_group="customers/9990001/adGroups/3001"):
+    return {
+        "change_date_time": ts, "customer_id": "9990001",
+        "resource_name": f"customers/9990001/changeEvents/178565760000000{n}~{n}~0",
+        "user_email": email, "client_type": client, "change_resource_type": rtype,
+        "change_resource_name": f"customers/9990001/{rpath}", "resource_change_operation": op,
+        "changed_fields": field, "old_resource": old, "new_resource": new,
+        "campaign": "customers/9990001/campaigns/2001", "ad_group": ad_group, "feed": "",
+        "account_name": "Account A", "campaign_name": "Campaign Alpha", "ad_group_name": "Ad Group 1" if ad_group else "",
+    }
+
+
+SAMPLE_API_WITH_NAMES_ROWS = [
+    _r6_row(0, "2026-08-01T10:00:00+03:00", "AD_GROUP_AD", "adGroupAds/3001~4001", "UPDATE", "status", "ENABLED", "PAUSED"),
+    _r6_row(1, "2026-08-02 09:12:00", "CAMPAIGN", "campaigns/2001", "UPDATE", "name", "Search | Generic | v1", "Search | Generic | Core", email="", client="GOOGLE_ADS_SCRIPTS", ad_group=""),
+    _r6_row(2, "2026-08-03T11:00:00+03:00", "CAMPAIGN_BUDGET", "campaignBudgets/1001", "UPDATE", "amount_micros", "50000000", "75000000", ad_group=""),
+    _r6_row(3, "2026-08-04T12:00:00+03:00", "AD_GROUP_AD", "adGroupAds/3001~4002", "CREATE", "status", "", "ENABLED"),
+]
+
+
+def _structured_rule_shadows(earlier, later):
+    """True when every row `later` can match is already matched by `earlier`
+    — i.e. `later` is unreachable under first-match-wins. Conservative: only
+    reports a shadow it can prove from the rule dicts alone."""
+    def types(rule):
+        if "resource_type" in rule:
+            return {rule["resource_type"]}
+        return set(rule["resource_type_in"]) if "resource_type_in" in rule else None
+    te, tl = types(earlier), types(later)
+    if te is not None and (tl is None or not tl <= te):
+        return False
+    if "resource_type_contains" in earlier:
+        needle = earlier["resource_type_contains"].upper()
+        if tl is not None:
+            if not all(needle in t for t in tl):
+                return False
+        elif needle not in later.get("resource_type_contains", "").upper():
+            return False
+    def needles(rule):
+        n = rule.get("field_name_contains", [])
+        return [n.lower()] if isinstance(n, str) else [x.lower() for x in n]
+    if not all(any(e in l for l in needles(later)) for e in needles(earlier)):
+        return False
+    if "field_name_not_contains" in earlier and earlier["field_name_not_contains"] != later.get("field_name_not_contains"):
+        return False
+    return all(earlier[k] == later.get(k) for k in ("operation", "new_value_equals") if k in earlier)
+
+
+def _run_round6_regressions(td):
+    """6th audit round (2026-10-10) — found by cross-checking changes.jsonl
+    against a 25k-row synthetic export row by row. Every case below produced
+    status "ok" with wrong or silently-missing output before its fix."""
+    with _test_case('literal account_name/campaign_name/ad_group_name columns are mapped and reach the output (previ…'):
+        f = td / "api_with_names.json"
+        f.write_text(json.dumps(SAMPLE_API_WITH_NAMES_ROWS), encoding="utf-8")
+        headers, _ = read_rows(f)
+        profile_path = PROFILES_DIR / f"{fingerprint(headers)}.json"
+
+        v = validate_source(f)
+        assert v["status"] == "ok", f"round6 fixture failed validation: {v}"
+        for canonical in ("account_name", "campaign_name", "ad_group_name"):
+            assert v["mapping"].get(canonical) == canonical, f"literal '{canonical}' column not mapped: {v['mapping']}"
+        r = run_pipeline(f, td / "out_r6", generated_at="2026-08-17T00:00:00")
+        assert r["status"] == "ok", f"round6 fixture failed: {r}"
+        with open(td / "out_r6" / "changes.jsonl", encoding="utf-8") as fh:
+            rows = {(x["resource_type"], x["operation"]): x for x in (json.loads(line) for line in fh)}
+        ad_pause, camp_rename, budget, ad_create = rows[("AD_GROUP_AD", "UPDATE")], rows[("CAMPAIGN", "UPDATE")], rows[("CAMPAIGN_BUDGET", "UPDATE")], rows[("AD_GROUP_AD", "CREATE")]
+        assert (ad_pause["account_name"], ad_pause["campaign_name"], ad_pause["ad_group_name"]) == ("Account A", "Campaign Alpha", "Ad Group 1"), f"display names lost: {ad_pause}"
+        print("[PASS] literal account_name/campaign_name/ad_group_name columns are mapped and reach the output (previously dropped: every row showed 'Campaign <id>')")
+
+    with _test_case('validate_source: source columns no alias matched are listed in ignored_headers instead of vanis…'):
+        assert v.get("ignored_headers") == ["feed"], f"unused source column not reported: {v.get('ignored_headers')}"
+        print("[PASS] validate_source: source columns no alias matched are listed in ignored_headers instead of vanishing without a trace")
+
+    with _test_case('mapping profiles: only human-confirmed mappings are cached; a stale auto-derived profile no lon…'):
+        # A profile auto-derived from the alias table froze that table's state
+        # at the time: a later alias fix never reached a file seen once before.
+        assert not profile_path.exists(), "an alias-matched source must not be cached as a mapping profile"
+        PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+        stale = {k: h for k, h in v["mapping"].items() if not k.endswith("_name")}
+        profile_path.write_text(json.dumps({"source_label": "google_ads_api_change_event_json", "mapping": stale, "headers_seen": headers}), encoding="utf-8")
+        v_stale = validate_source(f)
+        assert v_stale["mapping"].get("campaign_name") == "campaign_name", f"stale auto-derived profile shadowed the alias table: {v_stale['mapping']}"
+        profile_path.unlink()
+        print("[PASS] mapping profiles: only human-confirmed mappings are cached; a stale auto-derived profile no longer shadows the alias table")
+
+    with _test_case("soft_warnings: 'No campaign reference column' no longer fires when campaign_resource is mapped"):
+        base = {"timestamp": "t", "user_email": "u", "operation": "o"}
+        assert not any("No campaign reference" in w for w in soft_warnings({**base, "campaign_resource": "campaign"})), "campaign_resource alone is a campaign reference"
+        assert any("No campaign reference" in w for w in soft_warnings(base)), "warning must still fire with no campaign column at all"
+        print("[PASS] soft_warnings: 'No campaign reference column' no longer fires when campaign_resource is mapped")
+
+    with _test_case("categorize: pausing/enabling an ad is Status/Paused|Enabled, not 'Ad changed' (the generic AD U…"):
+        assert (ad_pause["category"], ad_pause["subcategory"]) == ("Status", "Paused"), f"AD_GROUP_AD status change miscategorized: {ad_pause['category']}/{ad_pause['subcategory']}"
+        assert (ad_create["category"], ad_create["subcategory"]) == ("Ad", "Ad created"), f"AD_GROUP_AD CREATE must stay 'Ad created': {ad_create['category']}/{ad_create['subcategory']}"
+        print("[PASS] categorize: pausing/enabling an ad is Status/Paused|Enabled, not 'Ad changed' (the generic AD UPDATE rule used to win first)")
+
+    with _test_case('structured_rules: FEED/FEED_ITEM removals reach their own category, and no rule is fully shadow…'):
+        assert match_structured({"resource_type": "FEED", "field_name": "name", "operation": "REMOVE"}) == ("Feed", "Feed removed")
+        assert match_structured({"resource_type": "FEED_ITEM", "field_name": "name", "operation": "REMOVE"}) == ("Feed", "Feed item removed")
+        rules = CATEGORY_RULES["structured_rules"]
+        shadowed = [(i, j) for j in range(len(rules)) for i in range(j) if _structured_rule_shadows(rules[i], rules[j])]
+        assert not shadowed, f"unreachable structured_rules (earlier index fully shadows later): {shadowed}"
+        print("[PASS] structured_rules: FEED/FEED_ITEM removals reach their own category, and no rule is fully shadowed by an earlier one")
+
+    with _test_case("normalize_number: only a whole-value number (optional currency/unit) parses — 'Search | Generic…"):
+        for text in ("Search | Generic | v1", "AG | Generic | 01", "feed/100", "v1", "customers/1/campaigns/456", "10:30", "2026-08-01", "Campaign 7"):
+            assert normalize_number(text, "TR") is None, f"free text parsed as a number: {text!r} -> {normalize_number(text, 'TR')}"
+        for raw, style, expected in (("50000000", "TR", 50000000.0), ("3.2", "TR", 3.2), ("150.000", "TR", 150000.0), ("3,50", "TR", 3.5),
+                                     ("₺150,00", "TR", 150.0), ("150.000 TL", "TR", 150000.0), ("%20", "TR", 20.0), ("20%", "TR", 20.0),
+                                     ("$1,234.56", "US", 1234.56), ("TRY100.00/day", "US", 100.0), ("5km", "TR", 5.0), ("-3,50", "TR", -3.5)):
+            assert normalize_number(raw, style) == expected, f"genuine number no longer parsed: {raw!r} -> {normalize_number(raw, style)}"
+        assert camp_rename["old_value_num"] is None and camp_rename["old_value_display"] is None, f"campaign name got a numeric value: {camp_rename}"
+        assert budget["old_value_display"] == 50.0, f"micros amount no longer converted: {budget}"
+        print("[PASS] normalize_number: only a whole-value number (optional currency/unit) parses — 'Search | Generic | v1' is no longer 1.0")
+
+    with _test_case('needs_date_format/needs_decimal_style: sample_values are the ambiguous values themselves, not t…'):
+        mixed = [dict(row) for row in SAMPLE_API_WITH_NAMES_ROWS]
+        mixed[3]["change_date_time"] = "03/04/2026 10:00:00"
+        fm = td / "api_mixed_dates.json"
+        fm.write_text(json.dumps(mixed), encoding="utf-8")
+        n_ask = normalize_changes(fm, v["mapping"], v["source_label"])
+        assert n_ask["status"] == "needs_date_format", f"an ambiguous slash date must still stop the pipeline: {n_ask['status']}"
+        assert n_ask["sample_values"] == ["03/04/2026 10:00:00"], f"needs_date_format must show the ambiguous values, got: {n_ask['sample_values']}"
+        mixed_dec = [dict(row) for row in SAMPLE_API_WITH_NAMES_ROWS]
+        mixed_dec[3]["new_resource"] = "150.000"
+        fd = td / "api_ambiguous_decimal.json"
+        fd.write_text(json.dumps(mixed_dec), encoding="utf-8")
+        n_dec = normalize_changes(fd, v["mapping"], v["source_label"])
+        assert n_dec["status"] == "needs_decimal_style" and n_dec["sample_values"] == ["150.000"], f"needs_decimal_style must show the ambiguous values, got: {n_dec}"
+        print("[PASS] needs_date_format/needs_decimal_style: sample_values are the ambiguous values themselves, not the first 5 rows")
+
+    with _test_case('parse_timestamp: year-first ISO rows still parse under --date-format DMY/MDY (a mixed file used…'):
+        n_dmy = normalize_changes(fm, v["mapping"], v["source_label"], date_format="DMY")
+        assert n_dmy["status"] == "ok" and n_dmy["rows_skipped_unparseable_date"] == 0 and len(n_dmy["rows"]) == 4, f"mixed ISO + DD/MM file lost rows under DMY: {n_dmy.get('rows_skipped_unparseable_date')} skipped"
+        assert sorted(x["timestamp_iso"] for x in n_dmy["rows"])[-1] == "2026-08-03T11:00:00" and any(x["timestamp_iso"] == "2026-04-03T10:00:00" for x in n_dmy["rows"])
+        print("[PASS] parse_timestamp: year-first ISO rows still parse under --date-format DMY/MDY (a mixed file used to lose one format or the other)")
+
+    with _test_case('run summary + coverage.txt report rows excluded from the timeline for having no timezone, and n…'):
+        assert r.get("rows_timezone_unknown") == 1, f"run summary must count rows with no resolvable timezone: {r.get('rows_timezone_unknown')}"
+        coverage = (td / "out_r6" / "coverage.txt").read_text(encoding="utf-8")
+        assert "Rows with unknown timezone: 1 (25.0%)" in coverage and "--timezone" in coverage, f"coverage.txt doesn't report unknown-timezone rows:\n{coverage}"
+        print("[PASS] run summary + coverage.txt report rows excluded from the timeline for having no timezone, and name the flag that resolves them")
+
+    with _test_case('normalize_changes: an empty identity/reference cell is None like its derived *_id sibling, not…'):
+        assert camp_rename["user_email"] is None and camp_rename["ad_group_resource"] is None and camp_rename["ad_group_name"] is None, f"empty identity/reference cells must be None, not '': {camp_rename}"
+        assert camp_rename["actor_type"] == "automation" and camp_rename["old_value"] == "Search | Generic | v1"
+        print("[PASS] normalize_changes: an empty identity/reference cell is None like its derived *_id sibling, not '' in one field and None in the next")
+
+
+def _run_round7_cases(td):
+    """Follow-ups to the 6th audit round (2026-10-10): the remaining
+    correctness gaps it listed, plus --currency, per-field rows for
+    multi-field events, and the column-packed dashboard payload."""
+    iso = ["2026-08-01 10:00:00"] * 200
+    with _test_case("detect_date_format: a slash date past row 200 is still seen (only the first 200 rows used to be sampled)"):
+        assert detect_date_format(iso + ["03/04/2026 10:00:00"]) is None, "an ambiguous slash date after row 200 must still stop and ask"
+        assert detect_date_format(iso + ["25/04/2026 10:00:00"]) == "DMY"
+        assert detect_date_format(iso + ["04/25/2026 10:00:00"]) == "MDY"
+        print("[PASS] detect_date_format: a slash date past row 200 is still seen (only the first 200 rows used to be sampled)")
+
+    with _test_case("detect_date_format: one unreadable value in an ISO column no longer asks 'DD/MM or MM/DD?'"):
+        assert detect_date_format(["2026-08-01 10:00:00"] * 50 + ["N/A"]) == "ISO"
+        assert detect_date_format(["Aug 16, 2026, 10:42:26 PM"] * 5 + ["n/a"]) == "UI_EN"
+        assert detect_date_format(["garbage", "more garbage"]) is None, "a column with no recognizable date at all must still stop"
+        junk = [dict(row) for row in SAMPLE_API_WITH_NAMES_ROWS]
+        junk[1]["change_date_time"] = "N/A"
+        fj = td / "api_one_bad_date.json"
+        fj.write_text(json.dumps(junk), encoding="utf-8")
+        n_junk = normalize_changes(fj, validate_source(fj)["mapping"], "t")
+        assert n_junk["status"] == "ok" and n_junk["rows_skipped_unparseable_date"] == 1, f"one bad date must be counted as skipped, not stop the run: {n_junk.get('status')}"
+        print("[PASS] detect_date_format: one unreadable value in an ISO column no longer asks 'DD/MM or MM/DD?'")
+
+    with _test_case("structured_rules: creating a campaign/ad group whose changed field is status is 'created', not Status/Enabled"):
+        assert match_structured({"resource_type": "CAMPAIGN", "field_name": "status", "operation": "CREATE", "new_value": "ENABLED"}) == ("Campaign", "Campaign created")
+        assert match_structured({"resource_type": "AD_GROUP", "field_name": "status", "operation": "CREATE", "new_value": "PAUSED"}) == ("AdGroup", "Ad group created")
+        assert match_structured({"resource_type": "CAMPAIGN", "field_name": "status", "operation": "UPDATE", "new_value": "ENABLED"}) == ("Status", "Enabled")
+        print("[PASS] structured_rules: creating a campaign/ad group whose changed field is status is 'created', not Status/Enabled")
+
+    with _test_case("structured_rules: 'Negative keyword' needs both 'keyword' and 'negative' in the field; no dict literal repeats a key"):
+        neg = {"resource_type": "AD_GROUP_CRITERION", "operation": "CREATE"}
+        assert match_structured({**neg, "field_name": "negative_keyword.text"}) == ("Keyword", "Negative keyword")
+        assert match_structured({**neg, "field_name": "keyword.text, negative"}) == ("Keyword", "Negative keyword")
+        assert match_structured({**neg, "field_name": "negative, placement.url"}) is None, "a negative non-keyword criterion is not a negative keyword"
+        import ast
+        tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+        repeated = sorted({(d.lineno, k.value) for d in ast.walk(tree) if isinstance(d, ast.Dict)
+                           for k in d.keys if isinstance(k, ast.Constant) and sum(1 for o in d.keys if isinstance(o, ast.Constant) and o.value == k.value) > 1})
+        assert not repeated, f"dict literal repeats a key (the earlier value is silently discarded): {repeated}"
+        print("[PASS] structured_rules: 'Negative keyword' needs both 'keyword' and 'negative' in the field; no dict literal repeats a key")
+
+    orphan = [dict(row) for row in SAMPLE_API_WITH_NAMES_ROWS]
+    orphan[2]["ad_group_name"] = "Ad Group 1"   # a budget row: its ad_group reference is empty
+    fo = td / "api_orphan_name.json"
+    fo.write_text(json.dumps(orphan), encoding="utf-8")
+    with _test_case("normalize_changes: a display name can't attach a row to an ad group its own reference column says it lacks"):
+        r_o = run_pipeline(fo, td / "out_r7", generated_at="2026-08-17T00:00:00")
+        assert r_o["status"] == "ok", f"orphan-name fixture failed: {r_o}"
+        with open(td / "out_r7" / "changes.jsonl", encoding="utf-8") as fh:
+            o_rows = [json.loads(line) for line in fh]
+        o_budget = next(x for x in o_rows if x["resource_type"] == "CAMPAIGN_BUDGET")
+        assert o_budget["ad_group_name"] is None and o_budget["campaign_name"] == "Campaign Alpha", f"orphan ad_group_name kept: {o_budget['ad_group_name']!r}"
+        assert next(x for x in o_rows if x["operation"] == "CREATE")["ad_group_name"] == "Ad Group 1", "a row WITH an ad_group reference keeps its name"
+        assert r_o.get("orphan_names_dropped") == 1, f"dropped names must be counted in the run summary: {r_o.get('orphan_names_dropped')}"
+        assert "without a matching reference: 1" in (td / "out_r7" / "coverage.txt").read_text(encoding="utf-8")
+        fl = td / "legacy_names_only.csv"
+        fl.write_text(SAMPLE_LEGACY_SUMMARY_TR_CSV, encoding="utf-8")
+        n_l = normalize_changes(fl, validate_source(fl)["mapping"], "legacy_summary_tr", decimal_style="TR")
+        assert sum(1 for x in n_l["rows"] if x["ad_group_name"]) == 5 and n_l["orphan_names_dropped"] == 0, "a name-only source (no reference column at all) keeps every name"
+        print("[PASS] normalize_changes: a display name can't attach a row to an ad group its own reference column says it lacks")
+
+    with _test_case("--currency: monetary rows carry the code and show it as their unit; other rows don't; a bad code is rejected"):
+        r_c = run_pipeline(fo, td / "out_r7_cur", currency="TRY", generated_at="2026-08-17T00:00:00")
+        assert r_c["status"] == "ok", f"--currency run failed: {r_c}"
+        with open(td / "out_r7_cur" / "changes.jsonl", encoding="utf-8") as fh:
+            c_rows = {x["field_name"]: x for x in (json.loads(line) for line in fh)}
+        assert (c_rows["amount_micros"]["currency"], c_rows["amount_micros"]["value_unit"], c_rows["amount_micros"]["old_value_display"]) == ("TRY", "TRY", 50.0), f"budget row: {c_rows['amount_micros']}"
+        assert c_rows["name"]["currency"] is None and c_rows["name"]["value_unit"] is None
+        assert o_budget["currency"] is None and o_budget["value_unit"] == "units (converted from micros)", "without --currency nothing changes"
+        assert run_pipeline(fo, td / "out_r7_badcur", currency="lira")["status"] == "error"
+        print("[PASS] --currency: monetary rows carry the code and show it as their unit; other rows don't; a bad code is rejected")
+
+    with _test_case("multi-field events: split into one row per field when old/new carry the per-field values (nested resource JSON)"):
+        camp_old = {"campaign": {"resourceName": "customers/9990001/campaigns/2001", "status": "ENABLED", "name": "Old name"}}
+        camp_new = {"campaign": {"resourceName": "customers/9990001/campaigns/2001", "status": "PAUSED", "name": "New name"}}
+        events = [
+            _r6_row(7, "2026-08-05T10:00:00+03:00", "CAMPAIGN", "campaigns/2001", "UPDATE", ["status", "name"], json.dumps(camp_old), json.dumps(camp_new), ad_group=""),
+            # camelCase keys + a nested object passed as-is, not as a JSON string
+            _r6_row(8, "2026-08-05T11:00:00+03:00", "CAMPAIGN_BUDGET", "campaignBudgets/1001", "UPDATE", ["amount_micros", "delivery_method"],
+                    {"campaignBudget": {"amountMicros": "50000000", "deliveryMethod": "STANDARD"}}, {"campaignBudget": {"amountMicros": 75000000, "deliveryMethod": "ACCELERATED"}}, ad_group=""),
+        ]
+        fmf = td / "api_multi_field_nested.json"
+        fmf.write_text(json.dumps(events), encoding="utf-8")
+        r_mf = run_pipeline(fmf, td / "out_r7_mf", generated_at="2026-08-17T00:00:00")
+        assert r_mf["status"] == "ok" and r_mf["row_count"] == 4, f"2 events x 2 fields must give 4 rows: {r_mf}"
+        with open(td / "out_r7_mf" / "changes.jsonl", encoding="utf-8") as fh:
+            mf = {x["field_name"]: x for x in (json.loads(line) for line in fh)}
+        assert (mf["status"]["old_value"], mf["status"]["new_value"], mf["status"]["subcategory"]) == ("ENABLED", "PAUSED", "Paused"), f"status row: {mf.get('status')}"
+        assert (mf["name"]["old_value"], mf["name"]["new_value"], mf["name"]["subcategory"]) == ("Old name", "New name", "Campaign name changed")
+        assert (mf["amount_micros"]["old_value"], mf["amount_micros"]["new_value"], mf["amount_micros"]["new_value_display"]) == ("50000000", "75000000", 75.0), f"budget row: {mf['amount_micros']}"
+        assert mf["delivery_method"]["new_value"] == "ACCELERATED"
+        assert not any(x["multi_field"] for x in mf.values()) and mf["status"]["event_id"] == mf["name"]["event_id"] and mf["status"]["change_id"] != mf["name"]["change_id"]
+        assert json.loads((td / "out_r7_mf" / "change_history.json").read_text(encoding="utf-8"))["meta"]["event_count"] == 2
+        print("[PASS] multi-field events: split into one row per field when old/new carry the per-field values (nested resource JSON)")
+
+    with _test_case("dashboard payload: changes are embedded column-packed and unpack in the browser's own JS to the identical rows (Node)"):
+        import subprocess
+        many = [{**row, "change_id": f"{row['change_id']}{i}", "timestamp_utc": None if i % 7 == 0 else row["timestamp_utc"]} for i in range(150) for row in o_rows]
+        packed = pack_changes(many)
+        m = re.search(r"function unpackChanges\(packed\)\{.*?\n\}\n", DASHBOARD_TEMPLATE, re.S)
+        assert m, "unpackChanges() not found in the dashboard template"
+        (td / "packed.json").write_text(json.dumps(packed), encoding="utf-8")
+        js = m.group(0) + f"\nprocess.stdout.write(JSON.stringify(unpackChanges(JSON.parse(require('fs').readFileSync({json.dumps(str(td / 'packed.json'))}, 'utf8')))));"
+        proc = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=30)
+        assert proc.returncode == 0, f"unpackChanges failed under Node:\n{proc.stderr}"
+        assert json.loads(proc.stdout) == many, "unpacked rows differ from the rows that were packed"
+        plain, small = len(json.dumps(many)), len(json.dumps(packed))
+        assert small < plain * 0.4, f"packing saved too little: {small} vs {plain} bytes"
+        html = (td / "out_r7" / "dashboard.html").read_text(encoding="utf-8")
+        assert '"changes_packed"' in html and not re.search(r'"changes"\s*:\s*\[', html), "the shipped dashboard must embed the packed form only"
+        assert isinstance(json.loads((td / "out_r7" / "change_history.json").read_text(encoding="utf-8"))["changes"], list), "change_history.json stays plain rows"
+        print(f"[PASS] dashboard payload: changes are embedded column-packed and unpack in the browser's own JS to the identical rows (Node) — {round(100 * small / plain)}% of the plain size on this fixture")
+
+
 def self_test():
+    """Runs every case; returns True only if none failed. A failing case is
+    reported and the run continues, so one run shows every failure — a case
+    that depends on an earlier, failed one fails too (usually with a
+    NameError): fix the first failure listed and re-run."""
     import tempfile
     global PROFILES_DIR
-    ok = True
+    _SELF_TEST_FAILURES.clear()
     real_profiles_dir = PROFILES_DIR
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            _run_pipeline_cases(Path(td))
+    finally:
+        PROFILES_DIR = real_profiles_dir
+    with _test_case("Rule Matches JS regression suite (Node)"):
+        _run_js_rule_matches_regression()
+    if _SELF_TEST_FAILURES:
+        print(f"\n{len(_SELF_TEST_FAILURES)} self-test case(s) FAILED:")
+        for label in _SELF_TEST_FAILURES:
+            print(f"  - {label}")
+    else:
+        print("\nAll self-tests passed.")
+    return not _SELF_TEST_FAILURES
 
-    with tempfile.TemporaryDirectory() as td:
-        td = Path(td)
-        # Isolate mapping-profiles/ for the duration of the test — otherwise
-        # a saved profile from one run leaks into the next and self-test
-        # results depend on prior runs instead of being reproducible.
-        PROFILES_DIR = td / "mapping-profiles"
+
+def _run_pipeline_cases(td):
+    global PROFILES_DIR
+    # Isolate mapping-profiles/ for the duration of the test — otherwise
+    # a saved profile from one run leaks into the next and self-test
+    # results depend on prior runs instead of being reproducible.
+    PROFILES_DIR = td / "mapping-profiles"
+    with _test_case('legacy_summary_tr: … rows, …% Other, … human users, … automation actor(s)'):
         # --- fixture 1: known legacy_summary_tr, full run in one call ---
         f1 = td / "legacy.csv"
         f1.write_text(SAMPLE_LEGACY_SUMMARY_TR_CSV, encoding="utf-8")
@@ -3345,6 +3991,7 @@ def self_test():
         print(f"[PASS] legacy_summary_tr: {r1['row_count']} rows, {r1['other_pct']}% Other, "
               f"{r1['human_users']} human users, {r1['automation_actors']} automation actor(s)")
 
+    with _test_case('api_change_event: correctly stopped for unknown category (CAMPAIGN_CRITERION/proximity_target)…'):
         # --- fixture 2: API JSON, includes one unmapped category (CAMPAIGN_CRITERION/proximity_target) ---
         f2 = td / "api.json"
         f2.write_text(json.dumps(SAMPLE_API_CHANGE_EVENT_JSON), encoding="utf-8")
@@ -3353,11 +4000,13 @@ def self_test():
         assert any(u["field_name"] == "proximity_target" for u in r2["unknown_combinations"]), "fixture2: expected CAMPAIGN_CRITERION/proximity_target to be flagged unknown"
         print(f"[PASS] api_change_event: correctly stopped for unknown category (CAMPAIGN_CRITERION/proximity_target) instead of guessing")
 
+    with _test_case('api_change_event with --allow-unknown-categories: … rows built'):
         r2b = run_pipeline(f2, td / "out2b", allow_unknown_categories=True, generated_at="2026-08-17T00:00:00")
         assert r2b["status"] == "ok", f"fixture2b failed: {r2b}"
         assert r2b["row_count"] == 5
         print(f"[PASS] api_change_event with --allow-unknown-categories: {r2b['row_count']} rows built")
 
+    with _test_case("ISO offset ('+03:00') resolves to UTC with no --timezone flag needed"):
         # regression guard: ISO offset ('+03:00') must resolve to UTC WITHOUT
         # a --timezone flag — this silently broke before the 2026-08-18 fix.
         with open(td / "out2b" / "changes.jsonl", encoding="utf-8") as fh:
@@ -3367,12 +4016,14 @@ def self_test():
         assert offset_row["timezone"] == "+03:00"
         print(f"[PASS] ISO offset ('+03:00') resolves to UTC with no --timezone flag needed")
 
+    with _test_case('amount_micros converted to human-readable display value, raw value preserved'):
         # regression guard: micros amounts must be human-readable, raw preserved
         micros_row = next(r for r in api_rows if r["field_name"] == "amount_micros" and r["old_value"] == "150000000")
         assert micros_row["old_value_display"] == 150.0, f"micros not converted: {micros_row}"
         assert micros_row["old_value"] == "150000000", "raw value must never be overwritten"
         print(f"[PASS] amount_micros converted to human-readable display value, raw value preserved")
 
+    with _test_case("source_event_id captured from API's own resource_name, used as event_id"):
         # regression guard: ChangeEvent's own event identity (resource_name)
         # must be captured as source_event_id and used as event_id, not
         # silently discarded in favor of the content-hash change_id.
@@ -3381,6 +4032,7 @@ def self_test():
         assert offset_row["event_id"] != offset_row["change_id"]
         print(f"[PASS] source_event_id captured from API's own resource_name, used as event_id")
 
+    with _test_case('identical duplicate rows collapse to 1 (duplicates_removed=…)'):
         # regression guard: dedup — a re-imported/duplicate row must collapse,
         # not double-count. change_id was computed but never filtered on before
         # the 2026-08-18 fix.
@@ -3393,6 +4045,7 @@ def self_test():
         assert r_dup["duplicates_removed"] == 1
         print(f"[PASS] identical duplicate rows collapse to 1 (duplicates_removed={r_dup['duplicates_removed']})")
 
+    with _test_case('same-named campaign in 2 different accounts produces 2 separate Campaign Last Changes entries'):
         # regression guard: same campaign name in two different accounts must
         # NOT collapse into one "Campaign Last Changes" entry — this silently
         # lost one of them before the 2026-08-18 fix.
@@ -3413,11 +4066,13 @@ def self_test():
         assert {e["account_name"] for e in brand_entries} == {"Account A", "Account B"}
         print(f"[PASS] same-named campaign in 2 different accounts produces 2 separate Campaign Last Changes entries")
 
+    with _test_case("GOOGLE_ADS_API client_type classified as 'unknown' actor, not assumed human"):
         # regression guard: GOOGLE_ADS_API must not be auto-classified human —
         # it's genuinely ambiguous (could be a human's script or a service account).
         assert derive_actor_type(None, "GOOGLE_ADS_API") == "unknown", "GOOGLE_ADS_API must not default to human"
         print(f"[PASS] GOOGLE_ADS_API client_type classified as 'unknown' actor, not assumed human")
 
+    with _test_case('escapeHtml present and used broadly in the shipped dashboard'):
         # regression guard: escapeHtml must exist in the shipped dashboard —
         # weak but real guard against a future edit silently removing it and
         # reopening the XSS hole verified manually in the browser this session.
@@ -3426,6 +4081,7 @@ def self_test():
         assert dashboard_html.count("escapeHtml(") > 15, "escapeHtml used too rarely — likely missing from a render path"
         print(f"[PASS] escapeHtml present and used broadly in the shipped dashboard")
 
+    with _test_case("Explorer table's numeric-aware sort comparator present in shipped dashboard (verified separatel…"):
         # regression guard: Explorer table's numeric-aware sort comparator
         # (3rd audit round fix) must ship in the dashboard. The actual sort
         # LOGIC was verified directly under Node this session — [100, 20]
@@ -3436,6 +4092,7 @@ def self_test():
         assert "compareExplorerSortValues" in dashboard_html, "numeric-aware Explorer sort comparator missing from shipped dashboard"
         print(f"[PASS] Explorer table's numeric-aware sort comparator present in shipped dashboard (verified separately under Node: [100,20] sorts to [20,100], not lexicographic)")
 
+    with _test_case("'user_name' now self-maps like user_email/client_type already did — a source using that literal…"):
         # Found 2026-08-18 via a synthetic-dataset dry run (not a pasted
         # audit): "user_name" was missing from its own alias list.
         mapping, unmatched = try_alias_match(["user_name", "user_email"], [{"user_name": "ads-budget-system"}])
@@ -3453,6 +4110,7 @@ def self_test():
         assert un_row["actor_type"] == "automation", f"a literal 'user_name' column carrying 'ads-budget-system' must resolve to actor_type=automation, got {un_row['actor_type']!r} (user_name={un_row['user_name']!r})"
         print(f"[PASS] 'user_name' now self-maps like user_email/client_type already did — a source using that literal column name correctly resolves actor_type instead of silently falling back to 'unknown'")
 
+    with _test_case("read_rows(): JSON headers now come from the union of ALL rows' keys, not just row 0 — a key onl…"):
         # Found 2026-08-18 via a synthetic-dataset dry run (not a pasted
         # audit): read_rows()'s JSON branch derived headers from rows[0].keys()
         # only. A heterogeneous JSON array — human rows with user_email,
@@ -3477,6 +4135,7 @@ def self_test():
         assert auto_row["actor_type"] == "automation", f"row-2's user_name (present only on row 2, not row 1) must still map and resolve actor_type=automation, got {auto_row['actor_type']!r}"
         print(f"[PASS] read_rows(): JSON headers now come from the union of ALL rows' keys, not just row 0 — a key only present on a later row is no longer silently invisible to mapping")
 
+    with _test_case('check_hard_required() now runs for --mapping-file and cached-fingerprint mappings too, not just…'):
         # Found 2026-08-18 via a synthetic-dataset dry run (not a pasted
         # audit): check_hard_required() only ran on the freshly-computed
         # alias-match path — a --mapping-file that genuinely omits a
@@ -3501,6 +4160,7 @@ def self_test():
         assert any("account_ref" in m for m in r_incomplete["missing_required"]), f"missing_required must name the account ref: {r_incomplete['missing_required']}"
         print(f"[PASS] check_hard_required() now runs for --mapping-file and cached-fingerprint mappings too, not just the fresh alias-match path — an incomplete mapping stops with needs_mapping instead of silently producing 100% 'Other' output")
 
+    with _test_case('an invalid --timezone (e.g. a typo) now stops the pipeline with a clear error instead of being…'):
         # =================================================================
         # 4th audit round (2026-08-18) — every claim independently
         # reproduced against this file's actual code before being fixed,
@@ -3523,6 +4183,7 @@ def self_test():
         assert r_goodtz["status"] == "ok", f"a valid --timezone must still work: {r_goodtz}"
         print(f"[PASS] an invalid --timezone (e.g. a typo) now stops the pipeline with a clear error instead of being silently swallowed per-row")
 
+    with _test_case('a missing or invalid-JSON --mapping-file now returns a structured error instead of a raw traceb…'):
         # A missing/invalid --mapping-file used to crash with a raw
         # FileNotFoundError/JSONDecodeError instead of a structured status.
         v_missing_map = validate_source(f_badtz, mapping_file=td / "does_not_exist.json", save_profile=False)
@@ -3533,6 +4194,7 @@ def self_test():
         assert v_badjson_map["status"] == "error", f"an invalid-JSON --mapping-file must return a structured error, got: {v_badjson_map}"
         print(f"[PASS] a missing or invalid-JSON --mapping-file now returns a structured error instead of a raw traceback")
 
+    with _test_case('validate_extra_rules(): a malformed --extra-rules entry (missing category/subcategory, no match…'):
         # extra_rules entries missing category/subcategory used to crash
         # match_structured() with a raw KeyError the moment a row matched —
         # --extra-rules is this tool's own documented fix for
@@ -3546,6 +4208,7 @@ def self_test():
         assert r_badrule["status"] == "error", f"run_pipeline must reject a malformed extra_rules entry before touching the data, got: {r_badrule}"
         print(f"[PASS] validate_extra_rules(): a malformed --extra-rules entry (missing category/subcategory, no matcher, wrong shape) now fails validation up front instead of crashing match_structured() with a raw KeyError")
 
+    with _test_case('query_changes(): --since now validates against ^\\d+[dwm]$ — garbage and negative values raise V…'):
         # query's --since parser: int(since.rstrip("dwm")) crashed on garbage
         # ("abc", "7x") and silently accepted a negative count ("-7d"),
         # producing a future cutoff and silently-wrong (usually empty)
@@ -3561,6 +4224,7 @@ def self_test():
         assert query_changes([{"timestamp_iso": "2026-08-01T00:00:00"}], since="0d") == [{"timestamp_iso": "2026-08-01T00:00:00"}]
         print(f"[PASS] query_changes(): --since now validates against ^\\d+[dwm]$ — garbage and negative values raise ValueError instead of crashing or silently returning wrong results")
 
+    with _test_case("a >20% unparseable-date rate now stops with needs_date_review instead of silently returning 'ok…"):
         # Any unparseable-date rate, even 90%+, previously still returned
         # status "ok" with just a WARNING line in coverage.txt. Past 20% the
         # pipeline now stops (mirrors the >30%-empty-required-field gate's
@@ -3580,6 +4244,7 @@ def self_test():
         assert r_highskip_forced["status"] == "ok", f"--force-review must let a high unparseable-date rate proceed, got: {r_highskip_forced}"
         print(f"[PASS] a >20% unparseable-date rate now stops with needs_date_review instead of silently returning 'ok' with most of the dataset dropped (--force-review bypasses it once confirmed)")
 
+    with _test_case("a CAMPAIGN/AD_GROUP-type change with no separate attributed 'campaign'/'ad_group' field now fal…"):
         # Found 2026-08-18 via a real API-connected user's export (not a
         # pasted audit): a CAMPAIGN/AD_GROUP-type change whose row has no
         # separate "campaign"/"ad_group" attributed field (Google's own
@@ -3613,6 +4278,7 @@ def self_test():
         assert ch_selfref["summary"]["changed_ad_groups"] == 1, f"expected 1 changed ad group, got {ch_selfref['summary']}"
         print(f"[PASS] a CAMPAIGN/AD_GROUP-type change with no separate attributed 'campaign'/'ad_group' field now falls back to the resource's own identity, instead of leaving campaign_id/ad_group_id empty and undercounting changed_campaigns/changed_ad_groups")
 
+    with _test_case("a real native Google Ads UI 'Change history' CSV export (no account/field_name/resource_type co…"):
         # Found 2026-08-18 via a real native Google Ads UI "Change history
         # report" CSV export (Campaigns > Change history > Download) — not a
         # pasted audit, not the ChangeEvent API. Genuinely different shape
@@ -3644,6 +4310,7 @@ def self_test():
         assert cats == {"Campaign", "Status", "AdGroup", "Budget"}, f"unexpected category set: {cats}"
         print(f"[PASS] a real native Google Ads UI 'Change history' CSV export (no account/field_name/resource_type column, narrow-no-break-space before AM/PM, spelled-out-month timestamps) now runs end to end — --account-name fills the missing account, UI_EN auto-detects the timestamp format, and the new English summary_text_rules categorize it instead of 100% falling to Other")
 
+    with _test_case("a second real native UI export's gaps now covered: a new 'Account' category for customer/accoun…"):
         # Found 2026-08-18 via a SECOND real native UI export (a different
         # account than the one above) — heavier on account-administration
         # events than the first, which surfaced two more gaps: no category
@@ -3679,6 +4346,7 @@ def self_test():
         assert broad_kw_paused["category"] == "Status", f"broad match keyword paused must categorize as Status, got {broad_kw_paused['category']}"
         print(f"[PASS] a second real native UI export's gaps now covered: a new 'Account' category for customer/account-administration events (identity/security/access/manager/notifications), broad-match keywords (previously only phrase-match was covered), and bare/Campaign/Customer asset-creation lines")
 
+    with _test_case('F-01: two distinct real events (different source_event_id, identical other fields) both survive…'):
         # =================================================================
         # Regression guards for the 2026-08-18 forensic audit's findings.
         # =================================================================
@@ -3703,6 +4371,7 @@ def self_test():
         assert r_collision2["duplicates_removed"] == 0, f"F-01: these are not duplicates, duplicates_removed should be 0, got {r_collision2['duplicates_removed']}"
         print(f"[PASS] F-01: two distinct real events (different source_event_id, identical other fields) both survive dedup")
 
+    with _test_case("F-02: changed_fields as a JSON list no longer crashes (multi_field=True, field_name='…')"):
         # F-02: changed_fields as a real JSON list (repeated FieldMask) must
         # not crash — joined into one field_name string, multi_field flagged.
         fieldmask_rows = [
@@ -3721,6 +4390,7 @@ def self_test():
         assert fieldmask_row["field_name"] == "status, name"
         print(f"[PASS] F-02: changed_fields as a JSON list no longer crashes (multi_field=True, field_name='{fieldmask_row['field_name']}')")
 
+    with _test_case("F-03: ChangeEvent's real campaign/ad_group fields captured correctly (campaign_id=…, ad_group_i…"):
         # F-03: Google's real top-level ChangeEvent.campaign / .ad_group
         # fields (resource-name/path strings) must be captured correctly —
         # into campaign_id/ad_group_id (path tail) and campaign_resource/
@@ -3747,6 +4417,7 @@ def self_test():
         assert attr_row["ad_group_resource"] == "customers/1/adGroups/900"
         print(f"[PASS] F-03: ChangeEvent's real campaign/ad_group fields captured correctly (campaign_id={attr_row['campaign_id']}, ad_group_id={attr_row['ad_group_id']})")
 
+    with _test_case('F-04: --mask-users masks changes.jsonl (previously leaked the raw email there)'):
         # F-04: --mask-users must mask changes.jsonl too, not just the dashboard.
         mask_rows_test = [
             {"change_date_time": "2026-08-01 10:00:00", "customer_id": "1", "resource_name": "customers/1/changeEvents/4~1~0",
@@ -3765,6 +4436,7 @@ def self_test():
         assert '"user_name": "User A"' in jsonl_text
         print(f"[PASS] F-04: --mask-users masks changes.jsonl (previously leaked the raw email there)")
 
+    with _test_case('F-05: Summary.changed_campaigns/most_active_campaign correctly account-scoped (… campaigns, top…'):
         # F-05: same campaign name in 2 accounts must not collapse in the
         # Summary panel's changed_campaigns count / most_active_campaign —
         # same defect class as campaign_last (F-11-adjacent, fixed earlier),
@@ -3786,6 +4458,7 @@ def self_test():
         assert "(Account A)" in ch_f05["summary"]["most_active_campaign"], f"F-05: most_active_campaign should disambiguate by account, got {ch_f05['summary']['most_active_campaign']!r}"
         print(f"[PASS] F-05: Summary.changed_campaigns/most_active_campaign correctly account-scoped ({ch_f05['summary']['changed_campaigns']} campaigns, top={ch_f05['summary']['most_active_campaign']!r})")
 
+    with _test_case('F-07: operation_confidence distinguishes inferred UPDATE from explicit UNKNOWN'):
         # F-07: operation="" (present but empty) must be flagged
         # operation_confidence='inferred'; explicit UNKNOWN/UNSPECIFIED must
         # stay 'explicit' and un-coerced.
@@ -3808,12 +4481,14 @@ def self_test():
         assert explicit_unknown_row["operation"] == "UNKNOWN" and explicit_unknown_row["operation_confidence"] == "explicit"
         print(f"[PASS] F-07: operation_confidence distinguishes inferred UPDATE from explicit UNKNOWN")
 
+    with _test_case('F-08/F-09: SEARCH_ADS_360_SYNC and SEARCH_ADS_360_POST classify consistently (both automation)'):
         # F-08/F-09: SEARCH_ADS_360_POST must classify the same as its sibling
         # SEARCH_ADS_360_SYNC (both automation) — was inconsistent before.
         assert derive_actor_type(None, "SEARCH_ADS_360_SYNC") == "automation"
         assert derive_actor_type(None, "SEARCH_ADS_360_POST") == "automation", "F-08/F-09: SEARCH_ADS_360_POST must match its SA360 sibling"
         print(f"[PASS] F-08/F-09: SEARCH_ADS_360_SYNC and SEARCH_ADS_360_POST classify consistently (both automation)")
 
+    with _test_case('F-11: all 6 previously-uncovered resource types (FEED, FEED_ITEM, CAMPAIGN_FEED, AD_GROUP_FEED,…'):
         # F-11: the 6 previously-zero-coverage real ChangeEventResourceType
         # values must now resolve to a real category, not Other/unmatched.
         for rt, expected_category in [("FEED", "Feed"), ("FEED_ITEM", "Feed"), ("CAMPAIGN_FEED", "Feed"),
@@ -3823,6 +4498,7 @@ def self_test():
             assert hit is not None and hit[0] == expected_category, f"F-11: {rt} should categorize as {expected_category}, got {hit}"
         print(f"[PASS] F-11: all 6 previously-uncovered resource types (FEED, FEED_ITEM, CAMPAIGN_FEED, AD_GROUP_FEED, AD_GROUP_BID_MODIFIER, CAMPAIGN_ASSET_SET) now categorize")
 
+    with _test_case('F-16/F-17/F-18: empty CSV, invalid JSON, missing file all return structured errors (no uncaught…'):
         # F-16/F-17/F-18: malformed input must return a structured error, not
         # crash with a raw Python exception.
         f_empty = td / "f16_empty.csv"; f_empty.write_text("", encoding="utf-8")
@@ -3832,6 +4508,7 @@ def self_test():
         assert run_pipeline(td / "f18_missing.csv", td / "out_f18", generated_at="2026-08-17T00:00:00")["status"] == "error"
         print(f"[PASS] F-16/F-17/F-18: empty CSV, invalid JSON, missing file all return structured errors (no uncaught exceptions)")
 
+    with _test_case('F-19: duplicate column headers are detected and warned about'):
         # F-19: duplicate column headers must be detected and warned about.
         f_dup = td / "f19_dup.csv"
         f_dup.write_text("Date,Date,User,Account,Campaign,Change,Was,Now\n2026-08-01,2026-08-01,U1,A,C1,status,ENABLED,PAUSED\n", encoding="utf-8")
@@ -3842,6 +4519,7 @@ def self_test():
         assert any("Duplicate column header" in w for w in v_dup.get("warnings", [])), f"F-19: duplicate header warning missing: {v_dup.get('warnings')}"
         print(f"[PASS] F-19: duplicate column headers are detected and warned about")
 
+    with _test_case("P0: script-context XSS — payload appears only as escaped unicode, never as raw '</script>'"):
         # =================================================================
         # Regression guards for the 2026-08-19 (2nd) forensic audit's findings.
         # =================================================================
@@ -3865,6 +4543,7 @@ def self_test():
         assert "\\u003c/script\\u003e\\u003cimg" in xss_html, "P0: the payload should appear as its escaped-unicode form instead"
         print(f"[PASS] P0: script-context XSS — payload appears only as escaped unicode, never as raw '</script>'")
 
+    with _test_case('P1: two different campaign_ids in the same account (no display name) count as 2 campaigns, not 1'):
         # P1: campaign identity within the SAME account, by id not name —
         # two different campaign_ids sharing a name in one account previously
         # merged into one Campaign Last Changes / Summary entry.
@@ -3886,6 +4565,7 @@ def self_test():
         assert len(ch_campid["untouched"]) == 2, f"P1: Campaign Last Changes must list 2 separate entries, got {len(ch_campid['untouched'])}"
         print(f"[PASS] P1: two different campaign_ids in the same account (no display name) count as 2 campaigns, not 1")
 
+    with _test_case("P1: change_history.json's untouched field renamed to days_since_last_change_at_generation (no l…"):
         # P1: change_history.json's untouched entries use the renamed,
         # explicitly-static field name — the dashboard's own live JS
         # computation is a DIFFERENT number by design (real browser clock vs
@@ -3897,6 +4577,7 @@ def self_test():
         assert "days_since_last_change" not in ch_rename["untouched"][0], "P1: the old ambiguous field name must be gone"
         print(f"[PASS] P1: change_history.json's untouched field renamed to days_since_last_change_at_generation (no longer implies it matches the dashboard's live figure)")
 
+    with _test_case('P1: unparseable-date rows reported in coverage.txt and change_history.json meta, not just a sil…'):
         # P1: unparseable-date rows are now visible in meta + coverage.txt,
         # not just a JSON field nobody is required to check.
         mixed_date_rows = [
@@ -3922,6 +4603,7 @@ def self_test():
         assert ch_mixdate["meta"]["rows_skipped_unparseable_date"] == 1
         print(f"[PASS] P1: unparseable-date rows reported in coverage.txt and change_history.json meta, not just a silently-dropped count")
 
+    with _test_case('P2: ISO timestamp with trailing junk after a valid offset is rejected (previously silently trun…'):
         # P2: ISO trailing junk must be rejected, not silently truncated —
         # and must not silently drop a valid offset by falling through to
         # the (previously lenient) fallback parser.
@@ -3933,6 +4615,7 @@ def self_test():
             pass
         print(f"[PASS] P2: ISO timestamp with trailing junk after a valid offset is rejected (previously silently truncated, losing the offset)")
 
+    with _test_case('P2: DMY-format timestamp with an explicit offset now preserves it (previously always dropped)'):
         # P2: DMY format now preserves a trailing offset, matching the ISO
         # branch's existing behavior (previously DMY never even tried).
         dmy_dt = parse_timestamp("01/08/2026 10:00:00+03:00", "DMY")
@@ -3940,6 +4623,7 @@ def self_test():
         assert dmy_dt.utcoffset().total_seconds() == 3 * 3600
         print(f"[PASS] P2: DMY-format timestamp with an explicit offset now preserves it (previously always dropped)")
 
+    with _test_case('P2: CAMPAIGN/AD_GROUP REMOVE categorize as Campaign removed/Ad group removed, not swallowed by…'):
         # P2: CAMPAIGN/AD_GROUP REMOVE must categorize as Campaign
         # removed/Ad group removed, not be shadowed by the generic
         # operation=REMOVE -> Status/Removed catch-all.
@@ -3947,6 +4631,7 @@ def self_test():
         assert match_structured({"resource_type": "AD_GROUP", "field_name": "status", "operation": "REMOVE", "new_value": ""}) == ("AdGroup", "Ad group removed")
         print(f"[PASS] P2: CAMPAIGN/AD_GROUP REMOVE categorize as Campaign removed/Ad group removed, not swallowed by the generic Status/Removed rule")
 
+    with _test_case('P2: two different account_ids count as 2 active accounts (account_id-based, not account_name-ba…'):
         # P2: account identity — two different account_ids sharing an
         # account_name must count as 2 active accounts, matching how
         # campaign identity was already fixed to prefer id over name.
@@ -3966,6 +4651,7 @@ def self_test():
         assert ch_accid["summary"]["active_accounts"] == 2, f"P2: two different account_ids must count as 2 active accounts, got {ch_accid['summary']['active_accounts']}"
         print(f"[PASS] P2: two different account_ids count as 2 active accounts (account_id-based, not account_name-based)")
 
+    with _test_case('P2: two different user emails count as 2 active users (email-based identity, not display-name-b…'):
         # P2: user identity — two different emails sharing a display name
         # must count as 2 active users, not merge into 1.
         user_id_rows = [
@@ -3984,6 +4670,7 @@ def self_test():
         assert ch_userid["summary"]["active_users"] == 2, f"P2: two different emails, both actor_type human, must count as 2 active users, got {ch_userid['summary']['active_users']}"
         print(f"[PASS] P2: two different user emails count as 2 active users (email-based identity, not display-name-based)")
 
+    with _test_case('P3: known_sources now actually consulted — source_label names the real format instead of generi…'):
         # P3: known_sources is now actually consulted — a matching header set
         # gets a specific source_label instead of the generic "alias_match".
         f_ks_legacy = td / "p3_ks_legacy.csv"
@@ -3996,6 +4683,7 @@ def self_test():
         assert v_ks_api["source_label"] == "google_ads_api_change_event_json", f"P3: known_sources should identify this as google_ads_api_change_event_json, got {v_ks_api['source_label']}"
         print(f"[PASS] P3: known_sources now actually consulted — source_label names the real format instead of generic 'alias_match'")
 
+    with _test_case("SUMMARY_CHANGED_FROM_TO_RE: 'X changed/increased/decreased from A to B' summaries now parsed as…"):
         # SUMMARY_CHANGED_FROM_TO_RE: second free-text fallback for summaries
         # phrased as "... changed/increased/decreased from X to Y" (no arrow,
         # so SUMMARY_OLD_NEW_RE wouldn't catch it). No old_value/new_value
@@ -4016,6 +4704,7 @@ def self_test():
         assert cft_budget["value_confidence"] == "parsed_from_summary", f"changed-from-to: value_confidence wrong: {cft_budget}"
         print(f"[PASS] SUMMARY_CHANGED_FROM_TO_RE: 'X changed/increased/decreased from A to B' summaries now parsed as a second fallback (previously only the '->' arrow phrasing was)")
 
+    with _test_case("Permanent 'what this report can't do' disclosure present in every dashboard, independent of thi…"):
         # Permanent "what this report can't do" disclosure: unlike apiCaveat's
         # run-specific warn-boxes, this must appear in every dashboard, even
         # one with clean data and no API rows — it's about the tool's own
@@ -4025,6 +4714,7 @@ def self_test():
         assert "never whether a change was good, risky" in dash_html, "limitations disclosure must stay factual, not judgmental"
         print(f"[PASS] Permanent 'what this report can't do' disclosure present in every dashboard, independent of this run's data")
 
+    with _test_case('normalize_number: negative values with a single separator no longer have their magnitude corrup…'):
         # 3rd audit round (2026-08-18), confirmed findings only — every claim
         # below was independently reproduced against this file's actual code
         # before being accepted; most of that round's other claims (dedup
@@ -4042,6 +4732,7 @@ def self_test():
         assert normalize_number("-150.000", "TR") == -150000.0, f"negative TR-thousands value corrupted: {normalize_number('-150.000', 'TR')}"
         print(f"[PASS] normalize_number: negative values with a single separator no longer have their magnitude corrupted (previously '-150.00' became -15000.0)")
 
+    with _test_case("try_alias_match: a plain 'campaign' display-name column (values with no '/') resolves to campai…"):
         # try_alias_match: a literal lowercase "campaign"/"ad_group" header is
         # only the API's own resource-path field when its VALUES look like
         # one (contain '/'). A plain display-name column that happens to be
@@ -4063,6 +4754,7 @@ def self_test():
         assert plaincamp_row["campaign_resource"] is None, f"plain 'campaign' column must NOT be forced into campaign_resource, got {plaincamp_row['campaign_resource']!r}"
         print(f"[PASS] try_alias_match: a plain 'campaign' display-name column (values with no '/') resolves to campaign_name, no longer shadowed into campaign_resource by case alone")
 
+    with _test_case('make_change_id: same event with a space-separated vs T-separated raw timestamp now dedupes corr…'):
         # make_change_id: two rows describing the exact same real event, one
         # with a space-separated raw timestamp and one T-separated, must
         # dedupe to 1 row — previously hashed off raw_ts and never collapsed.
@@ -4082,6 +4774,7 @@ def self_test():
         assert r_crossfmt["duplicates_removed"] == 1
         print(f"[PASS] make_change_id: same event with a space-separated vs T-separated raw timestamp now dedupes correctly (previously hashed off raw_ts and never collapsed)")
 
+    with _test_case("parse_timestamp: slash-separated ISO dates ('2026/08/01') now parse under --date-format ISO (pr…"):
         # parse_timestamp: a slash-separated ISO-shaped date must parse under
         # explicit --date-format ISO, matching DMY/MDY (which already accept
         # both '/' and '.').
@@ -4089,6 +4782,7 @@ def self_test():
         assert slash_iso_dt.year == 2026 and slash_iso_dt.month == 8 and slash_iso_dt.day == 1, f"slash-separated ISO date not parsed correctly: {slash_iso_dt}"
         print(f"[PASS] parse_timestamp: slash-separated ISO dates ('2026/08/01') now parse under --date-format ISO (previously always raised unparseable)")
 
+    with _test_case('read_rows: a JSON array of non-object values ([1, 2, 3]) now returns a structured error instead…'):
         # read_rows: a JSON array of non-object values must raise a clear
         # ValueError (surfaced as a structured error status), not an
         # unhandled AttributeError from rows[0].keys().
@@ -4098,6 +4792,7 @@ def self_test():
         assert r_prim["status"] == "error", f"primitive-array JSON must return a structured error, got: {r_prim}"
         print(f"[PASS] read_rows: a JSON array of non-object values ([1, 2, 3]) now returns a structured error instead of crashing with AttributeError")
 
+    with _test_case("read_rows: a JSON object without 'results'/'changeEvents' now names the actual problem, not jus…"):
         # read_rows: a JSON object without a recognized wrapper key names the
         # actual problem instead of a generic "no headers found".
         f_unwrapped = td / "p3_unwrapped.json"
@@ -4107,6 +4802,7 @@ def self_test():
         assert "results" in r_unwrapped["message"] or "changeEvents" in r_unwrapped["message"], f"error message should name the missing wrapper key: {r_unwrapped['message']}"
         print(f"[PASS] read_rows: a JSON object without 'results'/'changeEvents' now names the actual problem, not just 'no headers found'")
 
+    with _test_case("mask_rows: the same real identity keeps the same mask label ('…') across separate runs, even wh…"):
         # mask_rows: labels must be stable across SEPARATE runs (persisted),
         # not just within one run — previously pure per-run encounter order,
         # so the same person could be "User A" in one report and "User B" in
@@ -4139,6 +4835,7 @@ def self_test():
         assert alex_label_run_a == alex_label_run_b, f"same real identity got different mask labels across separate runs: {alex_label_run_a!r} vs {alex_label_run_b!r}"
         print(f"[PASS] mask_rows: the same real identity keeps the same mask label ('{alex_label_run_a}') across separate runs, even when row order differs (previously per-run encounter order only)")
 
+    with _test_case('TSV input: … rows built (previously untested code path)'):
         # regression guard (audit F-13): the .tsv code path existed but was
         # never exercised by any fixture until now. Re-serialized properly
         # via csv (not a blind comma->tab replace, which would corrupt the
@@ -4153,6 +4850,7 @@ def self_test():
         assert r_tsv["row_count"] == 10, f"TSV fixture row_count={r_tsv['row_count']}"
         print(f"[PASS] TSV input: {r_tsv['row_count']} rows built (previously untested code path)")
 
+    with _test_case("dict-wrapped JSON ({'results': [...]}) input: … rows built (previously untested code path)"):
         # regression guard (audit F-23): the dict-wrapped JSON shapes
         # ({"results": [...]}, {"changeEvents": [...]}) existed in read_rows()
         # but were never exercised by any fixture until now.
@@ -4167,6 +4865,7 @@ def self_test():
         assert r_wrapped["row_count"] == 2, f"wrapped-JSON fixture row_count={r_wrapped['row_count']}"
         print(f"[PASS] dict-wrapped JSON ({{'results': [...]}}) input: {r_wrapped['row_count']} rows built (previously untested code path)")
 
+    with _test_case('unknown_format: correctly stopped for column mapping (unmapped: …)'):
         # --- fixture 3: genuinely unknown header format -> Layer 3 ---
         f3 = td / "unknown.csv"
         f3.write_text(SAMPLE_UNKNOWN_FORMAT_CSV, encoding="utf-8")
@@ -4174,6 +4873,7 @@ def self_test():
         assert r3["status"] == "needs_mapping", f"fixture3 should need mapping, got: {r3['status']}"
         print(f"[PASS] unknown_format: correctly stopped for column mapping (unmapped: {r3['unmapped_headers']})")
 
+    with _test_case('unknown_format with confirmed mapping: … rows built, profile saved for next time'):
         # confirm a mapping (simulating the Claude+user chat step) and re-run
         confirmed = {
             "source_label": "test_ui_variant",
@@ -4194,15 +4894,14 @@ def self_test():
         assert r3b["status"] == "ok", f"fixture3b failed: {r3b}"
         print(f"[PASS] unknown_format with confirmed mapping: {r3b['row_count']} rows built, profile saved for next time")
 
+    with _test_case('unknown_format second run, no --mapping-file needed: fingerprint match reused the saved profile'):
         # prove the fingerprint (Layer 1) now hits without needing --mapping-file again
         r3c = run_pipeline(f3, td / "out3c", allow_unknown_categories=True, force_review=True, generated_at="2026-08-17T00:00:00")
         assert r3c["status"] == "ok", f"fixture3c (fingerprint reuse) failed: {r3c}"
         print(f"[PASS] unknown_format second run, no --mapping-file needed: fingerprint match reused the saved profile")
 
-    PROFILES_DIR = real_profiles_dir
-    _run_js_rule_matches_regression()
-    print("\nAll self-tests passed." if ok else "\nSome self-tests FAILED.")
-    return ok
+    _run_round6_regressions(td)
+    _run_round7_cases(td)
 
 
 # =====================================================================
@@ -4224,6 +4923,7 @@ def main():
     p_run.add_argument("--force-review", action="store_true")
     p_run.add_argument("--extra-rules", help="JSON file: list of extra structured_rules entries to apply on top of CATEGORY_RULES.")
     p_run.add_argument("--account-name", help="Constant account name/id for every row, for a source with no account column at all (e.g. the Google Ads UI's own single-account Change history CSV export).")
+    p_run.add_argument("--currency", help="3-letter ISO code (e.g. TRY) of the account's currency. Shown as the unit on budget/bid/target-CPA amounts. Never guessed: without it, amounts stay unit-less. One code for the whole file — don't pass it for a multi-currency MCC export.")
     p_run.add_argument("--open", action="store_true")
 
     p_query = sub.add_parser("query", help="Deterministic filter over a changes.jsonl.")
@@ -4266,7 +4966,7 @@ def main():
             args.input, args.out_dir, mapping_file=args.mapping_file, date_format=args.date_format,
             decimal_style=args.decimal_style, tz=args.timezone, mask_users=args.mask_users,
             allow_unknown_categories=args.allow_unknown_categories, force_review=args.force_review,
-            extra_rules=extra_rules, open_browser=args.open, account_name=args.account_name,
+            extra_rules=extra_rules, open_browser=args.open, account_name=args.account_name, currency=args.currency,
         )
         print(json.dumps(result, indent=2, ensure_ascii=False))
         sys.exit(0 if result.get("status") == "ok" else 2)
