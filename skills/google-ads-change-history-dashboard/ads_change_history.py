@@ -418,14 +418,30 @@ CATEGORY_RULES = {
         {"resource_type": "AD_GROUP_BID_MODIFIER", "category": "Bidding", "subcategory": "Bid modifier changed"},
         {"resource_type": "CAMPAIGN_ASSET_SET", "category": "Asset", "subcategory": "Asset set changed"},
     ],
+    # Added 2026-11-10 (D-3/A-1..A-6): checked first, per statement. A rule
+    # matches when its headline pattern matches line 1 AND its detail pattern
+    # matches one of the indented lines below it.
+    "summary_detail_rules": [
+        {"headline": r"^Kampanya öğesi değiştirildi", "detail": r"olan Durum, Kaldırıldı olarak", "category": "Asset", "subcategory": "Asset removed"},
+        {"headline": r"(değiştirildi|changed)$", "detail": r"(olan Durum, Duraklatıldı olarak|^Status changed from \S+ to Paused)", "category": "Status", "subcategory": "Paused"},
+        {"headline": r"(değiştirildi|changed)$", "detail": r"(olan Durum, Etkin olarak|^Status changed from \S+ to (Enabled|Active))", "category": "Status", "subcategory": "Enabled"},
+        {"headline": r"(değiştirildi|changed)$", "detail": r"(olan Durum, Kaldırıldı olarak|^Status changed from \S+ to Removed)", "category": "Status", "subcategory": "Removed"},
+        {"headline": r"^(Kampanya değiştirildi|Campaign changed)", "detail": r"(Hedef EBM|Target CPA)", "category": "Bidding", "subcategory": "Target CPA"},
+        {"headline": r"^(Kampanya değiştirildi|Campaign changed)", "detail": r"(Hedef ROAS|Target ROAS)", "category": "Bidding", "subcategory": "Target ROAS"},
+        {"headline": r"^(Kampanya değiştirildi|Campaign changed)", "detail": r"(teklif stratejisi|Teklif sınırı|Tıklama sayısını|Dönüşüm sayısını|Dönüşüm değerini|bid strategy|bidding strategy|Bid limit|Maximi[sz]e (clicks|conversions))", "category": "Bidding", "subcategory": "Strategy changed"},
+    ],
     "summary_text_rules": [
         {"pattern": r"^Yeni Kelime Eklendi", "category": "Keyword", "subcategory": "Keyword added"},
         {"pattern": r"^Negatif Kelime Eklendi", "category": "Keyword", "subcategory": "Negative keyword"},
         {"pattern": r"^(TBM Değişti|AdGroup TBM Değişti|Teklif Değişti)", "category": "Bidding", "subcategory": "Bid changed"},
         {"pattern": r"^(Strateji Değişti|Teklif Stratejisi)", "category": "Bidding", "subcategory": "Strategy changed"},
         {"pattern": r"^Bütçe Değişti", "category": "Budget", "subcategory": "Budget changed"},
-        {"pattern": r"^Durum Değişti.*(ENABLED|Etkin)", "category": "Status", "subcategory": "Enabled"},
-        {"pattern": r"^Durum Değişti.*(PAUSED|Duraklat)", "category": "Status", "subcategory": "Paused"},
+        # F-1 fixed 2026-11-10: "A -> B" is categorized by B (the new state), not A.
+        {"pattern": r"^Durum Değişti.*->\s*\W*(ENABLED|Etkin)", "category": "Status", "subcategory": "Enabled"},
+        {"pattern": r"^Durum Değişti.*->\s*\W*(PAUSED|Duraklat)", "category": "Status", "subcategory": "Paused"},
+        {"pattern": r"^Durum Değişti.*->\s*\W*(REMOVED|Kaldırıldı)", "category": "Status", "subcategory": "Removed"},
+        {"pattern": r"^Durum Değişti(?!.*->).*(ENABLED|Etkin)", "category": "Status", "subcategory": "Enabled"},
+        {"pattern": r"^Durum Değişti(?!.*->).*(PAUSED|Duraklat)", "category": "Status", "subcategory": "Paused"},
         {"pattern": r"^(Öğe Silindi|Kaldırıldı)", "category": "Status", "subcategory": "Removed"},
         # Added 2026-08-18, found via a real native Google Ads UI export
         # (Campaigns > Change history > Download) — that CSV has no
@@ -464,8 +480,11 @@ CATEGORY_RULES = {
         {"pattern": r"^\d+ (broad|phrase|exact) match keywords? removed", "category": "Keyword", "subcategory": "Keyword removed"},
         {"pattern": r"^\d+ (broad|phrase|exact) match keywords? paused", "category": "Status", "subcategory": "Paused"},
         {"pattern": r"^\d+ data segments? added", "category": "Audience", "subcategory": "Audience added"},
+        {"pattern": r"^\d+ (age ranges?|genders?|household incomes?|parental status(es)?) (added|removed|changed)", "category": "Audience", "subcategory": "Audience added"},
         {"pattern": r"^\d+ languages? (added|removed)", "category": "Targeting", "subcategory": "Language targeting changed"},
-        {"pattern": r"^\d+ (countr(y|ies)|regions?) (added|removed)", "category": "Targeting", "subcategory": "Location targeting changed"},
+        {"pattern": r"^\d+ (countr(y|ies)|regions?|cit(y|ies)|locations?) (added|removed)", "category": "Targeting", "subcategory": "Location targeting changed"},
+        {"pattern": r"^\d+ (devices?|platforms?) (added|removed|changed)", "category": "Targeting", "subcategory": "Device targeting changed"},
+        {"pattern": r"^\d+ bid adjustments? changed", "category": "Bidding", "subcategory": "Bid modifier changed"},
         {"pattern": r"^(Conversion|Standard goals changed|Account-default goals)", "category": "Conversion", "subcategory": "Conversion tracking changed"},
         # Account/customer-administration events — see the "Account" entry
         # in CATEGORY_RULES["categories"] above for why these have nowhere
@@ -503,7 +522,11 @@ CATEGORY_RULES = {
         {"pattern": r"^Bütçe oluşturuldu", "category": "Budget", "subcategory": "Budget created"},
         {"pattern": r"^Bütçe kaldırıldı", "category": "Budget", "subcategory": "Budget removed"},
         {"pattern": r"^\d+ bütçenin tutarı (azaltıldı|artırıldı)", "category": "Budget", "subcategory": "Budget changed"},
-        {"pattern": r"^\d+ teklif ayarlama değişikliği", "category": "Bidding", "subcategory": "Bid changed"},
+        # 2026-11-10: platform and ad-schedule adjustments are bid modifiers, as structured AD_GROUP_BID_MODIFIER.
+        {"pattern": r"^\d+ teklif ayarlama değişikliği", "category": "Bidding", "subcategory": "Bid modifier changed"},
+        {"pattern": r"^\d+ reklam grubu etkin", "category": "Status", "subcategory": "Enabled"},
+        {"pattern": r"^\d+ reklam grubu duraklat", "category": "Status", "subcategory": "Paused"},
+        {"pattern": r'^Bütçe ".*" olarak ayarlandı', "category": "Budget", "subcategory": "Budget changed"},
         {"pattern": r"^Reklam grubu oluşturuldu", "category": "AdGroup", "subcategory": "Ad group created"},
         {"pattern": r"^Reklam grubu değiştirildi", "category": "AdGroup", "subcategory": "Ad group settings changed"},
         {"pattern": r"^Reklam grubu kaldırıldı", "category": "AdGroup", "subcategory": "Ad group removed"},
@@ -513,12 +536,19 @@ CATEGORY_RULES = {
         {"pattern": r"^\d+ [Dd]uyarlı görüntülü reklam oluşturuldu", "category": "Ad", "subcategory": "Ad created"},
         {"pattern": r"^\d+ [Dd]uyarlı görüntülü reklam değiştirildi", "category": "Ad", "subcategory": "Ad changed"},
         {"pattern": r"^\d+ [Dd]uyarlı görüntülü reklam kaldırıldı", "category": "Ad", "subcategory": "Ad removed"},
-        {"pattern": r"^Öğe oluşturuldu", "category": "Ad", "subcategory": "Ad created"},
-        {"pattern": r"negatif (anahtar kelime listesi uygulandı|sıralı eşlemeli anahtar kelime(ler)? (eklendi|listeye eklendi))", "category": "Keyword", "subcategory": "Negative keyword"},
+        {"pattern": r"^Öğe (oluşturuldu|eklendi)", "category": "Asset", "subcategory": "Asset added"},
+        {"pattern": r"^Öğe değiştirildi", "category": "Asset", "subcategory": "Asset changed"},
+        # Matched against the statement headline only (2026-11-10), so a detail line can't trigger it.
+        {"pattern": r"negatif (anahtar kelime listesi uygulandı|(geniş|sıralı|tam) eşlemeli anahtar kelime(ler)? (eklendi|listeye eklendi|kaldırıldı))", "category": "Keyword", "subcategory": "Negative keyword"},
         {"pattern": r"^\d+ (geniş|sıralı|tam) eşlemeli anahtar kelime(ler)? eklendi", "category": "Keyword", "subcategory": "Keyword added"},
+        {"pattern": r"^\d+ (geniş|sıralı|tam) eşlemeli anahtar kelime(ler)? kaldırıldı", "category": "Keyword", "subcategory": "Keyword removed"},
         {"pattern": r"^\d+ (geniş|sıralı|tam) eşlemeli anahtar kelime(ler)? duraklatıldı", "category": "Status", "subcategory": "Paused"},
-        {"pattern": r"^\d+ dil (eklendi|kaldırıldı)", "category": "Targeting", "subcategory": "Language targeting changed"},
-        {"pattern": r"^\d+ (ülke(ler)?|bölge(ler)?) (eklendi|kaldırıldı)", "category": "Targeting", "subcategory": "Location targeting changed"},
+        {"pattern": r"^\d+ (geniş|sıralı|tam) eşlemeli anahtar kelime(ler)? etkin", "category": "Status", "subcategory": "Enabled"},
+        {"pattern": r"^\d+ dil(ler)? (eklendi|kaldırıldı)", "category": "Targeting", "subcategory": "Language targeting changed"},
+        {"pattern": r"^\d+ (ülke(ler)?|bölge(ler)?|şehir(ler)?|konum(lar)?) (eklendi|kaldırıldı)", "category": "Targeting", "subcategory": "Location targeting changed"},
+        {"pattern": r"^\d+ (platform(lar)?|cihaz(lar)?) (eklendi|kaldırıldı|değiştirildi)", "category": "Targeting", "subcategory": "Device targeting changed"},
+        {"pattern": r"^\d+ (yaş aralık(ları)?|cinsiyet(ler)?|hane geliri|ebeveynlik durumu) (eklendi|kaldırıldı|değiştirildi)", "category": "Audience", "subcategory": "Audience added"},
+        {"pattern": r"(Hesap varsayılan hedefleri|kampanyaya özel hedef)", "category": "Conversion", "subcategory": "Conversion tracking changed"},
         {"pattern": r"^Dönüşüm hedefi oluşturuldu", "category": "Conversion", "subcategory": "Conversion action created"},
         {"pattern": r"^Dönüşüm hedefi değiştirildi", "category": "Conversion", "subcategory": "Conversion action changed"},
         # Second pass, 2026-08-19: 4 more real phrasings found in the same
@@ -530,12 +560,17 @@ CATEGORY_RULES = {
         # use re.search without a ^ anchor, same reasoning as the negative-
         # keyword-list rule above.
         {"pattern": r"negatif yaş grubu (eklendi|değiştirildi|kaldırıldı)", "category": "Audience", "subcategory": "Audience added"},
-        {"pattern": r"adlı kampanya özel hedefi (eklendi|değiştirildi|kaldırıldı)", "category": "Audience", "subcategory": "Audience added"},
+        # 2026-11-10: a campaign-specific custom goal is a conversion goal, not an audience (A-3).
+        {"pattern": r"adlı kampanya özel hedefi (eklendi|değiştirildi|kaldırıldı)", "category": "Conversion", "subcategory": "Conversion tracking changed"},
     ],
     "fallback": {"category": "Other", "subcategory": "Other"},
 }
 
-AUTOMATION_USER_PATTERNS = re.compile(r"(^ads-|system|automated|rule|script|bot|api)", re.IGNORECASE)
+# L-8 fixed 2026-11-10: whole words only ("Abbott", "Kapil", "Capital One" are people).
+AUTOMATION_USER_PATTERNS = re.compile(
+    r"(^ads-|\b(system|automated|automation|rules?|scripts?|bot|api|otomatik|otomasyon|kural|automático|automática|automatique|automatisch|automatico|Skript|скрипт|автоматическ\w*)\b)",
+    re.IGNORECASE,
+)
 # Fixed 2026-08-18 (audit F-08/F-09): "SA360" never occurs in either real
 # ChangeClientType enum value (they're "SEARCH_ADS_360_SYNC" and
 # "SEARCH_ADS_360_POST" — "ADS_360", not "SA360") — that alternative was dead
@@ -550,7 +585,9 @@ AUTOMATION_CLIENT_TYPE = re.compile(r"(AUTOMATED|RULE|SCRIPT|RECOMMENDATION|BULK
 # confident — leave it "unknown" unless client_type OR the user_name pattern
 # says otherwise. Fixed 2026-08-18.
 HUMAN_CLIENT_TYPE = re.compile(r"(WEB_CLIENT|MOBILE_APP|EDITOR)", re.IGNORECASE)
-SUMMARY_OLD_NEW_RE = re.compile(r"(-?\d[\d.,]*)\s*->\s*(-?\d[\d.,]*)")
+# B-9 2026-11-10: every summary regex runs on one line capped at SUMMARY_LINE_CAP chars.
+SUMMARY_LINE_CAP = 2000
+SUMMARY_OLD_NEW_RE = re.compile(r"(?<![\d.,])(-?\d[\d.,]{0,30})\s{0,5}->\s{0,5}(-?\d[\d.,]{0,30})")
 # Second fallback for free-text summaries phrased as "... changed/increased/
 # decreased from X to Y" instead of the "X -> Y" arrow SUMMARY_OLD_NEW_RE
 # looks for. Tried only when the arrow pattern finds nothing. Not numeric-only
@@ -567,9 +604,21 @@ SUMMARY_CHANGED_FROM_TO_RE = re.compile(
 # azaltıldı" (target CPA/ROAS, bids) — verified against a real 98-row export.
 # Currency symbol (₺) stripped along with the digit-group leader, same as the
 # other two patterns leave to normalize_number().
+# 2026-11-10: also düşürüldü/yükseltildi, currency before or after the number, quoted text values.
+_TR_AMOUNT = r"[₺$€£]?\s?-?\d[\d.,\u00a0\u202f']{0,30}(?:\s?(?:₺|TL|€|\$|£))?"
 SUMMARY_TR_OLAN_DEGERINE_RE = re.compile(
-    r"₺?(-?[\d.,]+)\s+olan\s+[^,\n]+,\s*₺?(-?[\d.,]+)\s+(?:olarak değiştirildi|değerine (?:artırıldı|azaltıldı))"
+    r"(?<![\w.,])(" + _TR_AMOUNT + r")\s+olan\s+[^,\n]{1,200},\s*(" + _TR_AMOUNT + r")\s+(?:olarak değiştirildi|değerine (?:artırıldı|azaltıldı|düşürüldü|yükseltildi|değiştirildi))"
 )
+SUMMARY_TR_OLAN_TEXT_RE = re.compile(r'^\s*(?:[^:\n]{1,200}:\s*)?("[^"\n]{0,500}"|\S{1,60})\s+olan\s+[^,\n]{1,200},\s*("[^"\n]{0,500}"|\S{1,60})\s+olarak değiştirildi', re.IGNORECASE)
+# old-only "X değeri ₺N idi" and new-only percent "X %+10 olarak ayarlandı" (A-4/D-8).
+SUMMARY_TR_OLD_ONLY_RE = re.compile(r"değeri\s+(" + _TR_AMOUNT + r")\s+idi\b")
+SUMMARY_PERCENT_SET_RE = re.compile(r"(?:%\s?([+-]?\d[\d.,]{0,10})|([+-]?\d[\d.,]{0,10})\s?%)\s+(?:olarak ayarlandı|set)", re.IGNORECASE)
+SUMMARY_NEW_AMOUNT_RE = re.compile(r"(?:Bütçe tutarı(?: değeri)?|Budget amount|Amount)\s*:\s*(" + _TR_AMOUNT + r")", re.IGNORECASE)
+CURRENCY_SYMBOLS = (("₺", "TRY"), ("TL", "TRY"), ("TRY", "TRY"), ("€", "EUR"), ("EUR", "EUR"), ("£", "GBP"), ("GBP", "GBP"), ("$", "USD"), ("USD", "USD"))
+# A-5: "<Campaign>: ₺N olan Bütçe tutarı, ..." / "<Campaign>: Bütçe tutarı değeri: ₺N".
+SUMMARY_BUDGET_OWNER_RE = re.compile(r"^\s+([^:\n]{1,200}?):\s*(?:\S{1,40}\s+olan\s+)?(?:Bütçe tutarı|Budget amount)", re.IGNORECASE)
+# L-6: words that show the summary is in a UI language these rules know (TR/EN).
+KNOWN_SUMMARY_VOCAB_RE = re.compile(r"(değiştirildi|oluşturuldu|eklendi|kaldırıldı|duraklatıldı|etkin|uygulandı|ayarlandı|değişikliği|Değişti|changed|created|added|removed|paused|enabled|active|applied|set to|updated)", re.IGNORECASE)
 # -? prefix added 2026-08-18 (3rd audit round, confirmed): without it, a
 # negative value like "-150.00" or "-3,50" matched neither pattern (both
 # required the string to START with a digit), fell through to
@@ -577,9 +626,10 @@ SUMMARY_TR_OLAN_DEGERINE_RE = re.compile(
 # stripped instead of converted — "-150.00" became -15000.0, not -150.0. The
 # sign character sits before the digits either way, so adding "-?" is
 # sufficient; the replace() calls downstream don't touch it.
-DIGIT_GROUP_3 = re.compile(r"^-?\d{1,3}([.,]\d{3})+$")
-DIGIT_GROUP_SHORT = re.compile(r"^-?\d+[.,]\d{1,2}$")
+DIGIT_GROUP_3 = re.compile(r"^[+-]?\d{1,3}([.,]\d{3})+$")
+DIGIT_GROUP_SHORT = re.compile(r"^[+-]?\d+[.,]\d{1,2}$")
 SINCE_RE = re.compile(r"^\d+[dwm]$")
+EMAIL_RE = re.compile(r"[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63})+")
 
 
 # =====================================================================
@@ -1030,9 +1080,11 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
 # wrapped in a currency marker and/or a short unit ("₺150,00", "150.000 TL",
 # "%20", "TRY100.00/day", "5km"). A letter directly before the digits
 # ("v1", "Q3") is an identifier, not a quantity, so no free-form prefix.
+# L-9 2026-11-10: trailing currency symbols accepted; B-9: digits capped at 40.
 NUMERIC_VALUE_RE = re.compile(
-    r"^([+-])?\s*(?:[₺$€£¥%]|TRY|TL|USD|EUR|GBP)?\s*(-?\d[\d.,]*)\s*(?:%|[^\W\d_]{1,4})?(?:/[^\W\d_]{1,5})?$"
+    r"^([+-])?\s*(?:[₺$€£¥%]|TRY|TL|USD|EUR|GBP)?\s*([+-]?\d[\d.,]{0,40})\s*(?:%|[₺$€£¥]|[^\W\d_]{1,4})?(?:/[^\W\d_]{1,5})?$"
 )
+_DIGIT_GROUP_SPACE_RE = re.compile(r"(?<=\d)[\u00a0\u202f\u2009' ](?=\d{3}(?!\d))")
 
 
 def _numeric_core(raw):
@@ -1040,7 +1092,10 @@ def _numeric_core(raw):
     when the value is text that merely contains digits."""
     if raw is None:
         return None
-    m = NUMERIC_VALUE_RE.match(str(raw).strip())
+    text = str(raw).strip()
+    if len(text) > 64:
+        return None
+    m = NUMERIC_VALUE_RE.match(_DIGIT_GROUP_SPACE_RE.sub("", text))
     if not m:
         return None
     return ("-" if m.group(1) == "-" else "") + m.group(2)
@@ -1058,7 +1113,8 @@ def normalize_number(raw, decimal_style):
             s = s.replace(",", "")
     elif has_dot or has_comma:
         sep = "." if has_dot else ","
-        if DIGIT_GROUP_SHORT.match(s):
+        # 2026-11-10: "0,001" is never a thousands group; a TR comma is the decimal mark.
+        if DIGIT_GROUP_SHORT.match(s) or (s.count(sep) == 1 and DIGIT_GROUP_3.match(s) and (s.lstrip("+-").split(sep)[0] == "0" or (decimal_style == "TR" and sep == ","))):
             s = s.replace(sep, ".")
         elif DIGIT_GROUP_3.match(s):
             if decimal_style in ("TR", "US"):
@@ -1224,15 +1280,81 @@ def parse_timestamp(raw, fmt):
     return dt
 
 
+_OP_REMOVE_RE = re.compile(r"\b(silindi|kaldırıldı|removed|deleted|eliminad[oa]s?|borrad[oa]s?|supprimée?s?|entfernt|gelöscht|rimoss[oaie]|eliminat[oaie]|removid[oa]s?|excluíd[oa]s?|удален\w*|удалён\w*)\b", re.IGNORECASE)
+_OP_CREATE_RE = re.compile(r"\b(eklendi|oluşturuldu|uygulandı|added|created|applied|cread[oa]s?|añadid[oa]s?|agregad[oa]s?|créée?s?|ajoutée?s?|erstellt|hinzugefügt|creat[oaie]|aggiunt[oaie]|criad[oa]s?|adicionad[oa]s?|создан\w*|добавлен\w*)\b", re.IGNORECASE)
+_STATUS_DETAIL_RE = re.compile(r"(?:olan Durum, (\w+) olarak|^\s*Status changed from \S+ to (\w+))", re.IGNORECASE | re.MULTILINE)
+
+
+def split_statement(text):
+    """(headline, detail_lines) of one statement: line 1 and the indented lines under it."""
+    lines = str(text or "").split("\n")
+    return lines[0].strip()[:SUMMARY_LINE_CAP], [l[:SUMMARY_LINE_CAP] for l in lines[1:] if l.strip()]
+
+
+def split_statements(cell):
+    """D-3 2026-11-10: a bundled free-text cell -> one text per statement
+    (a non-indented line plus the indented detail lines under it)."""
+    out = []
+    for line in str(cell or "").replace("\r\n", "\n").split("\n"):
+        if line.strip() and not line[0].isspace() or not out:
+            out.append([line])
+        else:
+            out[-1].append(line)
+    return ["\n".join(x).rstrip() for x in out if "".join(x).strip()] or [str(cell or "")]
+
+
 def infer_operation(raw_summary):
+    """A-7 2026-11-10: per statement, from its headline; a "changed" headline
+    whose status detail ends in Removed is a REMOVE. Pause/enable stay UPDATE
+    (the Status category says which)."""
     if not raw_summary:
         return "UPDATE"
-    s = raw_summary.lower()
-    if any(k in s for k in ("eklendi", "added", "created", "oluşturuldu")):
+    headline, details = split_statement(raw_summary)
+    if _OP_REMOVE_RE.search(headline):
+        return "REMOVE"
+    if _OP_CREATE_RE.search(headline):
         return "CREATE"
-    if any(k in s for k in ("silindi", "kaldırıldı", "removed", "deleted")):
+    m = _STATUS_DETAIL_RE.search("\n".join(details))
+    if m and (m.group(1) or m.group(2) or "").lower() in ("kaldırıldı", "removed"):
         return "REMOVE"
     return "UPDATE"
+
+
+def _currency_of(text):
+    for sym, code in CURRENCY_SYMBOLS:
+        if sym in text:
+            return code
+    return None
+
+
+def parse_statement_values(text, operation=None):
+    """Old/new value strings parsed from one summary statement, plus its unit:
+    (old, new, unit) or None. Each pattern runs per line (B-9 length cap)."""
+    lines = [l[:SUMMARY_LINE_CAP] for l in str(text or "").split("\n")]
+    for line in lines:
+        m = SUMMARY_OLD_NEW_RE.search(line) or SUMMARY_TR_OLAN_DEGERINE_RE.search(line)
+        if m:
+            return m.group(1).strip(), m.group(2).strip(), _currency_of(m.group(0))
+        m = SUMMARY_CHANGED_FROM_TO_RE.search(line)
+        if m:
+            return m.group(1).strip().rstrip("."), m.group(2).strip().rstrip("."), _currency_of(m.group(0))
+    for line in lines:
+        m = SUMMARY_TR_OLD_ONLY_RE.search(line)
+        if m:
+            return m.group(1).strip(), None, _currency_of(m.group(1))
+        m = SUMMARY_PERCENT_SET_RE.search(line)
+        if m:
+            return None, (m.group(1) or m.group(2)), "%"
+    if operation == "CREATE":
+        for line in lines:
+            m = SUMMARY_NEW_AMOUNT_RE.search(line)
+            if m:
+                return None, m.group(1).strip(), _currency_of(m.group(1))
+    for line in lines:
+        m = SUMMARY_TR_OLAN_TEXT_RE.search(line)
+        if m:
+            return m.group(1).strip('"'), m.group(2).strip('"'), None
+    return None
 
 
 def derive_actor_type(user_name, client_type):
@@ -1257,6 +1379,48 @@ def apply_value_alias(field, raw):
         if raw_norm in alts or raw_norm.upper() == canonical:
             return canonical
     return raw_norm
+
+
+def _norm_text(t):
+    return " ".join(str(t or "").split())
+
+
+def _sha(*parts):
+    return hashlib.sha1("|".join(str(x or "") for x in parts).encode("utf-8")).hexdigest()[:20]
+
+
+def assign_change_ids(rows, masked=False):
+    """D-1 2026-11-10: change_id hashes ad group, operation and the full
+    statement text too. Rows with no source_event_id are a multiset: the k-th
+    identical row gets occurrence k in its hash, so nothing in one file is ever
+    dropped and only a re-import of the same file collapses. A source_event_id
+    is the source's own identity, so two rows sharing it with identical content
+    stay real duplicates. Statements of one cell share event_id. With masking
+    the user part is the mask label (S-2). Returns the possible-duplicate count."""
+    occ, cell_occ, possible = Counter(), Counter(), 0
+    i = 0
+    while i < len(rows):
+        n = max(1, int(rows[i].get("statement_count") or 1))
+        cell = rows[i:i + n]
+        first = cell[0]
+        user_ref = first.get("user_name") if masked else (first.get("user_email") or first.get("user_name"))
+        common = (first.get("account_id") or first.get("account_name"), first.get("timestamp_utc") or first.get("timestamp_iso"), user_ref,
+                  first.get("campaign_id") or first.get("campaign_name"), first.get("ad_group_id") or first.get("ad_group_name"))
+        cell_key = _sha("cell", *common, "\n".join(_norm_text(r.get("raw_summary")) for r in cell), first.get("source_event_id"))
+        k = cell_occ[cell_key]
+        cell_occ[cell_key] += 1
+        if k and not first.get("source_event_id"):
+            possible += 1
+        event_id = first.get("source_event_id") or (cell_key if not k else _sha(cell_key, k))
+        for r in cell:
+            key = _sha(*common, r.get("resource_id") or r.get("resource_path") or r.get("resource_name"), r.get("field_name"),
+                       r.get("old_value"), r.get("new_value"), r.get("operation"), _norm_text(r.get("raw_summary")), r.get("source_event_id"))
+            j = occ[key]
+            occ[key] += 1
+            r["change_id"] = key if (not j or r.get("source_event_id")) else _sha(key, j)
+            r["event_id"] = event_id
+        i += n
+    return possible
 
 
 def make_change_id(account_ref, ts, user_ref, resource_ref, field_name, old_value, new_value, source_event_id=None):
@@ -1359,6 +1523,26 @@ def derive_resource_id_from_path(resource_path):
     return str(resource_path).rsplit("/", 1)[-1]
 
 
+_STMT_KEY = "\x00statement"
+
+
+def split_statement_rows(rows, mapping):
+    """D-3 2026-11-10: one row per statement for summary-only rows (no field_name
+    on the row); every statement row keeps the cell's other columns."""
+    sh, fh = mapping.get("raw_summary"), mapping.get("field_name")
+    if not sh:
+        return rows
+    out = []
+    for r in rows:
+        cell = r.get(sh)
+        parts = split_statements(cell) if isinstance(cell, str) and "\n" in cell and not (fh and r.get(fh)) else None
+        if not parts or len(parts) < 2:
+            out.append(r)
+            continue
+        out.extend({**r, sh: part, _STMT_KEY: (i, len(parts))} for i, part in enumerate(parts))
+    return out
+
+
 def normalize_changes(input_path, mapping, source_label, date_format=None, decimal_style=None, tz="unknown", default_account_name=None):
     """Returns dict: status 'ok' with 'rows' (list of canonical dicts), or a
     needs_date_format / needs_decimal_style status to stop and ask."""
@@ -1371,6 +1555,11 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
 
     source_row_count = len(rows)
     rows = expand_multi_field_rows(rows, mapping)
+    rows_after_field_split = len(rows)
+    # D-4 guard 2026-11-10: a header mapped to raw_summary is never also the operation.
+    if mapping.get("operation") and mapping.get("operation") == mapping.get("raw_summary"):
+        mapping = {k: v for k, v in mapping.items() if k != "operation"}
+    rows = split_statement_rows(rows, mapping)
     ts_header = mapping.get("timestamp")
     ts_values = [r.get(ts_header) for r in rows] if ts_header else []
     resolved_date_fmt = date_format or detect_date_format(ts_values)
@@ -1416,6 +1605,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
     campaign_ref_mapped = "campaign_id" in mapping or "campaign_resource" in mapping
     ad_group_ref_mapped = "ad_group_id" in mapping or "ad_group_resource" in mapping
     out_rows, unparseable, orphan_names = [], 0, 0
+    dst_gap = dst_fold = 0
     for r in rows:
         def g(field):
             h = mapping.get(field)
@@ -1440,28 +1630,35 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         elif tz != "unknown":
             try:
                 from zoneinfo import ZoneInfo
-                ts_utc = dt.replace(tzinfo=ZoneInfo(tz)).astimezone(dt_timezone.utc).isoformat()
+                zi = ZoneInfo(tz)
+                ts_utc = dt.replace(tzinfo=zi).astimezone(dt_timezone.utc).isoformat()
+                # D-7 2026-11-10: count local times a DST change skips (gap) or repeats (fold).
+                a, b = dt.replace(tzinfo=zi, fold=0), dt.replace(tzinfo=zi, fold=1)
+                if a.utcoffset() != b.utcoffset():
+                    if a.astimezone(dt_timezone.utc).astimezone(zi).replace(tzinfo=None) != dt:
+                        dst_gap += 1
+                    else:
+                        dst_fold += 1
             except Exception:
                 ts_utc = None
 
         raw_summary = g("raw_summary")
+        stmt_index, stmt_count = r.get(_STMT_KEY, (0, 1))
+        raw_operation = g("operation")
+        operation = apply_value_alias("operation", raw_operation) if raw_operation else infer_operation(raw_summary)
         old_value, new_value = g("old_value"), g("new_value")
-        value_confidence = "structured"
+        # 2026-11-10: None when there are no values at all (was always "structured").
+        value_confidence = "structured" if (old_value or new_value) else None
+        parsed_currency = parsed_unit = None
         if (not old_value and not new_value) and raw_summary:
-            m = SUMMARY_OLD_NEW_RE.search(str(raw_summary))
-            if m:
-                old_value, new_value = m.group(1), m.group(2)
+            parsed = parse_statement_values(raw_summary, operation)
+            if parsed:
+                old_value, new_value, unit = parsed
                 value_confidence = "parsed_from_summary"
-            else:
-                m2 = SUMMARY_CHANGED_FROM_TO_RE.search(str(raw_summary))
-                if m2:
-                    old_value, new_value = m2.group(1).strip().rstrip("."), m2.group(2).strip().rstrip(".")
-                    value_confidence = "parsed_from_summary"
-                else:
-                    m3 = SUMMARY_TR_OLAN_DEGERINE_RE.search(str(raw_summary))
-                    if m3:
-                        old_value, new_value = m3.group(1), m3.group(2)
-                        value_confidence = "parsed_from_summary"
+                if unit == "%":
+                    parsed_unit = "%"
+                elif unit:
+                    parsed_currency = parsed_unit = unit
 
         old_num = new_num = None
         try:
@@ -1501,8 +1698,6 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         # value: "explicit" (the source said so, including literal
         # UNKNOWN/UNSPECIFIED strings, which were already preserved
         # un-coerced before this fix) vs "inferred" (this script guessed).
-        raw_operation = g("operation")
-        operation = apply_value_alias("operation", raw_operation) if raw_operation else infer_operation(raw_summary)
         operation_confidence = "explicit" if raw_operation else "inferred"
         user_name, user_email, client_type = g("user_name"), g("user_email"), g("client_type")
         actor_type = derive_actor_type(user_name or user_email, client_type)
@@ -1543,6 +1738,14 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         if not ad_group_id and rt_upper == "AD_GROUP":
             ad_group_id = resource_id
         campaign_name, ad_group_name = g("campaign_name") or None, g("ad_group_name") or None
+        campaign_confidence = "source" if campaign_name or campaign_id else None
+        if not campaign_name and not campaign_id and not campaign_ref_mapped and raw_summary:
+            # A-5 2026-11-10: "<Campaign>: ... Bütçe tutarı ..." names the campaign the cell leaves empty.
+            for line in str(raw_summary).split("\n")[1:]:
+                m_owner = SUMMARY_BUDGET_OWNER_RE.match(line[:SUMMARY_LINE_CAP])
+                if m_owner:
+                    campaign_name, campaign_confidence = m_owner.group(1).strip(), "inferred_from_summary"
+                    break
         if campaign_name and campaign_ref_mapped and not campaign_id:
             campaign_name, orphan_names = None, orphan_names + 1
         if ad_group_name and ad_group_ref_mapped and not ad_group_id:
@@ -1556,8 +1759,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         # change. ts_utc/timestamp_iso (same preference order as chrono_key())
         # is the normalized identity of "when", independent of source string
         # formatting.
-        change_id = make_change_id(account_id or account_name, ts_utc or dt.isoformat(), user_email or user_name, resource_id or resource_path or resource_name or g("campaign_name"), field_name, old_value, new_value, source_event_id=source_event_id)
-        event_id = source_event_id or change_id
+        change_id = event_id = None  # set for all rows by assign_change_ids() below
 
         # Fixed 2026-10-10 (6th audit round): an empty source cell came out
         # as "" for these identity/reference fields while the *_id derived
@@ -1578,12 +1780,17 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
             "field_name": field_name, "multi_field": multi_field, "old_value": old_value, "new_value": new_value,
             "old_value_num": old_num, "new_value_num": new_num,
             "old_value_display": old_value_display, "new_value_display": new_value_display,
-            "value_unit": "units (converted from micros)" if is_micros_field else None, "currency": None,
+            "value_unit": "units (converted from micros)" if is_micros_field else parsed_unit, "currency": parsed_currency,
             "value_confidence": value_confidence, "category": None, "subcategory": None,
             "category_confidence": None, "source": source_label, "raw_summary": raw_summary,
+            "statement_index": stmt_index, "statement_count": stmt_count, "campaign_confidence": campaign_confidence,
         })
 
-    return {"status": "ok", "rows": out_rows, "rows_skipped_unparseable_date": unparseable, "orphan_names_dropped": orphan_names, "input_rows": source_row_count, "rows_added_by_field_split": len(rows) - source_row_count, "date_format_used": resolved_date_fmt, "decimal_style_used": resolved_decimal_style}
+    possible_duplicates = assign_change_ids(out_rows)
+
+    return {"status": "ok", "rows": out_rows, "rows_skipped_unparseable_date": unparseable, "orphan_names_dropped": orphan_names, "input_rows": source_row_count, "rows_added_by_field_split": rows_after_field_split - source_row_count,
+            "rows_added_by_statement_split": len(rows) - rows_after_field_split, "possible_duplicate_rows": possible_duplicates,
+            "dst_nonexistent_local_time": dst_gap, "dst_ambiguous_local_time": dst_fold, "date_format_used": resolved_date_fmt, "decimal_style_used": resolved_decimal_style}
 
 
 def dedupe_rows(rows):
@@ -1592,7 +1799,9 @@ def dedupe_rows(rows):
     re-imported/overlapping file collapses instead of doubling. Until this
     function existed that collapse never actually happened: change_id was
     computed but nothing filtered on it. Fixed 2026-08-18. Returns
-    (deduped_rows, duplicate_count)."""
+    (deduped_rows, duplicate_count). 2026-11-10 (D-1): ids now carry an
+    occurrence index (assign_change_ids), so only same-source-event-id rows
+    or a re-imported file collapse; distinct rows in one file never do."""
     seen = set()
     out = []
     duplicates = 0
@@ -1692,9 +1901,15 @@ def match_structured(row, extra_rules=None):
 
 
 def match_summary(row):
-    summary = row.get("raw_summary") or ""
+    """2026-11-10: per statement — headline rules see line 1 only, detail rules
+    also need a matching indented line; case and repeated spaces ignored."""
+    headline, details = split_statement(row.get("raw_summary") or "")
+    headline = " ".join(headline.split())
+    for rule in CATEGORY_RULES.get("summary_detail_rules", []):
+        if re.search(rule["headline"], headline, re.IGNORECASE) and any(re.search(rule["detail"], d.strip(), re.IGNORECASE) for d in details):
+            return rule["category"], rule["subcategory"]
     for rule in CATEGORY_RULES["summary_text_rules"]:
-        if re.search(rule["pattern"], summary):
+        if re.search(rule["pattern"], headline, re.IGNORECASE):
             return rule["category"], rule["subcategory"]
     return None
 
@@ -1737,6 +1952,31 @@ def categorize_changes(rows, allow_unknown=False, extra_rules=None):
     total = len(rows)
     other_pct = round(100 * counter.get("Other", 0) / total, 1) if total else 0.0
     return {"status": "ok", "rows": rows, "other_pct": other_pct, "category_breakdown": dict(counter)}
+
+
+def semantic_data_quality(n, rows, other_pct):
+    """Added 2026-11-10: data_quality fields from normalize/categorize — statement
+    split, kept possible duplicates, DST, and warnings (L-6, B-13)."""
+    warnings = []
+    summary_rows = [r for r in rows if not r.get("field_name") and r.get("raw_summary")]
+    if rows and other_pct >= 30 and summary_rows:
+        known = sum(1 for r in summary_rows if KNOWN_SUMMARY_VOCAB_RE.search(split_statement(r["raw_summary"])[0]))
+        if known < len(summary_rows) / 2:
+            warnings.append(f"{other_pct}% of rows are Other and most summaries use words these rules don't know: the export is probably in a UI language without category rules (only English and Turkish have them). Re-export in English or Turkish for categories.")
+        else:
+            warnings.append(f"{other_pct}% of rows are Other: check for summary phrasings the rules don't cover.")
+    if rows and not any(r.get("timestamp_utc") for r in rows):
+        warnings.append("No --timezone given and the timestamps carry no offset: the timeline will be empty. Re-run with --timezone <IANA name>, e.g. Europe/Istanbul.")
+    if n.get("dst_nonexistent_local_time") or n.get("dst_ambiguous_local_time"):
+        warnings.append(f"{n.get('dst_nonexistent_local_time', 0)} row(s) fall in a daylight-saving gap and {n.get('dst_ambiguous_local_time', 0)} in a repeated hour; their UTC time may be off by the DST shift.")
+    return {
+        "rows_added_by_statement_split": n.get("rows_added_by_statement_split", 0),
+        "possible_duplicate_rows_kept": n.get("possible_duplicate_rows", 0),
+        "dst_nonexistent_local_time": n.get("dst_nonexistent_local_time", 0),
+        "dst_ambiguous_local_time": n.get("dst_ambiguous_local_time", 0),
+        "campaign_inferred_from_summary": sum(1 for r in rows if r.get("campaign_confidence") == "inferred_from_summary"),
+        "warnings": warnings,
+    }
 
 
 # =====================================================================
@@ -1823,7 +2063,35 @@ def mask_rows(rows, masked_users):
             if "@" in str(r.get("user_name") or ""):
                 r["user_name"] = None
         out.append(r)
+    known = dict(mask_map)
+    for r in rows:
+        ident = r.get("user_email") or r.get("user_name")
+        if r["actor_type"] == "human" and ident in mask_map:
+            for alias in (r.get("user_name"), r.get("user_email")):
+                if alias:
+                    known.setdefault(alias, mask_map[ident])
+    _scrub_identities(out, known)
+    assign_change_ids(out, masked=True)
     return out
+
+
+_SCRUB_SKIP_FIELDS = {"change_id", "event_id", "user_name", "user_email", "timestamp", "timestamp_iso", "timestamp_utc", "timezone",
+                      "operation", "operation_confidence", "category", "subcategory", "category_confidence", "value_confidence", "source"}
+
+
+def _scrub_identities(rows, mask_map):
+    """S-1/T-3 2026-11-10: with --mask-users, known identities and any
+    email-shaped string are replaced in every other string field too."""
+    names = sorted((k for k in mask_map if len(k) >= 3), key=len, reverse=True)
+    name_re = re.compile(r"(?<!\w)(" + "|".join(re.escape(k) for k in names) + r")(?!\w)") if names else None
+    def scrub(v):
+        if name_re:
+            v = name_re.sub(lambda m: mask_map[m.group(1)], v)
+        return EMAIL_RE.sub(lambda m: mask_map.get(m.group(0), "[email removed]"), v)
+    for r in rows:
+        for k, v in r.items():
+            if k not in _SCRUB_SKIP_FIELDS and isinstance(v, str) and v:
+                r[k] = scrub(v)
 
 
 def account_identity(r):
@@ -1906,11 +2174,14 @@ def build_aggregation(rows, sources, other_pct, masked_users, generated_at, date
     most_active_campaign_key = campaign_counter.most_common(1)[0][0] if campaign_counter else None
     most_active_campaign = campaign_display.get(most_active_campaign_key)
 
+    # D-5 2026-11-10: bucket by local day when every placed row shares one known zone.
+    zones = {r.get("timezone") for r in rows if r.get("timestamp_utc")}
+    timeline_tz = next(iter(zones)) if len(zones) == 1 and next(iter(zones)) not in (None, "unknown") else "UTC"
     timeline_counter, excluded_from_timeline = Counter(), 0
     for r in rows:
         tsu = r.get("timestamp_utc")
         if tsu:
-            timeline_counter[tsu[:10]] += 1
+            timeline_counter[(r.get("timestamp_iso") or tsu)[:10] if timeline_tz != "UTC" else tsu[:10]] += 1
         else:
             excluded_from_timeline += 1
     timeline_days = sorted(timeline_counter.keys())
@@ -1958,12 +2229,14 @@ def build_aggregation(rows, sources, other_pct, masked_users, generated_at, date
                 "campaign_name": r.get("campaign_name") or f"Campaign {r.get('campaign_id')}",
                 "account_name": r.get("account_name"),
                 "last_change_ts": r.get("timestamp_iso"),
+                "last_change_ts_utc": r.get("timestamp_utc"),
                 "_sort_ts": ts,
             }
     window_end_date = datetime.fromisoformat(window_end[:19]).date() if window_end else date.today()
     untouched = []
     for entry in campaign_last.values():
-        last_date = datetime.fromisoformat(entry["last_change_ts"]).date()
+        # D-6 2026-11-10: both ends on the chrono_key basis (UTC when known), never negative.
+        last_date = datetime.fromisoformat(entry["_sort_ts"][:19]).date()
         # Fixed 2026-08-19 (2nd audit): renamed from days_since_last_change.
         # This is a STATIC snapshot value (relative to this dataset's own
         # window_end, computed once at build time) — it is NOT the same
@@ -1993,7 +2266,9 @@ def build_aggregation(rows, sources, other_pct, masked_users, generated_at, date
         "meta": {
             "generated_at": generated_at, "data_window_start": window_start, "data_window_end": window_end,
             "row_count": total, "event_count": len(event_ids), "sources": sorted(sources), "other_pct": other_pct,
-            "masked_users": masked_users, "timeline_reference_tz": "UTC",
+            "masked_users": masked_users, "timeline_reference_tz": timeline_tz,
+            "timeline_basis": "local calendar day in " + timeline_tz if timeline_tz != "UTC" else "UTC calendar day",
+            "days_since_basis": "timestamp_utc" if all(r.get("timestamp_utc") for r in rows) else "timestamp_utc where known, else local time",
             "rows_excluded_from_timeline_unknown_tz": excluded_from_timeline,
             "rows_skipped_unparseable_date": unparseable, "rows_skipped_unparseable_date_pct": unparseable_pct,
             "untouched_scope_note": "Lists only campaigns with at least one change in this export. A campaign that doesn't appear in the export is not listed: it may have had no change in the export's date range, or may not exist — this report can't tell which.",
@@ -3473,7 +3748,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     # usable. The individual counts existed (some only in coverage.txt, some
     # only in the result, one only as a dashboard footnote); this is the one
     # place that states all of them, and they add up:
-    #   input_rows + rows_added_by_field_split - left_out = rows_in_report
+    #   input_rows + rows_added_by_field_split + rows_added_by_statement_split - left_out = rows_in_report
     # "in_report_with_limits" rows ARE in the report; each count names one
     # way a row is less than complete. Nothing here is a verdict on the data
     # — no threshold, no pass/fail. The existing stop-and-ask gates (>20%
@@ -3493,18 +3768,25 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         },
         "ignored_headers": v["ignored_headers"],
     }
+    data_quality.update(semantic_data_quality(n, c["rows"], c["other_pct"]))
     with open(out_dir / "coverage.txt", "w", encoding="utf-8") as f:
         dq_left = data_quality["left_out"]
         f.write(f"Input rows: {data_quality['input_rows']}\n")
         if data_quality["rows_added_by_field_split"]:
             f.write(f"Rows added by splitting multi-field events: {data_quality['rows_added_by_field_split']}\n")
+        if data_quality["rows_added_by_statement_split"]:
+            f.write(f"Rows added by splitting bundled summary cells (1 row = 1 change statement): {data_quality['rows_added_by_statement_split']}\n")
+        if data_quality["possible_duplicate_rows_kept"]:
+            f.write(f"Identical rows kept (possible duplicates, nothing tells them apart): {data_quality['possible_duplicate_rows_kept']}\n")
+        for w in data_quality["warnings"]:
+            f.write(f"WARNING: {w}\n")
         f.write(f"Left out: {sum(dq_left.values())} (unreadable date: {dq_left['unreadable_date']}, duplicate: {dq_left['duplicate']})\n")
         f.write(f"In the report: {data_quality['rows_in_report']}\n")
         f.write("In the report, with a limit: " + ", ".join(f"{k.replace('_', ' ')}: {val}" for k, val in data_quality["in_report_with_limits"].items()) + "\n")
         f.write(f"Source columns not used: {', '.join(data_quality['ignored_headers']) or 'none'}\n\n")
         f.write(f"Total rows: {len(c['rows'])}\n")
         if duplicate_count:
-            f.write(f"Duplicates removed (identical change_id): {duplicate_count}\n")
+            f.write(f"Duplicates removed (same source event id, identical content): {duplicate_count}\n")
         if n["rows_skipped_unparseable_date"]:
             input_total = len(c["rows"]) + n["rows_skipped_unparseable_date"]
             skip_pct = round(100 * n["rows_skipped_unparseable_date"] / input_total, 1) if input_total else 0.0
@@ -4051,6 +4333,185 @@ def _run_round7_cases(td):
         print(f"[PASS] dashboard payload: changes are embedded column-packed and unpack in the browser's own JS to the identical rows (Node) — {round(100 * small / plain)}% of the plain size on this fixture")
 
 
+def _r9_csv(td, name, rows, header="Date & time,User,Campaign,Ad group,Changes"):
+    import csv as _csv
+    p = td / name
+    with open(p, "w", encoding="utf-8", newline="") as f:
+        w = _csv.writer(f)
+        w.writerow(header.split(","))
+        w.writerows(rows)
+    return p
+
+
+def _r9_rows(out):
+    with open(out / "changes.jsonl", encoding="utf-8") as fh:
+        return [json.loads(l) for l in fh]
+
+
+def _run_r9_semantics_cases(td):
+    """Round 9 (2026-11-10), SEMANTICS area: dedupe, statement split,
+    per-statement categories/operations/values, masking, timeline basis."""
+    import time as _time
+    ts = "2026-08-04 16:16:32"
+    with _test_case("D-1: distinct rows sharing campaign+second are never dropped; identical rows in one file are kept and counted"):
+        p = _r9_csv(td, "r9_dedupe.csv", [
+            [ts, "a@example.test", "Campaign Alpha", "Ad Group 1", "1 dil eklendi\n  Dil A"],
+            [ts, "a@example.test", "Campaign Alpha", "Ad Group 2", "1 dil eklendi\n  Dil A"],
+            [ts, "a@example.test", "Campaign Alpha", "Ad Group 2", "1 ülke eklendi\n  Ülke A"],
+            [ts, "a@example.test", "Campaign Alpha", "Ad Group 2", "1 ülke eklendi\n  Ülke A"],
+        ])
+        r = run_pipeline(p, td / "out_r9_dedupe", account_name="Account A", tz="Europe/Istanbul", generated_at="2026-08-17T00:00:00")
+        assert r["status"] == "ok" and r["row_count"] == 4, f"no row may be dropped: {r.get('row_count')} {r.get('status')}"
+        dq = r["data_quality"]
+        assert dq["left_out"]["duplicate"] == 0 and dq["possible_duplicate_rows_kept"] == 1, f"dq: {dq}"
+        assert len({x["change_id"] for x in _r9_rows(td / "out_r9_dedupe")}) == 4, "change_id must stay unique"
+        print("[PASS] D-1: distinct rows sharing campaign+second are never dropped; identical rows in one file are kept and counted")
+
+    with _test_case("D-3: a bundled cell becomes one row per statement, sharing event_id; each statement categorized on its own"):
+        cell = ("1 sıralı eşlemeli anahtar kelime eklendi\n  \"anahtar a\"\n"
+                "2 negatif sıralı eşlemeli anahtar kelimeler eklendi\n  -\"x\"\n  -\"y\"\n"
+                "Kampanya değiştirildi\n  ₺208,20 olan Hedef EBM, ₺180,00 değerine düşürüldü\n"
+                "1 teklif ayarlama değişikliği\n  Tabletler: Platform teklif ayarlaması %-50 olarak ayarlandı")
+        p = _r9_csv(td, "r9_split.csv", [[ts, "a@example.test", "Campaign Alpha", "", cell]])
+        r = run_pipeline(p, td / "out_r9_split", account_name="Account A", tz="Europe/Istanbul", generated_at="2026-08-17T00:00:00")
+        assert r["status"] == "ok" and r["row_count"] == 4, f"expected 4 statement rows: {r}"
+        assert r["data_quality"]["rows_added_by_statement_split"] == 3
+        rows = sorted(_r9_rows(td / "out_r9_split"), key=lambda x: x["statement_index"])
+        assert len({x["event_id"] for x in rows}) == 1 and [x["statement_count"] for x in rows] == [4] * 4
+        got = [(x["category"], x["subcategory"], x["operation"]) for x in rows]
+        assert got == [("Keyword", "Keyword added", "CREATE"), ("Keyword", "Negative keyword", "CREATE"),
+                       ("Bidding", "Target CPA", "UPDATE"), ("Bidding", "Bid modifier changed", "UPDATE")], got
+        assert (rows[2]["old_value_num"], rows[2]["new_value_num"], rows[2]["currency"]) == (208.2, 180.0, "TRY"), rows[2]
+        assert (rows[3]["new_value_num"], rows[3]["value_unit"]) == (-50.0, "%"), rows[3]
+        assert rows[0]["value_confidence"] is None, "no values -> value_confidence None"
+        print("[PASS] D-3: a bundled cell becomes one row per statement, sharing event_id; each statement categorized on its own")
+
+    with _test_case("statement categories use headline and detail lines (TR/EN, legacy, case-insensitive)"):
+        cases = [
+            ("Kampanya değiştirildi\n  Hedef ROAS: %300", "Bidding", "Target ROAS"),
+            ("Kampanya değiştirildi\n  \"A\" olan Kampanyateklif stratejisi türü değeri, \"B\" olarak değiştirildi", "Bidding", "Strategy changed"),
+            ("Kampanya değiştirildi\n  Ad: \"Yeni\"", "Campaign", "Campaign settings changed"),
+            ("1 teklif ayarlama değişikliği\n  Cuma 12:00 - 16:00: Reklam zaman planlaması teklif ayarlaması %+10 olarak ayarlandı", "Bidding", "Bid modifier changed"),
+            ("Kampanya öğesi değiştirildi\n  Etkin olan Durum, Kaldırıldı olarak değiştirildi", "Asset", "Asset removed"),
+            ("Kampanya öğesi değiştirildi\n  Etkin olan Durum, Duraklatıldı olarak değiştirildi", "Status", "Paused"),
+            ("Kampanya öğesi değiştirildi\n  Kaldırıldı olan Durum, Etkin olarak değiştirildi", "Status", "Enabled"),
+            ("1 duyarlı arama ağı reklamı değiştirildi\n  etkin olan Durum, duraklatıldı olarak değiştirildi", "Status", "Paused"),
+            ("Öğe oluşturuldu\n  Durum: \"Etkin\"", "Asset", "Asset added"),
+            ("\"Hedef A\" adlı kampanya özel hedefi eklendi", "Conversion", "Conversion tracking changed"),
+            ("Her zaman Hesap varsayılan hedefleri kullanıldı", "Conversion", "Conversion tracking changed"),
+            ("2 diller eklendi", "Targeting", "Language targeting changed"),
+            ("3 şehirler eklendi", "Targeting", "Location targeting changed"),
+            ("2 platformlar eklendi", "Targeting", "Device targeting changed"),
+            ("6 yaş aralıkları eklendi", "Audience", "Audience added"),
+            ("1 negatif yaş grubu eklendi", "Audience", "Audience added"),
+            ("2 negatif geniş eşlemeli anahtar kelime eklendi", "Keyword", "Negative keyword"),
+            ("1 geniş eşlemeli anahtar kelime kaldırıldı", "Keyword", "Keyword removed"),
+            ("Bütçe \"Bütçe A\" olarak ayarlandı", "Budget", "Budget changed"),
+            ("Durum Değişti: ENABLED -> PAUSED", "Status", "Paused"),
+            ("Durum Değişti: PAUSED -> ENABLED", "Status", "Enabled"),
+            ("3 Campaigns Paused", "Status", "Paused"),
+            ("2 Kampanya  duraklatıldı", "Status", "Paused"),
+            ("Campaign changed\n  Target CPA changed from $5.00 to $6.00", "Bidding", "Target CPA"),
+            ("1 phrase match keyword added\n  2 negative phrase match keywords added", "Keyword", "Keyword added"),
+        ]
+        bad = [(t, match_summary({"raw_summary": t}), (c, sc)) for t, c, sc in cases if match_summary({"raw_summary": t}) != (c, sc)]
+        assert not bad, f"miscategorized: {bad}"
+        print(f"[PASS] statement categories use headline and detail lines ({len(cases)} TR/EN/legacy phrasings)")
+
+    with _test_case("infer_operation per statement: re-enable is not REMOVE, list applied is CREATE, es/fr/ru removal verbs"):
+        cases = [("Kampanya öğesi değiştirildi\n  Kaldırıldı olan Durum, Etkin olarak değiştirildi", "UPDATE"),
+                 ("Kampanya öğesi değiştirildi\n  Etkin olan Durum, Kaldırıldı olarak değiştirildi", "REMOVE"),
+                 ("\"Liste A\" negatif anahtar kelime listesi uygulandı", "CREATE"),
+                 ("1 kampanya etkin\n  duraklatıldı olan Durum, etkin olarak değiştirildi", "UPDATE"),
+                 ("Campaña eliminada", "REMOVE"), ("Campagne supprimée", "REMOVE"), ("Кампания удалена", "REMOVE"),
+                 ("Anzeige erstellt", "CREATE"), ("Kampanya değiştirildi\n  1 öğe eklendi", "UPDATE")]
+        bad = [(t, infer_operation(t), e) for t, e in cases if infer_operation(t) != e]
+        assert not bad, f"wrong operation: {bad}"
+        print("[PASS] infer_operation per statement: re-enable is not REMOVE, list applied is CREATE, es/fr/ru removal verbs")
+
+    with _test_case("values: TR old/new, old-only, percent, creation amount, currency; normalize_number edge cases"):
+        cases = [("Kampanya değiştirildi\n  ₺460,00 olan Hedef EBM, ₺437,93 değerine düşürüldü", ("₺460,00", "₺437,93", "TRY")),
+                 ("Kampanya değiştirildi\n  Hedef EBM değeri ₺139,00 idi", ("₺139,00", None, "TRY")),
+                 ("1 teklif ayarlama değişikliği\n  X: teklif ayarlaması %+10 olarak ayarlandı", (None, "+10", "%")),
+                 ("1 bütçenin tutarı azaltıldı\n  Kampanya B: 750,00 € olan Bütçe tutarı, 725,00 € olarak değiştirildi", ("750,00 €", "725,00 €", "EUR"))]
+        bad = [(t, parse_statement_values(t), e) for t, e in cases if parse_statement_values(t) != e]
+        assert not bad, f"value parse: {bad}"
+        assert parse_statement_values("Bütçe oluşturuldu\n  Kampanya B: Bütçe tutarı değeri: ₺1.180,00", "CREATE") == (None, "₺1.180,00", "TRY")
+        nums = [("0,001", "TR", 0.001), ("0,001", "US", 0.001), ("1,500", "US", 1500.0), ("130,00 ₺", "TR", 130.0),
+                ("1 234,50", "TR", 1234.5), ("1'234.50", "US", 1234.5), ("%+10", "TR", 10.0), ("9" * 80, "TR", None)]
+        bad = [(v, normalize_number(v, st), e) for v, st, e in nums if normalize_number(v, st) != e]
+        assert not bad, f"normalize_number: {bad}"
+        print("[PASS] values: TR old/new, old-only, percent, creation amount, currency; normalize_number edge cases")
+
+    with _test_case("A-5: an empty campaign cell takes the campaign named in a budget detail line, marked inferred_from_summary"):
+        p = _r9_csv(td, "r9_owner.csv", [[ts, "a@example.test", "", "", "1 bütçenin tutarı artırıldı\n  Campaign Beta: ₺200,00 olan Bütçe tutarı, ₺260,00 olarak değiştirildi"]])
+        r = run_pipeline(p, td / "out_r9_owner", account_name="Account A", tz="Europe/Istanbul", generated_at="2026-08-17T00:00:00")
+        row = _r9_rows(td / "out_r9_owner")[0]
+        assert (row["campaign_name"], row["campaign_confidence"]) == ("Campaign Beta", "inferred_from_summary"), row
+        assert (row["old_value_num"], row["new_value_num"], row["category"]) == (200.0, 260.0, "Budget"), row
+        print("[PASS] A-5: an empty campaign cell takes the campaign named in a budget detail line, marked inferred_from_summary")
+
+    with _test_case("L-8: automation names match whole words only"):
+        people = ["Kapil Rao", "Ann Abbott", "Lee Botha", "Napier Ltd", "Capital One Team", "Rulebook Fan"]
+        bots = ["ads-budget-system", "Automated rules", "Google Ads Script", "Otomatik kurallar", "Skript Konto"]
+        assert all(derive_actor_type(n, None) == "human" for n in people), [n for n in people if derive_actor_type(n, None) != "human"]
+        assert all(derive_actor_type(n, None) == "automation" for n in bots), [n for n in bots if derive_actor_type(n, None) != "automation"]
+        print("[PASS] L-8: automation names match whole words only")
+
+    with _test_case("S-1/S-2: --mask-users scrubs emails and names from every string field; change_id is not hashed on the identity"):
+        p = _r9_csv(td, "r9_mask.csv", [
+            [ts, "user.a@example.test", "Campaign Alpha", "", "Updated user.a@example.test's notification setting\n  cc other.person@example.test"],
+            [ts, "User Bee", "Campaign Alpha", "", "1 dil eklendi\n  added by User Bee"],
+        ])
+        run_pipeline(p, td / "out_r9_plain", account_name="Account A", tz="Europe/Istanbul", generated_at="2026-08-17T00:00:00")
+        r = run_pipeline(p, td / "out_r9_mask", account_name="Account A", tz="Europe/Istanbul", mask_users=True, generated_at="2026-08-17T00:00:00")
+        assert r["status"] == "ok", r
+        for name in ("changes.jsonl", "change_history.json", "dashboard.html"):
+            text = (td / "out_r9_mask" / name).read_text(encoding="utf-8")
+            assert "@example.test" not in text and "User Bee" not in text, f"identity leaked into {name}"
+        plain = {x["statement_index"]: x["change_id"] for x in _r9_rows(td / "out_r9_plain")}
+        assert not set(plain.values()) & {x["change_id"] for x in _r9_rows(td / "out_r9_mask")}, "masked change_id must not equal the identity-hashed one"
+        print("[PASS] S-1/S-2: --mask-users scrubs emails and names from every string field; change_id is not hashed on the identity")
+
+    with _test_case("D-5/D-6/D-7/B-13: local-day timeline, non-negative days_since, DST gap/fold counted, no-timezone warning"):
+        p = _r9_csv(td, "r9_tz.csv", [
+            ["2026-08-01 01:30:00", "a@example.test", "Campaign Alpha", "", "1 dil eklendi"],
+            ["2026-08-03 23:30:00", "a@example.test", "Campaign Beta", "", "1 dil eklendi"],
+        ])
+        r = run_pipeline(p, td / "out_r9_tz", account_name="Account A", tz="Europe/Istanbul", generated_at="2026-08-17T00:00:00")
+        ch = json.loads((td / "out_r9_tz" / "change_history.json").read_text(encoding="utf-8"))
+        assert [d["date"] for d in ch["timeline"]] == ["2026-08-01", "2026-08-03"], ch["timeline"]
+        assert ch["meta"]["timeline_reference_tz"] == "Europe/Istanbul"
+        assert all(e["days_since_last_change_at_generation"] >= 0 for e in ch["untouched"]), ch["untouched"]
+        p = _r9_csv(td, "r9_dst.csv", [["2026-03-29 02:30:00", "a@example.test", "Campaign Alpha", "", "1 dil eklendi"],
+                                       ["2026-10-25 02:30:00", "a@example.test", "Campaign Alpha", "", "1 ülke eklendi"]])
+        dq = run_pipeline(p, td / "out_r9_dst", account_name="Account A", tz="Europe/Berlin", generated_at="2026-08-17T00:00:00")["data_quality"]
+        assert (dq["dst_nonexistent_local_time"], dq["dst_ambiguous_local_time"]) == (1, 1), dq
+        dq = run_pipeline(p, td / "out_r9_notz", account_name="Account A", generated_at="2026-08-17T00:00:00")["data_quality"]
+        assert any("timeline will be empty" in w for w in dq["warnings"]), dq["warnings"]
+        print("[PASS] D-5/D-6/D-7/B-13: local-day timeline, non-negative days_since, DST gap/fold counted, no-timezone warning")
+
+    with _test_case("L-6: mostly-Other output in an unknown UI language carries a data_quality warning"):
+        p = _r9_csv(td, "r9_es.csv", [[ts, "a@example.test", "Campaign Alpha", "", "Campaña eliminada"],
+                                      [ts, "a@example.test", "Campaign Alpha", "", "Presupuesto modificado"]])
+        r = run_pipeline(p, td / "out_r9_es", account_name="Account A", tz="Europe/Istanbul", generated_at="2026-08-17T00:00:00")
+        assert r["other_pct"] == 100.0 and any("UI language" in w for w in r["data_quality"]["warnings"]), r["data_quality"]
+        assert _r9_rows(td / "out_r9_es")[0]["operation"] == "REMOVE"
+        print("[PASS] L-6: mostly-Other output in an unknown UI language carries a data_quality warning")
+
+    with _test_case("B-9: a 130k-character summary cell is parsed in well under a second"):
+        t0 = _time.time()
+        for cell in ("1" * 130000, "Durum Değişti: " + "9," * 65000, "Kampanya değiştirildi\n  " + "₺1 olan " * 16000, ("1 dil eklendi\n  " + "9" * 40 + "\n") * 3000):
+            for st in split_statements(cell):
+                op = infer_operation(st)
+                parse_statement_values(st, op)
+                match_summary({"raw_summary": st})
+            normalize_number(cell, "TR")
+        took = _time.time() - t0
+        assert took < 1.0, f"took {took:.2f}s"
+        print(f"[PASS] B-9: a 130k-character summary cell is parsed in well under a second ({took:.2f}s)")
+
+
 class _FakeEnum:
     def __init__(self, name):
         self.name = name
@@ -4572,7 +5033,8 @@ def _run_pipeline_cases(td):
             ui_rows = [json.loads(l) for l in fh]
         assert all(r["account_name"] == "Test Account" for r in ui_rows), "‑‑account-name must apply to every row when the source has no account column"
         cats = {r["category"] for r in ui_rows}
-        assert cats == {"Campaign", "Status", "AdGroup", "Budget"}, f"unexpected category set: {cats}"
+        # 2026-11-10: "Campaign changed" + "Status changed ... to active" is an enable (detail rule).
+        assert cats == {"Status", "AdGroup", "Budget"}, f"unexpected category set: {cats}"
         print(f"[PASS] a real native Google Ads UI 'Change history' CSV export (no account/field_name/resource_type column, narrow-no-break-space before AM/PM, spelled-out-month timestamps) now runs end to end — --account-name fills the missing account, UI_EN auto-detects the timestamp format, and the new English summary_text_rules categorize it instead of 100% falling to Other")
 
     with _test_case("a second real native UI export's gaps now covered: a new 'Account' category for customer/accoun…"):
@@ -5168,6 +5630,7 @@ def _run_pipeline_cases(td):
     _run_round6_regressions(td)
     _run_round7_cases(td)
     _run_round8_cases(td)
+    _run_r9_semantics_cases(td)
 
 
 # =====================================================================
