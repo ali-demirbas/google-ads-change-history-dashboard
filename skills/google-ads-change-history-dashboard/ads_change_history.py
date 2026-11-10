@@ -2372,81 +2372,121 @@ body.lab {
 
   /* ---- the dashboard, on Lab UI (the site's visual language: stone ink on
      white paper, the brand blue, plain-case labels, tiles) -------------- */
-  :root { --bad: var(--lab-bad); --good: var(--lab-good); --accent: var(--lab-brand); --text-dim: var(--lab-text-subtle); }
+  /* 2026-11-10: dashboard-only tokens, so dark mode can re-point them (pills, active buttons) */
+  :root { --accent: var(--lab-brand); --text-dim: var(--lab-text-subtle);
+    --dash-on-bg: var(--lab-ink-950); --dash-on-fg: #fff; --dash-cat-keep: 100%;
+    --dash-auto-fg: var(--lab-amber-800); --dash-auto-bg: var(--lab-amber-50); --dash-auto-line: var(--lab-amber-200);
+    --dash-rule-fg: var(--lab-violet-800); --dash-rule-bg: var(--lab-violet-50); --dash-rule-line: var(--lab-violet-200); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --dash-on-bg: #f5ede9; --dash-on-fg: #1f1c1b; --dash-cat-keep: 38%;
+    --dash-auto-fg: #fee685; --dash-auto-bg: color-mix(in oklab, #f99c00 18%, #1f1c1b); --dash-auto-line: color-mix(in oklab, #f99c00 40%, #1f1c1b);
+    --dash-rule-fg: #ddd6ff; --dash-rule-bg: color-mix(in oklab, #8d54ff 22%, #1f1c1b); --dash-rule-line: color-mix(in oklab, #8d54ff 45%, #1f1c1b); } }
+  :root[data-theme="dark"] {
+    --dash-on-bg: #f5ede9; --dash-on-fg: #1f1c1b; --dash-cat-keep: 38%;
+    --dash-auto-fg: #fee685; --dash-auto-bg: color-mix(in oklab, #f99c00 18%, #1f1c1b); --dash-auto-line: color-mix(in oklab, #f99c00 40%, #1f1c1b);
+    --dash-rule-fg: #ddd6ff; --dash-rule-bg: color-mix(in oklab, #8d54ff 22%, #1f1c1b); --dash-rule-line: color-mix(in oklab, #8d54ff 45%, #1f1c1b); }
   header { max-width: 1440px; margin: 0 auto; padding: 36px 28px 8px; }
   .lab header h1 { margin: 0 0 6px; font-size: clamp(1.75rem, 1.1rem + 1.7vw, 2.5rem); line-height: 1.1; letter-spacing: -0.025em; font-weight: 600; color: var(--lab-text-strong); }
-  header .meta { color: var(--lab-text-subtle); font-size: 13.5px; }
+  header .meta { color: var(--lab-text-subtle); font-size: 13.5px; overflow-wrap: anywhere; }
   header details.note { margin-top: 10px !important; }
   header details summary { color: var(--lab-brand-ink); font-weight: 500; }
   main { padding: 12px 28px 56px; display: flex; flex-direction: column; gap: 16px; max-width: 1440px; margin: 0 auto; }
-  section { background: var(--lab-surface); border-radius: var(--lab-radius-tile); box-shadow: 0 0 0 1px var(--lab-ring); padding: 22px 24px; }
+  section { background: var(--lab-surface); border-radius: var(--lab-radius-tile); box-shadow: 0 0 0 1px var(--lab-ring); padding: 22px 24px; min-width: 0; }
   .lab section h2 { margin: 0 0 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 1.0625rem; line-height: 1.35; letter-spacing: -0.01em; font-weight: 600; color: var(--lab-text-strong); }
   section h2 .note { margin: 0; font-size: 13px; font-weight: 400; color: var(--lab-text-subtle); }
   .section-caption { margin: -4px 0 18px; font-size: 13.5px; line-height: 1.5; color: var(--lab-text-subtle); max-width: 80ch; }
-  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .filters select, .filters input[type=text], .explorer-search, input.ctl { height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--lab-surface); color: var(--lab-text); box-shadow: inset 0 0 0 1px var(--lab-line-strong); font: 400 14px/1 var(--lab-font); }
-  .filters select { min-width: 140px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px 8px; align-items: flex-end; }
+  .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; position: relative; }
+  .fld-grow { flex: 1 1 200px; }
+  .fld-l { font-size: 12px; font-weight: 500; color: var(--lab-text-muted); }
+  .filters select, .filters input[type=search], .explorer-search, input.ctl, .ms > summary { height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--lab-surface); color: var(--lab-text); box-shadow: inset 0 0 0 1px var(--lab-line-strong); font: 400 14px/1 var(--lab-font); }
+  .filters select { min-width: 130px; }
   .filters select:focus, .filters input:focus, .explorer-search:focus, input.ctl:focus { outline: none; box-shadow: inset 0 0 0 2px var(--lab-brand); }
   .filters select option { color: #1f1c1b; background: #fff; }
+  /* multi-select as a checkbox popover (2026-11-10, replaces <select multiple size=1>) */
+  .ms { position: relative; min-width: 0; }
+  .ms-opt > span { min-width: 0; }
+  .ms > summary { display: flex; align-items: center; gap: 6px; min-width: 150px; max-width: 240px; cursor: pointer; list-style: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ms > summary::-webkit-details-marker { display: none; }
+  .ms > summary::after { content: "▾"; margin-left: auto; color: var(--lab-text-subtle); }
+  .ms > summary.has-sel { box-shadow: inset 0 0 0 2px var(--lab-brand); }
+  .ms-panel { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: max-content; min-width: 220px; max-width: min(360px, calc(100vw - 32px)); max-height: 320px; overflow: auto; padding: 8px; border-radius: 12px; background: var(--lab-surface); box-shadow: 0 0 0 1px var(--lab-ring-strong), var(--lab-shadow-float); }
+  .ms-opt { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 2px 6px; border-radius: 8px; font-size: 13.5px; cursor: pointer; overflow-wrap: anywhere; }
+  .ms-opt:hover { background: var(--lab-surface-soft); }
+  .ms-clear { margin-bottom: 4px; height: 30px; padding: 0 10px; border: 0; border-radius: 9999px; background: var(--lab-surface-soft); color: var(--lab-text-strong); font: 500 12.5px/1 var(--lab-font); cursor: pointer; }
   .rangebtns, .threshbtns { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 9999px; background: var(--lab-surface); box-shadow: 0 0 0 1px var(--lab-ring); }
   .rangebtns button, .threshbtns button { height: 30px; padding: 0 14px; border: 0; border-radius: 9999px; background: transparent; color: var(--lab-text-muted); font: 500 13px/1 var(--lab-font); cursor: pointer; }
   .rangebtns button:hover, .threshbtns button:hover { background: var(--lab-surface-soft); color: var(--lab-text-strong); }
-  .rangebtns button.active, .threshbtns button.active { background: var(--lab-ink-950); color: #fff; }
-  .clearbtn { margin-left: auto; height: 36px; padding: 0 16px; border: 0; border-radius: 9999px; background: var(--lab-surface); color: var(--lab-text-strong); box-shadow: inset 0 0 0 1px var(--lab-line-strong); font: 500 13.5px/1 var(--lab-font); cursor: pointer; }
+  .rangebtns button.active, .threshbtns button.active { background: var(--dash-on-bg); color: var(--dash-on-fg); }
+  .clearbtn { height: 36px; padding: 0 16px; border: 0; border-radius: 9999px; background: var(--lab-surface); color: var(--lab-text-strong); box-shadow: inset 0 0 0 1px var(--lab-line-strong); font: 500 13.5px/1 var(--lab-font); cursor: pointer; }
   .clearbtn:hover { background: var(--lab-brand); color: #fff; box-shadow: inset 0 0 0 1px var(--lab-brand); }
-  #filterContext { margin-top: 12px; min-height: 1em; font-size: 13px; color: var(--lab-brand-ink); }
+  #filterContext { margin-top: 12px; min-height: 1em; font-size: 13px; color: var(--lab-brand-ink); overflow-wrap: anywhere; }
   .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   @media (max-width: 900px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .stat { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-radius: var(--lab-radius-card); background: var(--lab-surface-soft); min-width: 0; }
   .stat .n { font-size: 1.5rem; line-height: 1.15; letter-spacing: -0.02em; font-weight: 600; color: var(--lab-text-strong); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
   .stat .l { font-size: 13px; font-weight: 500; color: var(--lab-text-subtle); }
-  .bar-row { display: grid; grid-template-columns: 200px 1fr 60px; gap: 12px; align-items: center; padding: 6px 0; cursor: pointer; }
-  .bar-row:hover .bar-label { color: var(--lab-brand-ink); }
-  .bar-label { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--lab-text); }
-  .bar-track { height: 8px; border-radius: 9999px; background: var(--lab-line); overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 9999px; background: var(--lab-brand); }
-  .bar-n { text-align: right; font-size: 13px; font-weight: 500; color: var(--lab-text-subtle); font-variant-numeric: tabular-nums; }
+  .bar-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) 60px; gap: 12px; align-items: center; width: 100%; padding: 6px 4px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .bar-row:hover .bar-label, .bar-row[aria-pressed="true"] .bar-label { color: var(--lab-brand-ink); }
+  .bar-row[aria-pressed="true"] { background: var(--lab-brand-soft); }
+  .bar-label { display: block; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--lab-text); }
+  .bar-track { display: block; height: 8px; border-radius: 9999px; background: var(--lab-line); overflow: hidden; }
+  .bar-fill { display: block; height: 100%; border-radius: 9999px; background: var(--lab-brand); }
+  .bar-n { display: block; text-align: right; font-size: 13px; font-weight: 500; color: var(--lab-text-subtle); font-variant-numeric: tabular-nums; }
   .grp-label { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--lab-text-strong); }
-  .grp-label + div + .grp-label, #humanBars + .grp-label { margin-top: 16px; }
-  .timeline { display: flex; align-items: flex-end; gap: 3px; height: 128px; overflow-x: auto; padding: 8px 0 4px; }
+  .grp-label ~ .grp-label { margin-top: 16px; }
+  .timeline { display: flex; align-items: flex-end; gap: 3px; height: 128px; overflow-x: auto; padding: 30px 0 4px; }
   .tl-bar { position: relative; min-width: 8px; flex: 1 0 8px; border-radius: 6px 6px 2px 2px; background: var(--lab-brand); }
   .tl-bar.edge { background: var(--lab-primary-300); }
-  .tl-bar:hover { background: var(--lab-primary-700); }
-  .tl-bar .tip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px; padding: 4px 8px; border-radius: 8px; background: var(--lab-ink-950); color: #fff; font-size: 12px; white-space: nowrap; }
-  .tl-bar:hover .tip { display: block; }
+  .tl-bar:hover, .tl-bar:focus { background: var(--lab-primary-700); }
+  .tl-bar .tip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px; padding: 4px 8px; border-radius: 8px; background: var(--lab-ink-950); color: #fff; font-size: 12px; white-space: nowrap; z-index: 5; }
+  .tl-bar:hover .tip, .tl-bar:focus .tip { display: block; }
+  #timelineReadout { min-height: 1.5em; margin-top: 4px; font-size: 13px; color: var(--lab-text-muted); }
   .acc-block { padding: 8px 0; border-bottom: 1px solid var(--lab-line); }
   .acc-block:last-child { border-bottom: 0; }
-  .acc-head { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
+  .acc-head { display: grid; grid-template-columns: 16px minmax(0, 180px) minmax(0, 1fr) 50px; align-items: center; gap: 10px; width: 100%; padding: 4px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
   .acc-head .chev { font-size: 11px; color: var(--lab-text-subtle); transition: transform var(--lab-fast) var(--lab-ease); }
-  .acc-head.open .chev { transform: rotate(90deg); }
-  .camp-list { display: none; margin-top: 6px; padding-left: 22px; }
-  .camp-list.open { display: block; }
+  .acc-head[aria-expanded="true"] .chev { transform: rotate(90deg); }
+  .camp-list { margin-top: 6px; padding-left: 22px; }
+  .camp-list[hidden] { display: none; }
+  .tbl-wrap { overflow-x: auto; max-width: 100%; }
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   th, td { max-width: 220px; padding: 10px 12px; border-bottom: 1px solid var(--lab-line); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  th { position: sticky; top: 0; background: var(--lab-surface); color: var(--lab-text-subtle); font-size: 12.5px; font-weight: 500; cursor: pointer; user-select: none; }
-  th.sorted { color: var(--lab-text-strong); }
-  th.sorted::after { content: " ▾"; color: var(--lab-brand); }
+  th { position: sticky; top: 0; background: var(--lab-surface); color: var(--lab-text-subtle); font-size: 12.5px; font-weight: 500; user-select: none; }
+  .th-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+  th[aria-sort="ascending"], th[aria-sort="descending"] { color: var(--lab-text-strong); }
+  th[aria-sort="descending"] .th-btn::after { content: " ▾"; color: var(--lab-brand); }
+  th[aria-sort="ascending"] .th-btn::after { content: " ▴"; color: var(--lab-brand); }
   tr.datarow { cursor: pointer; }
-  tr.datarow:hover { background: var(--lab-surface-soft); }
+  tr.datarow:hover, tr.datarow:focus { background: var(--lab-surface-soft); }
+  tr.datarow:focus { outline: 2px solid var(--lab-brand); outline-offset: -2px; }
   .pill { display: inline-block; padding: 1px 9px; border-radius: 9999px; border: 1px solid transparent; font-size: 12px; font-weight: 600; line-height: 1.6; background: var(--lab-surface-soft); color: var(--lab-text-muted); }
-  .pill-auto { color: var(--lab-amber-800); background: var(--lab-amber-50); border-color: var(--lab-amber-200); }
-  .pill-rule { color: var(--lab-violet-800); background: var(--lab-violet-50); border-color: var(--lab-violet-200); }
-  .pager { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; color: var(--lab-text-subtle); }
+  .pill.cat { color: color-mix(in oklab, var(--pc) var(--dash-cat-keep), #fff); border-color: color-mix(in srgb, var(--pc) 25%, transparent); background: color-mix(in srgb, var(--pc) 8%, transparent); }
+  .pill-auto { color: var(--dash-auto-fg); background: var(--dash-auto-bg); border-color: var(--dash-auto-line); }
+  .pill-rule { color: var(--dash-rule-fg); background: var(--dash-rule-bg); border-color: var(--dash-rule-line); }
+  .parsed { margin-left: 4px; padding: 0 5px; border-radius: 6px; font-size: 11px; font-weight: 500; color: var(--lab-text-muted); box-shadow: inset 0 0 0 1px var(--lab-line-strong); cursor: help; }
+  .rm-detail { display: block; margin-top: 2px; font-size: 12.5px; color: var(--lab-text-muted); }
+  .pager { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; color: var(--lab-text-subtle); }
   .pager button { height: 32px; padding: 0 14px; border: 0; border-radius: 9999px; background: var(--lab-surface); color: var(--lab-text-strong); box-shadow: inset 0 0 0 1px var(--lab-line-strong); font: 500 13px/1 var(--lab-font); cursor: pointer; }
   .pager button:disabled { opacity: 0.4; cursor: default; }
-  .explorer-search { width: 100%; margin-bottom: 12px; }
+  .explorer-search { width: 100%; }
+  .explorer-fld { margin-bottom: 12px; }
   .cfg-label { margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--lab-text-strong); }
   .cfg-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--lab-text-muted); }
+  .cfg-err { min-height: 1.2em; font-size: 12.5px; color: var(--lab-warn); }
   .cfg-check { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 13.5px; }
   input.ctl { width: 80px; height: 32px; }
+  input.ctl[aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--lab-warn); }
   .detail-overlay { display: none; position: fixed; inset: 0; z-index: 50; align-items: center; justify-content: center; padding: 16px; background: rgb(22 19 18 / 0.45); backdrop-filter: blur(2px); }
   .detail-overlay.open { display: flex; }
-  .detail-card { width: min(540px, 100%); max-height: 85vh; overflow: auto; padding: 24px; border-radius: var(--lab-radius-tile); background: var(--lab-surface); box-shadow: 0 0 0 1px var(--lab-ring), var(--lab-shadow-lift); }
+  .detail-card { width: min(600px, 100%); max-height: 85vh; overflow: auto; padding: 24px; border-radius: var(--lab-radius-tile); background: var(--lab-surface); box-shadow: 0 0 0 1px var(--lab-ring), var(--lab-shadow-lift); }
   .detail-card h3 { margin: 0 0 16px; font-size: 1.125rem; font-weight: 600; color: var(--lab-text-strong); }
-  .detail-card dl { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; margin: 0; font-size: 14px; }
+  .detail-card dl { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px 12px; margin: 0; font-size: 14px; }
   .detail-card dt { color: var(--lab-text-subtle); font-size: 13px; }
   .detail-card dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-  .detail-card .close { float: right; cursor: pointer; color: var(--lab-text-subtle); }
+  .detail-card dd.pre { white-space: pre-wrap; font-family: var(--lab-font-code); font-size: 12.5px; }
+  .detail-card .close { float: right; width: 36px; height: 36px; border: 0; border-radius: 9999px; background: transparent; color: var(--lab-text-muted); font-size: 16px; cursor: pointer; }
+  .detail-card .close:hover { background: var(--lab-surface-soft); }
   .note { margin-top: 8px; font-size: 13px; color: var(--lab-text-subtle); }
   .warn-box { margin: 10px 0 4px; padding: 10px 14px; border-radius: 12px; background: var(--lab-watch-soft); color: var(--lab-watch); font-size: 13.5px; }
   .empty { padding: 20px 0; text-align: center; color: var(--lab-text-subtle); }
@@ -2457,37 +2497,45 @@ body.lab {
     .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .stat { padding: 12px 14px; }
     .stat .n { font-size: 1.25rem; }
-    .bar-row { grid-template-columns: 110px 1fr 44px; gap: 10px; }
-    .filters select, .filters input[type=text] { flex: 1 1 140px; min-width: 0; }
-    .clearbtn { margin-left: 0; }
+    .bar-row { grid-template-columns: 110px minmax(0, 1fr) 44px; gap: 10px; }
+    .acc-head { grid-template-columns: 16px minmax(0, 110px) minmax(0, 1fr) 44px; }
+    .fld { flex: 1 1 140px; }
+    .ms > summary { max-width: none; min-width: 0; }
+    .ms-panel { position: static; width: 100%; min-width: 0; max-width: none; margin-top: 4px; }
+    .lab details:not(.ms) > summary { padding: 12px 0; }
+    .filters select { min-width: 0; width: 100%; }
     th, td { max-width: 150px; }
-    .detail-card dl { grid-template-columns: 1fr; gap: 2px; }
+    .detail-card { padding: 18px; }
+    .detail-card dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
     .detail-card dd { margin-bottom: 8px; }
   }
-  /* Print / "Save as PDF". The screen layout clips: the Explorer scrolls
-     sideways and its cells are single-line with an ellipsis, so on paper the
-     right-hand columns (old/new value, matches, source) were simply cut off.
-     On paper the table gets the full landscape width and its cells wrap. */
+  /* 44px tap targets on phones and touch screens (2026-11-10, C-4/F-11) */
+  @media (max-width: 640px), (pointer: coarse) {
+    .filters select, .filters input[type=search], .explorer-search, .ms > summary, .clearbtn, .rangebtns button, .threshbtns button, .pager button, .detail-card .close, .ms-clear { min-height: 44px; }
+    .ms-opt, .bar-row, .acc-head { min-height: 44px; }
+    .th-btn { min-height: 44px; }
+    tr.datarow td { padding-top: 13px; padding-bottom: 13px; }
+  }
+  /* Print / "Save as PDF": the table gets the full landscape width and its
+     cells wrap. 2026-11-10 (C-9): no break-inside:avoid on whole sections
+     (pushed a tall section to page 2, leaving page 1 mostly blank); headers never break mid-word. */
   @media print {
     @page { size: A4 landscape; margin: 10mm; }
     header { padding: 0 0 6px; }
-    /* block, not the screen's flex column: Chrome won't break a page between
-       flex items cleanly and pushed whole sections to the next page */
     main { display: block; padding: 0; }
-    /* a real border, not the screen's 1px ring shadow: a shadow isn't part
-       of the box, so its top hairline printed on the PREVIOUS page */
-    section { margin: 0 0 10px; padding: 12px 14px; border: 1px solid #dfe3ec; box-shadow: none; break-inside: avoid; }
-    .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    section { margin: 0 0 10px; padding: 12px 14px; border: 1px solid #dfe3ec; box-shadow: none; break-inside: auto; }
+    .lab section h2 { break-after: avoid; }
+    .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; break-inside: avoid; }
+    .stat, .bar-row, .acc-block, .tl-bar { break-inside: avoid; }
     .stat { padding: 10px 12px; }
     .stat .n { font-size: 1.1rem; overflow-wrap: anywhere; }
-    section:last-of-type { break-inside: auto; }
-    .filters, .explorer-search, .pager button, #detailOverlay { display: none !important; }
+    .filters, .explorer-fld, .pager button, #detailOverlay, .threshbtns, #ruleMatchesConfig { display: none !important; }
     #filterContext { margin: 0; }
     .timeline { overflow: visible; }
-    section > div[style*="overflow-x"] { overflow: visible !important; }
+    .tbl-wrap { overflow: visible !important; }
     table { font-size: 9.5px; table-layout: auto; }
     th, td { max-width: none; padding: 4px 6px; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; vertical-align: top; }
-    th { position: static; font-size: 9px; }
+    th { position: static; font-size: 9px; white-space: nowrap; overflow-wrap: normal; word-break: keep-all; hyphens: none; }
     thead { display: table-header-group; }
     tr { break-inside: avoid; }
     .pill { padding: 0 6px; font-size: 9px; white-space: nowrap; }
@@ -2503,10 +2551,8 @@ body.lab {
   <div id="apiCaveat"></div>
   <!-- Permanent, run-independent disclosure — unlike apiCaveat above (which
        only fires for conditions specific to THIS run), this always shows.
-       Borrowed idea (2026-08-18): a public Google Ads audit skill always
-       ships a "what this audit can't see" footer regardless of that run's
-       findings. Adapted here to stay strictly factual, no dollar/quality
-       claims — this tool doesn't judge, so the disclosure doesn't either. -->
+       Strictly factual, no dollar/quality claims: this tool doesn't judge,
+       so the disclosure doesn't either. -->
   <details class="note" style="margin-top:6px;">
     <summary style="cursor:pointer;">What this report can't do</summary>
     <ul style="margin:6px 0 0 18px;padding:0;">
@@ -2518,40 +2564,45 @@ body.lab {
   </details>
 </header>
 <main>
-  <section id="filtersSection">
-    <h2>Filters</h2>
+  <section id="filtersSection" aria-labelledby="hFilters">
+    <h2 id="hFilters">Filters</h2>
+    <!-- 2026-11-10 (C-2/F-12): every control has a visible label; multi-selects are checkbox popovers -->
     <div class="filters">
-      <select id="fAccount" multiple size="1"></select>
-      <select id="fCampaign" multiple size="1"></select>
-      <select id="fUser" multiple size="1"></select>
-      <select id="fActor" size="1">
-        <option value="">All actors</option>
-        <option value="human">Human</option>
-        <option value="automation">Automation</option>
-        <option value="unknown">Unknown</option>
-      </select>
-      <select id="fCategory" multiple size="1"></select>
-      <select id="fOperation" multiple size="1"></select>
-      <select id="fSource" multiple size="1"></select>
-      <select id="fRuleMatch" size="1">
-        <option value="">All changes</option>
-        <option value="__matched__">Matched a rule</option>
-      </select>
-      <div class="rangebtns" id="rangeBtns">
-        <button data-range="all" class="active">All</button>
-        <button data-range="30">30d</button>
-        <button data-range="7">7d</button>
-        <button data-range="1">Last 24h</button>
-      </div>
-      <input type="text" id="fSearch" placeholder="Search changes…" style="min-width:200px;">
-      <button class="clearbtn" id="clearFilters">Clear filters</button>
+      <div class="fld"><span class="fld-l" id="lAccount">Account</span><details class="ms" id="fAccount" data-state="accounts" data-all="All accounts"><summary aria-labelledby="lAccount fAccountSum"><span id="fAccountSum">All accounts</span></summary><div class="ms-panel" role="group" aria-labelledby="lAccount"></div></details></div>
+      <div class="fld"><span class="fld-l" id="lCampaign">Campaign</span><details class="ms" id="fCampaign" data-state="campaigns" data-all="All campaigns"><summary aria-labelledby="lCampaign fCampaignSum"><span id="fCampaignSum">All campaigns</span></summary><div class="ms-panel" role="group" aria-labelledby="lCampaign"></div></details></div>
+      <div class="fld"><span class="fld-l" id="lUser">User</span><details class="ms" id="fUser" data-state="users" data-all="All users"><summary aria-labelledby="lUser fUserSum"><span id="fUserSum">All users</span></summary><div class="ms-panel" role="group" aria-labelledby="lUser"></div></details></div>
+      <label class="fld"><span class="fld-l">Actor type</span>
+        <select id="fActor" aria-label="Actor type">
+          <option value="">All actors</option>
+          <option value="human">Human</option>
+          <option value="automation">Automation</option>
+          <option value="unknown">Unknown</option>
+        </select></label>
+      <div class="fld"><span class="fld-l" id="lCategory">Category</span><details class="ms" id="fCategory" data-state="categories" data-all="All categories"><summary aria-labelledby="lCategory fCategorySum"><span id="fCategorySum">All categories</span></summary><div class="ms-panel" role="group" aria-labelledby="lCategory"></div></details></div>
+      <div class="fld"><span class="fld-l" id="lOperation">Operation</span><details class="ms" id="fOperation" data-state="operations" data-all="All types"><summary aria-labelledby="lOperation fOperationSum"><span id="fOperationSum">All types</span></summary><div class="ms-panel" role="group" aria-labelledby="lOperation"></div></details></div>
+      <div class="fld"><span class="fld-l" id="lSource">Source</span><details class="ms" id="fSource" data-state="sources" data-all="All sources"><summary aria-labelledby="lSource fSourceSum"><span id="fSourceSum">All sources</span></summary><div class="ms-panel" role="group" aria-labelledby="lSource"></div></details></div>
+      <label class="fld"><span class="fld-l">Rule match</span>
+        <select id="fRuleMatch" aria-label="Rule match filter">
+          <option value="">All changes</option>
+          <option value="__matched__">Matched a rule</option>
+        </select></label>
+      <div class="fld"><span class="fld-l" id="lRange">Date range</span>
+        <div class="rangebtns" id="rangeBtns" role="group" aria-labelledby="lRange">
+          <button type="button" data-range="all" class="active" aria-pressed="true">All</button>
+          <button type="button" data-range="30" aria-pressed="false">30d</button>
+          <button type="button" data-range="7" aria-pressed="false">7d</button>
+          <button type="button" data-range="1" aria-pressed="false">Last 24h</button>
+        </div></div>
+      <label class="fld"><span class="fld-l">Range ends at</span>
+        <select id="fAnchor" aria-label="Date range ends at">
+          <option value="data">Newest change in the data</option>
+          <option value="today">Today</option>
+        </select></label>
+      <label class="fld fld-grow"><span class="fld-l">Search</span><input type="search" id="fSearch" aria-label="Search changes" placeholder="Campaign, user, summary text…"></label>
+      <div class="fld"><span class="fld-l" aria-hidden="true">&nbsp;</span><button type="button" class="clearbtn" id="clearFilters">Clear filters</button></div>
     </div>
-    <!-- Borrowed idea (2026-08-18): a public dashboard-generation skill's
-         convention of a stated filter-context line. Only meaningful for us
-         because our filters are LIVE (unlike that skill's frozen-snapshot
-         default, kept deliberately here — see AUDIT round-3 discussion) —
-         this line exists so a screenshot mid-filter is self-explanatory. -->
-    <div id="filterContext"></div>
+    <!-- A stated filter-context line, so a screenshot mid-filter is self-explanatory. -->
+    <div id="filterContext" aria-live="polite"></div>
   </section>
   <section id="summarySection">
     <h2>Summary</h2>
@@ -2559,30 +2610,31 @@ body.lab {
     <div class="summary-grid" id="summaryGrid"></div>
   </section>
   <section>
-    <h2>Activity Timeline <span class="note">(UTC day buckets)</span></h2>
-    <div class="section-caption">Bar height is relative to the busiest day shown — hover a bar for its exact date and count.</div>
-    <div class="timeline" id="timeline"></div>
+    <h2>Activity Timeline <span class="note" id="timelineBasis">(day buckets)</span></h2>
+    <div class="section-caption">Bar height is relative to the busiest day shown. Hover, tap or tab to a bar for its exact date and count.</div>
+    <div class="timeline" id="timeline" role="list" aria-label="Changes per day"></div>
+    <div id="timelineReadout" aria-live="polite"></div>
   </section>
   <section>
     <h2>User Activity</h2>
-    <div class="section-caption">Split by actor type — human (named user), automation (script/rule/recommendation), or unknown (no identity in the source data).</div>
+    <div class="section-caption">Split by actor type — human (named user), automation (script/rule/recommendation), or unknown (no identity in the source data). Select a bar to filter by it.</div>
     <div id="userActivity"></div>
   </section>
   <section>
     <h2>Account / Campaign Activity</h2>
-    <div class="section-caption">Each account expands to the campaigns it contains, ranked by number of changes.</div>
+    <div class="section-caption">Each account expands to the campaigns it contains, ranked by number of changes. Select a campaign to filter by it.</div>
     <div id="accountActivity"></div>
   </section>
   <section>
     <h2>Category Distribution</h2>
-    <div class="section-caption">Categories come from rule matches against resource type, field, and operation. "Other" means no rule matched yet — see coverage.txt.</div>
+    <div class="section-caption">Categories come from rule matches against resource type, field, operation and summary text. "Other" means no rule matched yet — see coverage.txt.</div>
     <div id="categoryDist"></div>
   </section>
   <section>
     <h2>Rule Matches</h2>
     <div class="section-caption">Deterministic, user-adjustable rules — a match means the change crossed a threshold you set, not that it was good or bad. Off by default; every match always shows the exact number and rule next to it.</div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px;">
-      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;min-height:36px;">
         <input type="checkbox" id="ruleMatchesToggle"> Rule-based change highlighting
       </label>
       <details id="ruleMatchesConfig">
@@ -2601,38 +2653,38 @@ body.lab {
   <section>
     <h2>Campaign Last Changes</h2>
     <div class="section-caption">Lists only campaigns with at least one change in this export. A campaign that doesn't appear in the export is not listed: it may have had no change in the export's date range, or may not exist — this report can't tell which. "Days since" is counted to the current time in your browser and under the current filters, not to the moment this file was generated.</div>
-    <div class="threshbtns" id="threshBtns" style="margin-bottom:10px;">
-      <button data-min="0" class="active">All</button>
-      <button data-min="7">7+ days</button>
-      <button data-min="14">14+ days</button>
-      <button data-min="30">30+ days</button>
-      <button data-min="60">60+ days</button>
+    <div class="threshbtns" id="threshBtns" role="group" aria-label="Minimum days since last change" style="margin-bottom:10px;">
+      <button type="button" data-min="0" class="active" aria-pressed="true">All</button>
+      <button type="button" data-min="7" aria-pressed="false">7+ days</button>
+      <button type="button" data-min="14" aria-pressed="false">14+ days</button>
+      <button type="button" data-min="30" aria-pressed="false">30+ days</button>
+      <button type="button" data-min="60" aria-pressed="false">60+ days</button>
     </div>
     <div id="untouched"></div>
   </section>
   <section>
     <h2>Change Explorer</h2>
-    <div class="section-caption">Click any row for full before/after detail. Click a column header to sort by it.</div>
-    <input type="text" class="explorer-search" id="explorerSearch" placeholder="Search within Explorer…">
-    <div style="overflow-x:auto;">
+    <div class="section-caption" id="explorerCaption">Select any row (click, or Tab then Enter) for full before/after detail. Select a column header to sort by it.</div>
+    <label class="fld explorer-fld"><span class="fld-l">Search within Explorer</span><input type="search" class="explorer-search" id="explorerSearch" aria-label="Search within Explorer" placeholder="Same search as the filter above…"></label>
+    <div class="tbl-wrap" tabindex="0" role="region" aria-label="Change Explorer table">
     <table id="explorerTable">
       <thead><tr>
-        <th data-key="timestamp_iso">Date</th><th data-key="user_name">User</th><th data-key="account_name">Account</th>
-        <th data-key="campaign_name">Campaign</th><th data-key="ad_group_name">Ad Group</th><th data-key="category">Category</th>
-        <th data-key="field_name">Change</th><th data-key="old_value">Old Value</th><th data-key="new_value">New Value</th><th>Matches</th><th data-key="source">Source</th>
+        <th data-key="timestamp_iso" aria-sort="descending"><button type="button" class="th-btn">Date</button></th><th data-key="user_name"><button type="button" class="th-btn">User</button></th><th data-key="account_name"><button type="button" class="th-btn">Account</button></th>
+        <th data-key="campaign_name"><button type="button" class="th-btn">Campaign</button></th><th data-key="ad_group_name"><button type="button" class="th-btn">Ad Group</button></th><th data-key="category"><button type="button" class="th-btn">Category</button></th>
+        <th data-key="field_name"><button type="button" class="th-btn">Change</button></th><th data-key="raw_summary"><button type="button" class="th-btn">Summary</button></th><th data-key="old_value"><button type="button" class="th-btn">Old Value</button></th><th data-key="new_value"><button type="button" class="th-btn">New Value</button></th><th>Matches</th><th data-key="source"><button type="button" class="th-btn">Source</button></th>
       </tr></thead>
       <tbody id="explorerBody"></tbody>
     </table>
     </div>
     <div class="pager">
-      <button id="pagerPrev">Prev</button><span id="pagerInfo"></span><button id="pagerNext">Next</button>
+      <button type="button" id="pagerPrev">Prev</button><span id="pagerInfo" aria-live="polite"></span><button type="button" id="pagerNext">Next</button>
     </div>
   </section>
 </main>
 <div class="detail-overlay" id="detailOverlay">
-  <div class="detail-card">
-    <span class="close" id="detailClose">✕</span>
-    <h3>Change Detail</h3>
+  <div class="detail-card" id="detailCard" role="dialog" aria-modal="true" aria-labelledby="detailTitle" tabindex="-1">
+    <button type="button" class="close" id="detailClose" aria-label="Close detail">✕</button>
+    <h3 id="detailTitle">Change Detail</h3>
     <dl id="detailBody"></dl>
   </div>
 </div>
@@ -2654,43 +2706,136 @@ if(DASH_DATA && DASH_DATA.changes_packed){
   DASH_DATA.changes = unpackChanges(DASH_DATA.changes_packed);
   delete DASH_DATA.changes_packed;
 }
-// Fixed 2026-08-18: campaign/account/user/field names come from the source
-// file, not from a closed set — nothing here was escaped before, so a
-// campaign named e.g. "<img src=x onerror=...>" would have executed. Every
-// place below that interpolates source-derived text into innerHTML now goes
-// through this.
+// Every place that interpolates source-derived text into innerHTML goes
+// through this (campaign/account/user names come from the file, not a closed set).
 function escapeHtml(s){
   if (s === null || s === undefined) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-// Fixed 2026-08-19 (2nd audit): mirrors the Python-side identity() helpers —
-// prefer the *_id field when present, fall back to name only when a source
-// never provides one. Two different campaign_ids sharing a display name (or
-// a campaign renamed mid-window) previously collapsed into one bar/entry
-// here even after the Python side was fixed, because this file used
-// c.campaign_name directly everywhere.
+// Identity = *_id when present, else the name (mirrors the Python identity() helpers).
 function accountIdentity(c){ return c.account_id || c.account_name; }
 function campaignIdentity(c){ return c.campaign_id || c.campaign_name; }
 function adGroupIdentity(c){ return c.ad_group_id || c.ad_group_name; }
 function userIdentity(c){ return c.user_email || c.user_name; }
-// Distinct accent per category — purely a visual identity aid (which pill is
-// which at a glance), not a good/bad judgment; every category gets a color,
-// none is "better." "Other" stays neutral on purpose — it's not a real
-// category, coloring it like one would misrepresent it as such.
-// Lab UI hues (the site's ramps), taken at the 700 step so a pill's text
-// stays readable on white paper.
+// 2026-11-10: rows with no account/campaign identity get this key, so a drill-down on them filters exactly.
+const NONE = '__none__';
+// One key per actor, human / automation / unknown alike (F-8: Unknown is a real group).
+function actorKey(c){
+  if(c.actor_type==='human'){ const u = userIdentity(c); return u ? 'h:'+u : 'u:'; }
+  if(c.actor_type==='automation') return 'a:'+(c.client_type||c.user_name||'Automation');
+  return 'u:';
+}
+function actorLabel(c){
+  const k = actorKey(c);
+  if(k.startsWith('h:')) return c.user_name||c.user_email;
+  if(k.startsWith('a:')) return k.slice(2)+' (automation)';
+  return 'Unknown (no identity in source)';
+}
+// Turkish-aware, accent-insensitive fold (F-5/B-2): İ/I/ı -> i, ş -> s, ğ -> g, NFD marks stripped. Used on both sides.
+function fold(s){
+  if(s===null || s===undefined) return '';
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/ı/g,'i');
+}
+function rowHaystack(c){
+  if(c._hay===undefined){
+    c._hay = fold([c.campaign_name,c.account_name,c.user_name,c.user_email,c.category,c.subcategory,
+      c.field_name,c.old_value,c.new_value,c.ad_group_name,c.operation,c.source,c.resource_type,
+      c.client_type,c.change_id,c.raw_summary,c.value_unit,c.currency].filter(v=>v!==null && v!==undefined).join(' '));
+  }
+  return c._hay;
+}
+function firstLine(s){
+  if(!s) return '';
+  const line = String(s).split(/\r?\n/).map(x=>x.trim()).find(Boolean);
+  return line || '';
+}
+// ---- time ------------------------------------------------------------
+// 2026-11-10 (F-7): ranges compare on timestamp_utc, never on the viewer's
+// clock zone. A naive timestamp (no timezone known) is read as UTC so the
+// result is the same on every machine.
+function rowTime(c){
+  if(c._t!==undefined) return c._t;
+  let t = NaN;
+  if(c.timestamp_utc) t = Date.parse(c.timestamp_utc);
+  if(isNaN(t) && c.timestamp_iso){
+    const s = String(c.timestamp_iso);
+    t = Date.parse(/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(s) ? s : s+'Z');
+  }
+  c._t = isNaN(t) ? null : t;
+  return c._t;
+}
+let _dataEnd = {rows:null, v:null};
+function dataEndTime(){
+  const rows = (DASH_DATA && DASH_DATA.changes) || [];
+  if(_dataEnd.rows!==rows){
+    let m = null;
+    for(const c of rows){ const t = rowTime(c); if(t!=null && (m==null || t>m)) m = t; }
+    _dataEnd = {rows, v:m};
+  }
+  return _dataEnd.v;
+}
+function rangeAnchor(){ return state.anchor==='today' ? Date.now() : dataEndTime(); }
+function withinRange(c){
+  if(state.range==='all') return true;
+  const t = rowTime(c);
+  if(t==null) return false;
+  const a = rangeAnchor();
+  if(a==null) return true;
+  return t >= a - parseFloat(state.range)*86400000 && t <= a;
+}
+// Dates show the source's own wall-clock time (account-local when a timezone
+// is known), never re-zoned to the viewer. dd.mm.yyyy hh:mm ('tr-TR') for
+// Turkish data or a Turkish browser; otherwise the browser's locale (C-8).
+let UI_LOCALE;
+function detectLocale(){
+  try { if(typeof navigator!=='undefined' && /^tr\b/i.test(navigator.language||'')) return 'tr-TR'; } catch(e){}
+  const rows = ((DASH_DATA && DASH_DATA.changes) || []).slice(0, 500);
+  const tr = rows.filter(c=>/[ğışĞŞİ]|değiştirildi|eklendi|kaldırıldı/.test((c.raw_summary||'')+(c.operation||''))).length;
+  return rows.length && tr/rows.length > 0.2 ? 'tr-TR' : undefined;
+}
+function fmtWall(iso, withTime){
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(iso||'');
+  if(!m) return iso ? String(iso) : '—';
+  const d = new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0)));
+  const opt = {timeZone:'UTC', day:'2-digit', month:'2-digit', year:'numeric'};
+  if(withTime && m[4]!==undefined){ opt.hour='2-digit'; opt.minute='2-digit'; if(UI_LOCALE==='tr-TR') opt.hour12=false; }
+  try { return new Intl.DateTimeFormat(UI_LOCALE, opt).format(d); } catch(e){ return String(iso); }
+}
+function fmtTs(c){ return c.timestamp_iso ? fmtWall(c.timestamp_iso, true) : (c.timestamp || '—'); }
+function fmtEpochDate(t){ return t==null ? '—' : fmtWall(new Date(t).toISOString(), false); }
+// ---- values ----------------------------------------------------------
+// Neutral display, no good/bad colouring. Units: micros-converted amounts
+// show "display CUR (raw: …)"; a value_unit like "%" or "₺" is appended.
+function valueParts(c, which){
+  const raw = c[which+'_value'], disp = c[which+'_value_display'], unit = c.value_unit, cur = c.currency;
+  if(raw===null || raw===undefined || raw==='') return null;
+  const s = String(raw);
+  const fromMicros = disp!==null && disp!==undefined && isFinite(Number(s)) && Number(s)!==0 && Math.abs(Number(s) - Number(disp)*1e6) < 0.5;
+  if(unit && disp!==null && disp!==undefined && (/micros/i.test(unit) || (cur && unit===cur && fromMicros))){
+    return {main: `${disp}${cur ? ' '+cur : ''}`, raw: s};
+  }
+  if(unit && !/micros/i.test(unit) && !s.includes(unit)) return {main: unit==='%' ? s+'%' : `${s} ${unit}`};
+  return {main: s};
+}
+function valueText(c, which){ const p = valueParts(c, which); return p ? p.main + (p.raw ? ` (raw: ${p.raw})` : '') : ''; }
+const PARSED_TIP = 'Read from the change summary text, not from a structured field';
+function valueCellHtml(c, which){
+  const p = valueParts(c, which);
+  if(!p) return '—';
+  return escapeHtml(p.main) + (p.raw ? ` <span class="note" style="margin:0;">(raw: ${escapeHtml(p.raw)})</span>` : '')
+    + (c.value_confidence==='parsed_from_summary' ? `<span class="parsed" title="${PARSED_TIP}">parsed</span>` : '');
+}
+// Distinct accent per category — a visual identity aid, never a judgment.
+// "Other" stays neutral on purpose. Dark mode lightens the hue via CSS (--dash-cat-keep).
 const CATEGORY_COLORS = {
   Budget:'#1c4dc9', Bidding:'#7008e7', Keyword:'#00776e', Ad:'#c53c00', Asset:'#b75000',
   Targeting:'#c20039', Audience:'#0069a4', Status:'#007956', Campaign:'#432dd7',
   AdGroup:'#007492', Conversion:'#953d00', Feed:'#005f46', Account:'#5d0ec0',
 };
-function categoryPillStyle(cat){
+function categoryPillAttrs(cat){
   const c = CATEGORY_COLORS[cat];
-  return c ? ` style="color:${c};border-color:${c}33;background:${c}12;"` : '';
+  return c ? ` class="pill cat" style="--pc:${c};"` : ' class="pill"';
 }
-// General-purpose accent cycle for things with no fixed category identity —
-// KPI cards, per-account bars. Same visual-only rationale as CATEGORY_COLORS.
-// Lab UI series order; bars that carry no category draw in the first.
 const HUES = ['#2f6bff','#8d54ff','#00baa7','#f99c00','#ff2357','#00a5ef'];
 function barFillStyle(color, pct){
   return `width:${Math.max(2,pct)}%;background:${color};`;
@@ -2698,73 +2843,56 @@ function barFillStyle(color, pct){
 // =====================================================================
 // RULE MATCHES (V1: Magnitude + State) — deterministic, user-adjustable
 // thresholds. A match means "this row crossed a value you set," never a
-// verdict on whether the change was good, bad, or risky — no severity
-// labels, no danger-red color, and every match always renders with the
-// exact number and rule next to it so the reader judges for themselves.
-// Computed entirely client-side from fields already in every row (like
-// Category Distribution / User Activity / etc. already are) — no CLI flag,
-// no re-run needed to change a threshold. Off by default.
+// verdict; every match renders with the exact number and rule next to it.
+// Matched on category/subcategory (resource_type/field_name are null for
+// text-summary sources, category/subcategory are always resolved).
 // =====================================================================
-// Matched on category/subcategory, not field_name/resource_type — those two
-// are only populated for structured (field-column) sources. A text-summary
-// source (the Turkish legacy format, and the real native Google Ads UI
-// "Change history" CSV export — see docs/DOGFOODING-NOTES.md) leaves both
-// null, but categorize_changes() always resolves category/subcategory via
-// one path or the other, so it's the one signal reliable across every shape.
 const MAGNITUDE_RULES = [
   { id:'budget_magnitude', label:'Budget change', defaultPct:50, match:c=>c.subcategory==='Budget changed' },
   { id:'target_cpa_magnitude', label:'Target CPA change', defaultPct:30, match:c=>c.subcategory==='Target CPA' },
   { id:'target_roas_magnitude', label:'Target ROAS change', defaultPct:30, match:c=>c.subcategory==='Target ROAS' },
   { id:'bid_magnitude', label:'Bid/CPC change', defaultPct:50, match:c=>c.subcategory==='Bid changed' },
 ];
-// PAUSED->ENABLED deliberately not included: pausing stops something that
-// was running (a structural event worth surfacing), re-enabling resumes
-// normal operation (less surprising) — an intentional asymmetry, not a gap.
+// Twins of the Python summary_text_rules that make a pause/enable campaign-level
+// (same patterns, case-sensitive, anchored at the start like re.search("^...")). Keep in sync.
+const CAMPAIGN_PAUSED_TEXT = [/^\d+ campaigns? paused/, /^\d+ kampanya duraklat/];
+const CAMPAIGN_ENABLED_TEXT = [/^\d+ campaigns? active/, /^\d+ kampanya etkin/];
+function isCampaignResource(rt){ return /^(campaign|kampanya)$/i.test(String(rt||'').trim()); }
+// Legacy "Durum Değişti: A -> B" carries old/new only in the text (F-1/B-16).
+function statusFact(c, fallback){
+  if(c.old_value && c.new_value) return `${c.old_value} → ${c.new_value}`;
+  const m = /^Durum De[ğg]i[şs]ti:\s*(.+?)\s*->\s*(.+?)\s*$/m.exec(c.raw_summary||'');
+  return m ? `${m[1]} → ${m[2]}` : fallback;
+}
+// PAUSED->ENABLED is off by default (campaign_enabled), an intentional asymmetry.
 const STATE_RULES = [
-  // 'Paused' is shared by campaign/ad-group/keyword pause events in a
-  // text-summary source (no resource_type to key off), so when resource_type
-  // is genuinely absent this falls back to the same raw_summary phrasing
-  // categorize_changes() itself uses to tell them apart server-side.
   { id:'campaign_paused', label:'Campaign paused', defaultOn:true, match:c=>{
       if(c.subcategory!=='Paused') return false;
-      if(c.resource_type) return c.resource_type==='CAMPAIGN';
+      if(c.resource_type) return isCampaignResource(c.resource_type);
       const s = c.raw_summary||'';
-      // Turkish native UI export alternative — mirrors the "^\d+ kampanya
-      // duraklat" summary_text_rule (Python) that assigns this subcategory
-      // in the first place; keep both in sync if either wording changes.
-      return (/campaigns?\s+paused/i.test(s) && !/ad\s*groups?|match\s+keywords?/i.test(s))
-        || /^\d+\s*kampanya\s+duraklat/i.test(s);
+      return CAMPAIGN_PAUSED_TEXT.some(re=>re.test(s));
     },
-    // Text-summary rows (no explicit before/after column) don't carry
-    // old_value/new_value for this phrasing — fall back to a still-factual
-    // statement rather than a fabricated ENABLED->PAUSED that wasn't stated.
-    fact:c=> (c.old_value && c.new_value) ? `${c.old_value} → ${c.new_value}` : 'status → PAUSED' },
+    fact:c=> statusFact(c, 'status → PAUSED') },
   { id:'campaign_removed', label:'Campaign removed', defaultOn:true, match:c=> c.subcategory==='Campaign removed',
     fact:c=> `Operation: ${c.operation||'REMOVE'}` },
   { id:'ad_group_removed', label:'Ad group removed', defaultOn:true, match:c=> c.subcategory==='Ad group removed',
     fact:c=> `Operation: ${c.operation||'REMOVE'}` },
-  // Default OFF, unlike the other three — "never judge" means pausing isn't
-  // inherently more watch-worthy than re-enabling (a dormant campaign coming
-  // back can matter just as much); this one's opt-in rather than opt-out so
-  // the feature itself doesn't make that call for the user (2026-08-18,
-  // 5th audit round — noted, not applied at the time; applied now).
   { id:'campaign_enabled', label:'Campaign enabled', defaultOn:false, match:c=>{
       if(c.subcategory!=='Enabled') return false;
-      if(c.resource_type) return c.resource_type==='CAMPAIGN';
+      if(c.resource_type) return isCampaignResource(c.resource_type);
       const s = c.raw_summary||'';
-      // Turkish native UI export alternative — mirrors the "^\d+ kampanya
-      // etkin" summary_text_rule (Python) that assigns this subcategory in
-      // the first place; keep both in sync if either wording changes.
-      return (/campaigns?\s+active/i.test(s) && !/ad\s*groups?/i.test(s))
-        || /^\d+\s*kampanya\s+etkin/i.test(s);
+      return CAMPAIGN_ENABLED_TEXT.some(re=>re.test(s));
     },
-    fact:c=> (c.old_value && c.new_value) ? `${c.old_value} → ${c.new_value}` : 'status → ENABLED' },
+    fact:c=> statusFact(c, 'status → ENABLED') },
 ];
-const ruleState = {
-  enabled: false,
-  pct: Object.fromEntries(MAGNITUDE_RULES.map(r=>[r.id, r.defaultPct])),
-  stateOn: Object.fromEntries(STATE_RULES.map(r=>[r.id, r.defaultOn])),
-};
+function defaultRuleState(){
+  return {
+    enabled: false,
+    pct: Object.fromEntries(MAGNITUDE_RULES.map(r=>[r.id, r.defaultPct])),
+    stateOn: Object.fromEntries(STATE_RULES.map(r=>[r.id, r.defaultOn])),
+  };
+}
+const ruleState = defaultRuleState();
 function computeRuleMatches(c){
   const out = [];
   for(const r of MAGNITUDE_RULES){
@@ -2775,7 +2903,7 @@ function computeRuleMatches(c){
     const threshold = ruleState.pct[r.id];
     if(Math.abs(pctChange) >= threshold){
       const sign = pctChange>=0 ? '+' : '';
-      out.push({ id:r.id, label:r.label, detail:`${sign}${pctChange.toFixed(0)}% · rule: ≥±${threshold}%` });
+      out.push({ id:r.id, label:r.label, pct:pctChange, detail:`${sign}${pctChange.toFixed(0)}% · rule: ≥±${threshold}%` });
     }
   }
   for(const r of STATE_RULES){
@@ -2787,88 +2915,51 @@ function computeRuleMatches(c){
 function ruleMatchPillsHtml(matches){
   return matches.map(m=>`<span class="pill pill-rule" title="${escapeHtml(m.detail)}">${escapeHtml(m.label)}</span>`).join(' ');
 }
-const state = { accounts:new Set(), campaigns:new Set(), users:new Set(), actor:'', categories:new Set(), operations:new Set(), sources:new Set(), ruleMatch:'', range:'all', search:'', page:1, pageSize:200, sortKey:'timestamp_iso', sortDir:-1 };
-function uniqSorted(arr){ return [...new Set(arr)].filter(Boolean).sort(); }
-function fillMultiSelect(el, values, allLabel){
-  el.innerHTML = '';
-  const opt0 = document.createElement('option'); opt0.value=''; opt0.textContent = allLabel; el.appendChild(opt0);
-  values.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; el.appendChild(o); });
+// F-13: thresholds must be a number in (0, PCT_MAX]; anything else keeps the last valid value and says so.
+const PCT_MAX = 1000;
+function parseThreshold(v){
+  const s = String(v===null || v===undefined ? '' : v).trim().replace(',', '.');
+  if(s==='') return {ok:false, msg:'Enter a number'};
+  const n = Number(s);
+  if(!isFinite(n)) return {ok:false, msg:'Not a number'};
+  if(n<=0) return {ok:false, msg:'Must be greater than 0'};
+  if(n>PCT_MAX) return {ok:false, msg:`At most ${PCT_MAX}`};
+  return {ok:true, value:n};
 }
-// Fixed 2026-08-19 (2nd audit): value = identity (id-preferred), label =
-// display name — so two different ids sharing a display name filter as the
-// two distinct things they are, not one merged option.
-function fillMultiSelectPairs(el, pairs, allLabel){
-  el.innerHTML = '';
-  const opt0 = document.createElement('option'); opt0.value=''; opt0.textContent = allLabel; el.appendChild(opt0);
-  const seen = new Set();
-  pairs.filter(Boolean).sort((a,b)=> (a[1]||'').localeCompare(b[1]||'')).forEach(([v,l])=>{
-    if(seen.has(v)) return; seen.add(v);
-    const o=document.createElement('option'); o.value=v; o.textContent=l; el.appendChild(o);
-  });
+// F-6: turning highlighting off also drops the rule filter, so no hidden filter stays active.
+function setRuleHighlighting(on){
+  ruleState.enabled = !!on;
+  if(!ruleState.enabled) state.ruleMatch = '';
+  state.page = 1;
 }
-function initFilters(){
-  fillMultiSelectPairs(document.getElementById('fAccount'), DASH_DATA.changes.map(c=> accountIdentity(c) ? [accountIdentity(c), c.account_name || `Account ${c.account_id}`] : null), 'All accounts');
-  fillMultiSelectPairs(document.getElementById('fCampaign'), DASH_DATA.changes.map(c=> campaignIdentity(c) ? [campaignIdentity(c), c.campaign_name || `Campaign ${c.campaign_id}`] : null), 'All campaigns');
-  fillMultiSelectPairs(document.getElementById('fUser'), DASH_DATA.changes.map(c=> c.actor_type==='human' && userIdentity(c) ? [userIdentity(c), c.user_name || c.user_email] : null), 'All users');
-  fillMultiSelect(document.getElementById('fCategory'), uniqSorted(DASH_DATA.changes.map(c=>c.category)), 'All categories');
-  fillMultiSelect(document.getElementById('fOperation'), uniqSorted(DASH_DATA.changes.map(c=>c.operation)), 'All types');
-  fillMultiSelect(document.getElementById('fSource'), uniqSorted(DASH_DATA.changes.map(c=>c.source)), 'All sources');
-  const fRuleMatch = document.getElementById('fRuleMatch');
-  [...MAGNITUDE_RULES, ...STATE_RULES].forEach(r=>{
-    const opt = document.createElement('option'); opt.value = r.id; opt.textContent = r.label; fRuleMatch.appendChild(opt);
-  });
-  fRuleMatch.addEventListener('change', e=>{
-    state.ruleMatch = e.target.value; state.page = 1;
-    // Selecting an actual rule (not "All changes") is an explicit ask to see
-    // rule reasoning — turn the feature on so Explorer's Matches column and
-    // the Rule Matches section don't show a filtered-but-unexplained '—'.
-    if(state.ruleMatch && !ruleState.enabled){
-      ruleState.enabled = true;
-      document.getElementById('ruleMatchesToggle').checked = true;
-    }
-    render();
-  });
-  ['fAccount','fCampaign','fUser','fCategory','fOperation','fSource'].forEach(id=>{
-    document.getElementById(id).addEventListener('change', e=>{
-      const sel = new Set([...e.target.selectedOptions].map(o=>o.value).filter(Boolean));
-      const map = {fAccount:'accounts', fCampaign:'campaigns', fUser:'users', fCategory:'categories', fOperation:'operations', fSource:'sources'};
-      state[map[id]] = sel; state.page=1; render();
-    });
-  });
-  document.getElementById('fActor').addEventListener('change', e=>{ state.actor = e.target.value; state.page=1; render(); });
-  document.getElementById('rangeBtns').addEventListener('click', e=>{
-    if(e.target.tagName!=='BUTTON') return;
-    [...e.target.parentElement.children].forEach(b=>b.classList.remove('active'));
-    e.target.classList.add('active'); state.range = e.target.dataset.range; state.page=1; render();
-  });
-  document.getElementById('fSearch').addEventListener('input', e=>{ state.search=e.target.value.toLowerCase(); state.page=1; render(); });
-  document.getElementById('explorerSearch').addEventListener('input', e=>{ state.search=e.target.value.toLowerCase(); document.getElementById('fSearch').value=e.target.value; state.page=1; render(); });
-  document.getElementById('clearFilters').addEventListener('click', ()=>{
-    state.accounts=new Set(); state.campaigns=new Set(); state.users=new Set(); state.actor=''; state.categories=new Set(); state.operations=new Set(); state.sources=new Set();
-    state.range='all'; state.search=''; state.page=1; state.ruleMatch='';
-    document.getElementById('fSearch').value=''; document.getElementById('explorerSearch').value=''; document.getElementById('fActor').value=''; document.getElementById('fRuleMatch').value='';
-    document.querySelectorAll('#fAccount,#fCampaign,#fUser,#fCategory,#fOperation,#fSource').forEach(s=>[...s.options].forEach(o=>o.selected=false));
-    [...document.getElementById('rangeBtns').children].forEach(b=>b.classList.remove('active'));
-    document.getElementById('rangeBtns').children[0].classList.add('active');
-    render();
-  });
+function defaultState(){
+  return { accounts:new Set(), campaigns:new Set(), users:new Set(), actor:'', categories:new Set(), operations:new Set(), sources:new Set(), ruleMatch:'', range:'all', anchor:'data', search:'', page:1, pageSize:200, sortKey:'timestamp_iso', sortDir:-1, minDays:0 };
 }
-function withinRange(iso){
-  if(state.range==='all' || !iso) return true;
-  const ref = DASH_DATA.meta.data_window_end ? new Date(DASH_DATA.meta.data_window_end) : new Date();
-  const days = parseFloat(state.range);
-  const cutoff = new Date(ref.getTime() - days*86400000);
-  return new Date(iso) >= cutoff;
+const state = defaultState();
+// F-13: Clear filters resets everything, rule state and sort included.
+function resetAll(){
+  Object.assign(state, defaultState());
+  const d = defaultRuleState();
+  ruleState.enabled = d.enabled; Object.assign(ruleState.pct, d.pct); Object.assign(ruleState.stateOn, d.stateOn);
+}
+// F-2: drill-downs set identity filters, never a text search. Selecting the same thing again clears it.
+function toggleOnly(key, value){
+  const s = state[key];
+  state[key] = (s.size===1 && s.has(value)) ? new Set() : new Set([value]);
+  state.page = 1;
+}
+function drillCampaign(accKey, campKey){
+  const same = state.campaigns.size===1 && state.campaigns.has(campKey) && state.accounts.size===1 && state.accounts.has(accKey);
+  state.accounts = same ? new Set() : new Set([accKey]);
+  state.campaigns = same ? new Set() : new Set([campKey]);
+  state.page = 1;
 }
 function getFiltered(){
-  // Fixed 2026-08-19 (2nd audit): filters now match on identity (id-
-  // preferred), matching what the dropdowns now populate as `value` —
-  // previously matched on raw display name, so two different ids sharing a
-  // name both matched any filter selection meant for just one of them.
+  const q = fold((state.search||'').trim());
   return DASH_DATA.changes.filter(c=>{
-    if(state.accounts.size && !state.accounts.has(accountIdentity(c))) return false;
-    if(state.campaigns.size && !state.campaigns.has(campaignIdentity(c))) return false;
-    if(state.users.size){ const ident = c.actor_type==='human' ? userIdentity(c) : null; if(!ident || !state.users.has(ident)) return false; }
+    if(state.accounts.size && !state.accounts.has(accountIdentity(c)||NONE)) return false;
+    if(state.campaigns.size && !state.campaigns.has(campaignIdentity(c)||NONE)) return false;
+    if(state.users.size && !state.users.has(actorKey(c))) return false;
     if(state.actor && c.actor_type !== state.actor) return false;
     if(state.categories.size && !state.categories.has(c.category)) return false;
     if(state.operations.size && !state.operations.has(c.operation)) return false;
@@ -2878,32 +2969,113 @@ function getFiltered(){
       if(state.ruleMatch==='__matched__'){ if(!matches.length) return false; }
       else if(!matches.some(m=>m.id===state.ruleMatch)) return false;
     }
-    if(!withinRange(c.timestamp_iso)) return false;
-    if(state.search){
-      const hay = [c.campaign_name,c.account_name,c.user_name,c.user_email,c.category,c.subcategory,
-        c.field_name,c.old_value,c.new_value,c.ad_group_name,c.operation,c.source,c.resource_type,
-        c.client_type,c.change_id].join(' ').toLowerCase();
-      if(!hay.includes(state.search)) return false;
-    }
+    if(!withinRange(c)) return false;
+    if(q && !rowHaystack(c).includes(q)) return false;
     return true;
   });
 }
+// ---- filter controls -------------------------------------------------
+const MS_IDS = ['fAccount','fCampaign','fUser','fCategory','fOperation','fSource'];
+const optionLabels = {};   // state key -> Map(value -> label)
+function buildOptions(){
+  const rows = DASH_DATA.changes;
+  const add = (map, v, l)=>{ if(v!==null && v!==undefined && v!=='' && !map.has(v)) map.set(v, l); };
+  const acc = new Map(), camp = new Map(), usr = new Map(), cat = new Map(), op = new Map(), src = new Map();
+  rows.forEach(c=>{
+    add(acc, accountIdentity(c)||NONE, c.account_name || (c.account_id ? `Account ${c.account_id}` : '(no account)'));
+    add(camp, campaignIdentity(c)||NONE, c.campaign_name || (c.campaign_id ? `Campaign ${c.campaign_id}` : '(no campaign)'));
+    add(usr, actorKey(c), actorLabel(c));
+    add(cat, c.category, c.category);
+    add(op, c.operation, (s=>s.length>80 ? s.slice(0,79)+'…' : s)(firstLine(c.operation)));
+    add(src, c.source, c.source);
+  });
+  Object.assign(optionLabels, {accounts:acc, campaigns:camp, users:usr, categories:cat, operations:op, sources:src});
+}
+function msFill(el){
+  const key = el.dataset.state;
+  const opts = [...optionLabels[key].entries()].sort((a,b)=> String(a[1]).localeCompare(String(b[1])));
+  el.querySelector('.ms-panel').innerHTML = `<button type="button" class="ms-clear">Clear selection</button>` + opts.map(([v,l])=>
+    `<label class="ms-opt"><input type="checkbox" value="${escapeHtml(v)}"> <span>${escapeHtml(l)}</span></label>`).join('');
+}
+function labelFor(key, v){ const m = optionLabels[key]; return (m && m.has(v)) ? m.get(v) : String(v); }
+// F-10: every control is re-synced from state on each render.
+function syncControls(){
+  MS_IDS.forEach(id=>{
+    const el = document.getElementById(id); const key = el.dataset.state; const sel = state[key];
+    el.querySelectorAll('input[type=checkbox]').forEach(cb=>{ cb.checked = sel.has(cb.value); });
+    const sum = el.querySelector('summary');
+    sum.classList.toggle('has-sel', sel.size>0);
+    document.getElementById(id+'Sum').textContent = !sel.size ? el.dataset.all : sel.size===1 ? labelFor(key, [...sel][0]) : `${sel.size} selected`;
+  });
+  document.getElementById('fActor').value = state.actor;
+  document.getElementById('fRuleMatch').value = state.ruleMatch;
+  document.getElementById('fAnchor').value = state.anchor;
+  document.getElementById('ruleMatchesToggle').checked = ruleState.enabled;
+  ['fSearch','explorerSearch'].forEach(id=>{ const inp = document.getElementById(id); if(document.activeElement!==inp) inp.value = state.search; });
+  document.querySelectorAll('#rangeBtns button').forEach(b=>{ const on = b.dataset.range===state.range; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); });
+  document.querySelectorAll('#threshBtns button').forEach(b=>{ const on = parseInt(b.dataset.min)===state.minDays; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); });
+}
+function closePopovers(except){ document.querySelectorAll('details.ms[open]').forEach(d=>{ if(d!==except) d.open = false; }); }
+let searchTimer = null;
+function initFilters(){
+  buildOptions();
+  MS_IDS.forEach(id=>{
+    const el = document.getElementById(id); const key = el.dataset.state;
+    msFill(el);
+    el.addEventListener('toggle', ()=>{ if(el.open) closePopovers(el); });
+    el.addEventListener('change', e=>{
+      if(e.target.type!=='checkbox') return;
+      const s = new Set(state[key]);
+      if(e.target.checked) s.add(e.target.value); else s.delete(e.target.value);
+      state[key] = s; state.page = 1; render();
+    });
+    el.querySelector('.ms-clear').addEventListener('click', ()=>{ state[key] = new Set(); state.page = 1; render(); });
+    el.addEventListener('keydown', e=>{ if(e.key==='Escape' && el.open){ e.stopPropagation(); el.open = false; el.querySelector('summary').focus(); } });
+  });
+  document.addEventListener('click', e=>{ if(!e.target.closest || !e.target.closest('details.ms')) closePopovers(null); });
+  const fRuleMatch = document.getElementById('fRuleMatch');
+  [...MAGNITUDE_RULES, ...STATE_RULES].forEach(r=>{
+    const opt = document.createElement('option'); opt.value = r.id; opt.textContent = r.label; fRuleMatch.appendChild(opt);
+  });
+  fRuleMatch.addEventListener('change', e=>{
+    state.ruleMatch = e.target.value; state.page = 1;
+    // choosing a rule is an explicit ask to see rule reasoning: turn highlighting on
+    if(state.ruleMatch && !ruleState.enabled) ruleState.enabled = true;
+    render();
+  });
+  document.getElementById('fActor').addEventListener('change', e=>{ state.actor = e.target.value; state.page=1; render(); });
+  document.getElementById('fAnchor').addEventListener('change', e=>{ state.anchor = e.target.value; state.page=1; render(); });
+  document.getElementById('rangeBtns').addEventListener('click', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    state.range = b.dataset.range; state.page=1; render();
+  });
+  // C-5: debounced search (~150ms); both boxes share one query.
+  const onSearch = e=>{
+    state.search = e.target.value; state.page = 1;
+    const other = document.getElementById(e.target.id==='fSearch' ? 'explorerSearch' : 'fSearch'); other.value = e.target.value;
+    clearTimeout(searchTimer); searchTimer = setTimeout(render, 150);
+  };
+  document.getElementById('fSearch').addEventListener('input', onSearch);
+  document.getElementById('explorerSearch').addEventListener('input', onSearch);
+  document.getElementById('clearFilters').addEventListener('click', ()=>{
+    resetAll(); closePopovers(null);
+    document.querySelectorAll('#ruleMatchesMagnitudeInputs input').forEach(inp=>{ inp.value = ruleState.pct[inp.dataset.ruleId]; inp.removeAttribute('aria-invalid'); });
+    document.querySelectorAll('#ruleMatchesMagnitudeInputs .cfg-err').forEach(e=>{ e.textContent=''; });
+    document.querySelectorAll('#ruleMatchesStateInputs input').forEach(cb=>{ cb.checked = ruleState.stateOn[cb.dataset.ruleId]; });
+    render();
+  });
+}
+// ---- sections --------------------------------------------------------
 function renderSummary(filtered){
-  // Fixed 2026-08-19 (2nd audit): every identity below upgraded from raw
-  // display name to *Identity() (id-preferred) — same class of fix as
-  // 2026-08-18's account-scoping, this time covering same-account
-  // duplicate/renamed campaign names, ad group names, and same-display-name
-  // different-email users, none of which the first fix caught.
   const humanCount = new Set(filtered.filter(c=>c.actor_type==='human').map(userIdentity)).size;
   const accountSet = new Set(filtered.map(accountIdentity).filter(Boolean));
-  const accounts = accountSet.size;
   const campaigns = new Set(filtered.filter(c=>campaignIdentity(c)).map(c=>accountIdentity(c)+'||'+campaignIdentity(c))).size;
   const adgroups = new Set(filtered.filter(c=>adGroupIdentity(c)).map(c=>accountIdentity(c)+'||'+campaignIdentity(c)+'||'+adGroupIdentity(c))).size;
-  const last = filtered.reduce((m,c)=> (c.timestamp_iso && (!m || c.timestamp_iso>m)) ? c.timestamp_iso : m, null);
+  let last = null;
+  filtered.forEach(c=>{ const t = rowTime(c); if(t!=null && (!last || t>rowTime(last))) last = c; });
   const userCounts = {}, userDisplay = {};
   filtered.forEach(c=>{ if(c.actor_type==='human'){ const k=userIdentity(c); userCounts[k]=(userCounts[k]||0)+1; userDisplay[k]=c.user_name||c.user_email; }});
   const topUserKey = Object.entries(userCounts).sort((a,b)=>b[1]-a[1])[0];
-  const topUser = topUserKey ? [userDisplay[topUserKey[0]]] : null;
   const campCounts = {}, campDisplay = {};
   filtered.forEach(c=>{
     if(!campaignIdentity(c)) return;
@@ -2913,127 +3085,125 @@ function renderSummary(filtered){
     campDisplay[key] = accountSet.size <= 1 ? name : `${name} (${c.account_name||''})`;
   });
   const topCampKey = Object.entries(campCounts).sort((a,b)=>b[1]-a[1])[0];
-  const topCamp = topCampKey ? campDisplay[topCampKey[0]] : null;
   const stats = [
-    ['Total Changes', filtered.length.toLocaleString()], ['Active Accounts', accounts], ['Active Users', humanCount],
+    ['Total Changes', filtered.length.toLocaleString()], ['Active Accounts', accountSet.size], ['Active Users', humanCount],
     ['Changed Campaigns', campaigns], ['Changed Ad Groups', adgroups],
-    ['Last Change', last ? new Date(last).toLocaleString() : '—'],
-    ['Most Active User', topUser ? topUser[0] : '—'], ['Most Active Campaign', topCamp || '—'],
+    ['Last Change', last ? fmtTs(last) : '—'],
+    ['Most Active User', topUserKey ? (userDisplay[topUserKey[0]]||'—') : '—'], ['Most Active Campaign', topCampKey ? campDisplay[topCampKey[0]] : '—'],
   ];
-  // Plain tiles: the number is the signal, and no card's colour should read
-  // as meaning something (none is "the good one").
+  // Plain tiles: no card's colour should read as meaning something.
   document.getElementById('summaryGrid').innerHTML = stats.map(([l,n])=>
     `<div class="stat"><div class="n">${escapeHtml(n)}</div><div class="l">${l}</div></div>`
   ).join('');
 }
+// Days are the source's own local days when its timezone is known (D-5);
+// rows with no timezone can't be placed on a shared axis and are counted apart.
 function renderTimeline(filtered){
-  const counts = {}; let excluded = 0;
-  filtered.forEach(c=>{ if(c.timestamp_utc){ const d=c.timestamp_utc.slice(0,10); counts[d]=(counts[d]||0)+1; } else excluded++; });
+  const counts = {}; let excluded = 0; const tzs = new Set();
+  // same basis as the JSON (meta.timeline_reference_tz): UTC days only when the run had no zone
+  const utcDays = !!(DASH_DATA.meta && DASH_DATA.meta.timeline_reference_tz==='UTC');
+  filtered.forEach(c=>{
+    if(c.timestamp_utc){ const d = String(utcDays ? c.timestamp_utc : (c.timestamp_iso || c.timestamp_utc)).slice(0,10); counts[d]=(counts[d]||0)+1; if(c.timezone) tzs.add(c.timezone); }
+    else excluded++;
+  });
+  const basis = (DASH_DATA.meta && DASH_DATA.meta.timeline_basis) || (utcDays ? 'UTC day buckets' : tzs.size===1 ? `${[...tzs][0]} day buckets` : tzs.size>1 ? 'day buckets in each row\'s own timezone' : 'day buckets');
+  document.getElementById('timelineBasis').textContent = `(${basis})`;
   const days = Object.keys(counts).sort();
   const max = Math.max(1,...days.map(d=>counts[d]));
   const el = document.getElementById('timeline');
+  document.getElementById('timelineReadout').textContent = '';
   if(!days.length){ el.innerHTML = '<div class="empty">No timezone-resolved rows to plot.</div>'; return; }
   el.innerHTML = days.map((d,i)=>{
     const edge = i===0 || i===days.length-1;
-    const rel = counts[d]/max;
-    const h = Math.max(4, Math.round(rel*100));
-    // Magnitude is the bar's height alone, in one colour: a busy day isn't
-    // "bad," it's just busier. The first and last day are lighter because
-    // they may be partial.
-    return `<div class="tl-bar${edge?' edge':''}" style="height:${h}%;"><div class="tip">${d}: ${counts[d]}</div></div>`;
+    const h = Math.max(4, Math.round(counts[d]/max*100));
+    const text = `${fmtWall(d,false)}: ${counts[d]} change${counts[d]===1?'':'s'}`;
+    // one colour, height only; first/last day lighter (may be partial)
+    return `<div class="tl-bar${edge?' edge':''}" role="listitem" tabindex="0" aria-label="${escapeHtml(text)}" data-text="${escapeHtml(text)}" style="height:${h}%;"><div class="tip" aria-hidden="true">${escapeHtml(text)}</div></div>`;
   }).join('') + (excluded ? `<div class="note" style="width:100%;margin-top:6px;">${excluded} row(s) excluded — timezone unknown.</div>` : '');
+  const show = e=>{ const b = e.target.closest('.tl-bar'); if(b) document.getElementById('timelineReadout').textContent = b.dataset.text; };
+  if(!el._bound){ el.addEventListener('click', show); el.addEventListener('focusin', show); el._bound = true; }
 }
-// item.key (identity, used for filtering) defaults to item.name when a
-// caller doesn't have a separate identity (e.g. categories, which have no
-// id/name split). Fixed 2026-08-19 (2nd audit): previously data-label always
-// held the *display* name, which two different identities can share.
-// `color` (default) / `i.color` (per-item override) — same visual-identity
-// rationale as CATEGORY_COLORS/HUES: distinguishes, never ranks.
-function barList(container, items, onClick, color){
+// items: {key, name, count, color?}; each bar is a real button (keyboard and screen-reader operable).
+function barList(container, items, onClick, color, selected){
   const max = Math.max(1, ...items.map(i=>i.count));
   container.innerHTML = items.length ? items.map(i=>{
     const col = i.color || color || HUES[0];
-    return `
-    <div class="bar-row" data-label="${escapeHtml(i.key ?? i.name)}">
-      <div class="bar-label" title="${escapeHtml(i.name)}">${escapeHtml(i.name)}</div>
-      <div class="bar-track"><div class="bar-fill" style="${barFillStyle(col, i.count/max*100)}"></div></div>
-      <div class="bar-n">${i.count.toLocaleString()}</div>
-    </div>`;
+    const key = i.key ?? i.name;
+    return `<button type="button" class="bar-row" data-key="${escapeHtml(key)}" aria-pressed="${selected && selected.has(key) ? 'true' : 'false'}">
+      <span class="bar-label" title="${escapeHtml(i.name)}">${escapeHtml(i.name)}</span>
+      <span class="bar-track"><span class="bar-fill" style="${barFillStyle(col, i.count/max*100)}"></span></span>
+      <span class="bar-n">${i.count.toLocaleString()}</span>
+    </button>`;
   }).join('') : '<div class="empty">No data for current filters.</div>';
-  if(onClick) container.querySelectorAll('.bar-row').forEach(row=> row.addEventListener('click', ()=> onClick(row.dataset.label)));
+  if(onClick) container.querySelectorAll('.bar-row').forEach(row=> row.addEventListener('click', ()=> onClick(row.dataset.key)));
 }
 function renderUsers(filtered){
-  // Fixed 2026-08-19 (2nd audit): human grouping key upgraded to userIdentity
-  // (email-preferred) — two different people sharing a display name
-  // previously merged into one bar/one filter selection.
-  const human = {}, humanDisplay = {}, auto = {};
-  filtered.forEach(c=>{
-    if(c.actor_type==='human'){ const k=userIdentity(c)||'Unknown'; human[k]=(human[k]||0)+1; humanDisplay[k]=c.user_name||c.user_email||'Unknown'; }
-    else if(c.actor_type==='automation'){ const k=c.client_type||c.user_name||'Automation'; auto[k]=(auto[k]||0)+1; }
-  });
-  const humanList = Object.entries(human).sort((a,b)=>b[1]-a[1]).map(([key,count])=>({key,name:humanDisplay[key],count}));
-  const autoList = Object.entries(auto).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count}));
+  const groups = {h:{}, a:{}, u:{}}, disp = {};
+  filtered.forEach(c=>{ const k = actorKey(c); const g = k[0]; groups[g][k] = (groups[g][k]||0)+1; disp[k] = actorLabel(c); });
+  const list = g => Object.entries(groups[g]).sort((a,b)=>b[1]-a[1]).map(([key,count])=>({key, name: g==='a' ? key.slice(2) : disp[key], count}));
   const el = document.getElementById('userActivity');
-  el.innerHTML = '<div class="grp-label">Human</div><div id="humanBars"></div><div class="grp-label">Automation</div><div id="autoBars"></div>';
-  barList(document.getElementById('humanBars'), humanList, label=>{ state.actor='human'; document.getElementById('fActor').value='human'; state.users = state.users.has(label) && state.users.size===1 ? new Set() : new Set([label]); render(); }, HUES[0]);
-  barList(document.getElementById('autoBars'), autoList, label=>{
-    state.actor = state.actor==='automation' && state.search===label.toLowerCase() ? '' : 'automation';
-    document.getElementById('fActor').value = state.actor;
-    state.search = state.actor ? label.toLowerCase() : '';
-    document.getElementById('fSearch').value = state.actor ? label : '';
-    document.getElementById('explorerSearch').value = state.actor ? label : '';
-    render();
-  }, '#f99c00');
+  el.innerHTML = '<div class="grp-label">Human</div><div id="humanBars"></div><div class="grp-label">Automation</div><div id="autoBars"></div><div class="grp-label">Unknown</div><div id="unknownBars"></div>';
+  const pick = key=>{ toggleOnly('users', key); render(); };
+  barList(document.getElementById('humanBars'), list('h'), pick, HUES[0], state.users);
+  barList(document.getElementById('autoBars'), list('a'), pick, '#f99c00', state.users);
+  barList(document.getElementById('unknownBars'), list('u'), pick, '#98918f', state.users);
 }
+const openAccounts = new Set();
+// F-9: the tree is keyed by account identity, not display name.
 function renderAccounts(filtered){
-  // Fixed 2026-08-19 (2nd audit): nested campaign grouping upgraded to
-  // campaignIdentity — two different campaign_ids sharing a name within the
-  // SAME account previously merged into one bar with a combined count.
-  const accMap = {}, campDisplay = {};
+  const accMap = {}, accName = {}, campName = {};
   filtered.forEach(c=>{
-    if(!c.account_name) return;
-    accMap[c.account_name] = accMap[c.account_name] || {};
-    const key = campaignIdentity(c) || '(no campaign)';
-    accMap[c.account_name][key] = (accMap[c.account_name][key]||0)+1;
-    campDisplay[key] = c.campaign_name || (c.campaign_id ? `Campaign ${c.campaign_id}` : '(no campaign)');
+    const ak = accountIdentity(c) || NONE;
+    accName[ak] = c.account_name || (c.account_id ? `Account ${c.account_id}` : '(no account)');
+    const ck = campaignIdentity(c) || NONE;
+    accMap[ak] = accMap[ak] || {};
+    accMap[ak][ck] = (accMap[ak][ck]||0)+1;
+    campName[ck] = c.campaign_name || (c.campaign_id ? `Campaign ${c.campaign_id}` : '(no campaign)');
   });
-  const accounts = Object.entries(accMap).map(([name,camps])=>({name, camps, total: Object.values(camps).reduce((a,b)=>a+b,0)})).sort((a,b)=>b.total-a.total);
+  const accounts = Object.entries(accMap).map(([key,camps])=>({key, camps, total: Object.values(camps).reduce((a,b)=>a+b,0)})).sort((a,b)=>b.total-a.total);
   const el = document.getElementById('accountActivity');
   if(!accounts.length){ el.innerHTML='<div class="empty">No data for current filters.</div>'; return; }
+  if(accounts.length===1) openAccounts.add(accounts[0].key);
   const maxAcc = Math.max(1, ...accounts.map(a=>a.total));
+  const col = HUES[0];
   el.innerHTML = accounts.map((a,idx)=>{
-    const accCol = HUES[0];
+    const open = openAccounts.has(a.key);
+    const cmax = Math.max(...Object.values(a.camps));
     return `
     <div class="acc-block">
-      <div class="acc-head" data-idx="${idx}">
-        <span class="chev">▶</span>
-        <div class="bar-label" style="flex:0 0 180px;">${escapeHtml(a.name)}</div>
-        <div class="bar-track" style="flex:1;"><div class="bar-fill" style="${barFillStyle(accCol, a.total/maxAcc*100)}"></div></div>
-        <div class="bar-n" style="flex:0 0 50px;">${a.total}</div>
-      </div>
-      <div class="camp-list" id="camp-${idx}">
-        ${Object.entries(a.camps).sort((x,y)=>y[1]-x[1]).map(([key,n])=>{
-          const cmax = Math.max(...Object.values(a.camps));
-          const label = campDisplay[key] || key;
-          return `<div class="bar-row" data-label="${escapeHtml(label)}"><div class="bar-label">${escapeHtml(label)}</div><div class="bar-track"><div class="bar-fill" style="${barFillStyle(accCol, n/cmax*100)}opacity:.75;"></div></div><div class="bar-n">${n}</div></div>`;
+      <button type="button" class="acc-head" data-acc="${escapeHtml(a.key)}" aria-expanded="${open}" aria-controls="camp-${idx}">
+        <span class="chev" aria-hidden="true">▶</span>
+        <span class="bar-label">${escapeHtml(accName[a.key])}</span>
+        <span class="bar-track"><span class="bar-fill" style="${barFillStyle(col, a.total/maxAcc*100)}"></span></span>
+        <span class="bar-n">${a.total.toLocaleString()}</span>
+      </button>
+      <div class="camp-list" id="camp-${idx}"${open ? '' : ' hidden'}>
+        ${Object.entries(a.camps).sort((x,y)=>y[1]-x[1]).map(([ck,n])=>{
+          const on = state.campaigns.size===1 && state.campaigns.has(ck) && state.accounts.has(a.key);
+          return `<button type="button" class="bar-row" data-acc="${escapeHtml(a.key)}" data-camp="${escapeHtml(ck)}" aria-pressed="${on}"><span class="bar-label" title="${escapeHtml(campName[ck])}">${escapeHtml(campName[ck])}</span><span class="bar-track"><span class="bar-fill" style="${barFillStyle(col, n/cmax*100)}opacity:.75;"></span></span><span class="bar-n">${n.toLocaleString()}</span></button>`;
         }).join('')}
       </div>
     </div>`;
   }).join('');
-  el.querySelectorAll('.acc-head').forEach(h=> h.addEventListener('click', ()=>{ h.classList.toggle('open'); document.getElementById('camp-'+h.dataset.idx).classList.toggle('open'); }));
-  el.querySelectorAll('.camp-list .bar-row').forEach(row=> row.addEventListener('click', e=>{
-    e.stopPropagation();
-    state.search = row.dataset.label.toLowerCase();
-    document.getElementById('fSearch').value = row.dataset.label;
-    document.getElementById('explorerSearch').value = row.dataset.label;
-    render();
+  el.querySelectorAll('.acc-head').forEach(h=> h.addEventListener('click', ()=>{
+    const k = h.dataset.acc; if(openAccounts.has(k)) openAccounts.delete(k); else openAccounts.add(k);
+    const open = openAccounts.has(k);
+    h.setAttribute('aria-expanded', open); document.getElementById(h.getAttribute('aria-controls')).hidden = !open;
   }));
+  el.querySelectorAll('.camp-list .bar-row').forEach(row=> row.addEventListener('click', ()=>{ drillCampaign(row.dataset.acc, row.dataset.camp); render(); }));
 }
 function renderCategories(filtered){
   const counts = {}; filtered.forEach(c=> counts[c.category]=(counts[c.category]||0)+1);
   const list = Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count,color:CATEGORY_COLORS[name]||'#98918f'}));
-  barList(document.getElementById('categoryDist'), list, label=>{ state.categories = state.categories.has(label) && state.categories.size===1 ? new Set() : new Set([label]); render(); });
+  barList(document.getElementById('categoryDist'), list, key=>{ toggleOnly('categories', key); render(); }, null, state.categories);
 }
+function bindRowOpen(container){
+  container.querySelectorAll('tr.datarow').forEach(row=>{
+    row.addEventListener('click', ()=> openDetail(Number(row.dataset.idx)));
+    row.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openDetail(Number(row.dataset.idx)); } });
+  });
+}
+function rowIndex(c){ return c._i!==undefined ? c._i : DASH_DATA.changes.indexOf(c); }
 function renderRuleMatches(filtered){
   const countEl = document.getElementById('ruleMatchesCount');
   const el = document.getElementById('ruleMatches');
@@ -3046,29 +3216,32 @@ function renderRuleMatches(filtered){
   countEl.textContent = `${matched.length.toLocaleString()} of ${filtered.length.toLocaleString()} changes in view match a rule`;
   if(!matched.length){ el.innerHTML = '<div class="empty">No changes match the current rules.</div>'; return; }
   const SHOWN = 500;
-  el.innerHTML = `<table><thead><tr><th>Date</th><th>Campaign</th><th>Field</th><th>Matched rule(s)</th></tr></thead><tbody>${
-    matched.slice(0, SHOWN).map(({c,matches})=>`<tr class="datarow" data-id="${escapeHtml(c.change_id)}">
-      <td>${c.timestamp_iso ? new Date(c.timestamp_iso).toLocaleString() : escapeHtml(c.timestamp)}</td>
+  // C-7: the % and the old -> new values are visible text, not only a tooltip.
+  el.innerHTML = `<div class="tbl-wrap" tabindex="0" role="region" aria-label="Rule matches table"><table><thead><tr><th>Date</th><th>Campaign</th><th>Change</th><th>Old → New</th><th>Matched rule(s)</th></tr></thead><tbody>${
+    matched.slice(0, SHOWN).map(({c,matches})=>`<tr class="datarow" tabindex="0" data-idx="${rowIndex(c)}">
+      <td>${escapeHtml(fmtTs(c))}</td>
       <td>${escapeHtml(c.campaign_name || (c.campaign_id ? `Campaign ${c.campaign_id}` : '—'))}</td>
       <td>${escapeHtml(c.field_name || c.subcategory || '—')}</td>
-      <td>${ruleMatchPillsHtml(matches)}</td>
+      <td>${escapeHtml(valueText(c,'old') || '—')} → ${escapeHtml(valueText(c,'new') || '—')}</td>
+      <td style="white-space:normal;min-width:180px;">${matches.map(m=>`<span class="pill pill-rule">${escapeHtml(m.label)}</span><span class="rm-detail">${escapeHtml(m.detail)}</span>`).join('')}</td>
     </tr>`).join('')
-  }</tbody></table>${matched.length > SHOWN ? `<div class="note">Showing first ${SHOWN} of ${matched.length} matches (still counted correctly above) — narrow with the top filters to see the rest.</div>` : ''}`;
-  el.querySelectorAll('tr.datarow').forEach(row=> row.addEventListener('click', ()=> openDetail(row.dataset.id)));
+  }</tbody></table></div>${matched.length > SHOWN ? `<div class="note">Showing first ${SHOWN} of ${matched.length} matches (still counted correctly above) — narrow with the top filters to see the rest.</div>` : ''}`;
+  bindRowOpen(el);
 }
 function initRuleMatchesConfig(){
   const magEl = document.getElementById('ruleMatchesMagnitudeInputs');
   magEl.innerHTML = MAGNITUDE_RULES.map(r=>`
     <label class="cfg-field">
       ${escapeHtml(r.label)}
-      <span style="display:flex;align-items:center;gap:6px;">±<input type="number" class="ctl" min="1" max="500" step="1" value="${r.defaultPct}" data-rule-id="${r.id}" style="width:70px;">%</span>
+      <span style="display:flex;align-items:center;gap:6px;">±<input type="number" class="ctl" min="1" max="${PCT_MAX}" step="any" value="${r.defaultPct}" data-rule-id="${r.id}" aria-describedby="err-${r.id}" style="width:80px;">%</span>
+      <span class="cfg-err" id="err-${r.id}" aria-live="polite"></span>
     </label>`).join('');
   magEl.querySelectorAll('input[type=number]').forEach(inp=>{
-    inp.addEventListener('change', e=>{
-      const v = parseFloat(e.target.value);
-      ruleState.pct[e.target.dataset.ruleId] = (isFinite(v) && v > 0) ? v : MAGNITUDE_RULES.find(r=>r.id===e.target.dataset.ruleId).defaultPct;
-      e.target.value = ruleState.pct[e.target.dataset.ruleId];
-      render();
+    inp.addEventListener('input', e=>{
+      const id = e.target.dataset.ruleId; const res = parseThreshold(e.target.value);
+      const err = document.getElementById('err-'+id);
+      if(res.ok){ ruleState.pct[id] = res.value; e.target.removeAttribute('aria-invalid'); err.textContent = ''; render(); }
+      else { e.target.setAttribute('aria-invalid', 'true'); err.textContent = `${res.msg} (1–${PCT_MAX}). Still using ${ruleState.pct[id]}%.`; }
     });
   });
   const stateEl = document.getElementById('ruleMatchesStateInputs');
@@ -3079,56 +3252,34 @@ function initRuleMatchesConfig(){
   stateEl.querySelectorAll('input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('change', e=>{ ruleState.stateOn[e.target.dataset.ruleId] = e.target.checked; render(); });
   });
-  document.getElementById('ruleMatchesToggle').addEventListener('change', e=>{ ruleState.enabled = e.target.checked; render(); });
+  document.getElementById('ruleMatchesToggle').addEventListener('change', e=>{ setRuleHighlighting(e.target.checked); render(); });
 }
+// Recomputed from `filtered` on every render. "Days since" uses the same row
+// time (timestamp_utc) and the browser's clock, same basis as "Range ends at: Today".
 function renderUntouched(filtered){
-  // Fixed 2026-08-18: was reading DASH_DATA.untouched directly (a static,
-  // unfiltered, Python-precomputed list) — the top filters visibly did
-  // nothing here even though every other section respected them. Now
-  // recomputed from `filtered` on every render, same (account, campaign)
-  // keying as the Python side. "Days since" is computed against the real
-  // browser clock (new Date()) at render time, not the data snapshot's end —
-  // that "0 days" no longer means "0 days as of whenever this was generated".
-  // Fixed 2026-08-19 (2nd audit): key upgraded to campaignIdentity (id-
-  // preferred) — same-account same-name-different-id campaigns previously
-  // merged. Comparison upgraded to prefer timestamp_utc when resolved, same
-  // as the Python side's chrono_key() — a naive-local comparison across
-  // rows from genuinely different resolved timezones could pick the wrong
-  // "last" change.
   const campaignLast = {};
   filtered.forEach(c=>{
-    const cid = campaignIdentity(c);
-    if(!cid || !c.timestamp_iso) return;
-    const key = accountIdentity(c) + '||' + cid;
-    const chrono = c.timestamp_utc || c.timestamp_iso;
-    if(!campaignLast[key] || chrono > campaignLast[key]._chrono){
-      campaignLast[key] = { campaign_name: c.campaign_name || `Campaign ${c.campaign_id}`, account_name: c.account_name, last_change_ts: c.timestamp_iso, _chrono: chrono };
+    const cid = campaignIdentity(c); const t = rowTime(c);
+    if(!cid || t==null) return;
+    const key = (accountIdentity(c)||NONE) + '||' + cid;
+    if(!campaignLast[key] || t > campaignLast[key]._t){
+      campaignLast[key] = { campaign_name: c.campaign_name || `Campaign ${c.campaign_id}`, account_name: c.account_name, row: c, _t: t };
     }
   });
-  const now = new Date();
-  const untouched = Object.values(campaignLast).map(u=>{
-    const days = Math.floor((now - new Date(u.last_change_ts)) / 86400000);
-    return {...u, days_since: days};
-  }).sort((a,b)=> b.days_since - a.days_since);
-
-  const activeBtn = document.querySelector('#threshBtns button.active');
-  const min = activeBtn ? parseInt(activeBtn.dataset.min) : 0;
-  const rows = untouched.filter(u=>u.days_since >= min);
+  const now = Date.now();
+  const rows = Object.values(campaignLast).map(u=>({...u, days_since: Math.floor((now - u._t) / 86400000)}))
+    .sort((a,b)=> b.days_since - a.days_since).filter(u=>u.days_since >= state.minDays);
   const el = document.getElementById('untouched');
   if(!rows.length){ el.innerHTML='<div class="empty">No campaigns match this threshold (or current filters).</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>Campaign</th><th>Account</th><th>Last Change</th><th>Days Since (today)</th></tr></thead><tbody>${
-    rows.map(u=>`<tr><td>${escapeHtml(u.campaign_name)}</td><td>${escapeHtml(u.account_name||'')}</td><td>${new Date(u.last_change_ts).toLocaleDateString()}</td><td>${u.days_since}</td></tr>`).join('')
-  }</tbody></table>`;
+  el.innerHTML = `<div class="tbl-wrap" tabindex="0" role="region" aria-label="Campaign last changes table"><table><thead><tr><th>Campaign</th><th>Account</th><th>Last Change</th><th>Days Since (today)</th></tr></thead><tbody>${
+    rows.map(u=>`<tr><td>${escapeHtml(u.campaign_name)}</td><td>${escapeHtml(u.account_name||'')}</td><td>${escapeHtml(fmtTs(u.row))}</td><td>${u.days_since}</td></tr>`).join('')
+  }</tbody></table></div>`;
 }
-// Fixed 2026-08-18 (3rd audit round, confirmed): sorting the Old/New Value
-// columns compared them as raw strings — old_value/new_value are stored as
-// strings in the payload, so "100" sorted before "20" (lexicographic).
-// old_value_num/new_value_num are already computed for exactly this — use
-// them for those two columns when they parsed as numeric, and fall back to
-// the string comparison for any column (or any row) that isn't numeric.
+// Old/New sort numerically when both parsed as numbers (strings sort "100" before "20").
 function explorerSortValue(c, k){
   if(k==='old_value' && c.old_value_num!=null) return c.old_value_num;
   if(k==='new_value' && c.new_value_num!=null) return c.new_value_num;
+  if(k==='timestamp_iso'){ const t = rowTime(c); return t==null ? '' : t; }
   return c[k] ?? '';
 }
 function compareExplorerSortValues(av, bv){
@@ -3139,91 +3290,135 @@ function compareExplorerSortValues(av, bv){
 function renderExplorer(filtered){
   const sorted = [...filtered].sort((a,b)=>{ const k = state.sortKey; const cmp = compareExplorerSortValues(explorerSortValue(a,k), explorerSortValue(b,k)); return cmp<0 ? -state.sortDir : cmp>0 ? state.sortDir : 0; });
   const totalPages = Math.max(1, Math.ceil(sorted.length / state.pageSize));
-  state.page = Math.min(state.page, totalPages);
+  state.page = Math.max(1, Math.min(state.page, totalPages));
   const pageRows = sorted.slice((state.page-1)*state.pageSize, state.page*state.pageSize);
   const body = document.getElementById('explorerBody');
-  function displayValue(raw, display, unit, currency){
-    // Fixed 2026-08-18 (3rd audit round, confirmed): `display` reached the
-    // DOM unescaped here. Not currently exploitable — the only caller that
-    // sets `unit` (the micros-conversion branch) always passes a computed
-    // number/null, never raw source text — but escaping it defensively costs
-    // nothing and removes the gap for whatever sets old_value_display next.
-    // `currency` is only ever the run's own --currency code (validated
-    // ^[A-Z]{3}$ before it reaches a row) — escaped anyway, same reasoning.
-    const prefix = unit ? `${escapeHtml(display ?? '—')}${currency ? ' ' + escapeHtml(currency) : ''} ` : '';
-    const suffix = unit ? `(raw: ${escapeHtml(raw ?? '—')})` : escapeHtml(raw ?? '—');
-    return unit ? `${prefix}<span class="note" style="margin:0;">${suffix}</span>` : suffix;
-  }
-  body.innerHTML = pageRows.length ? pageRows.map(c=>`
-    <tr class="datarow" data-id="${escapeHtml(c.change_id)}">
-      <td>${c.timestamp_iso ? new Date(c.timestamp_iso).toLocaleString() : escapeHtml(c.timestamp)}</td>
-      <td>${c.actor_type==='human' ? escapeHtml(c.user_name||c.user_email||'—') : `<span class="pill pill-auto">${escapeHtml(c.client_type||'automation')}</span>`}</td>
-      <td>${escapeHtml(c.account_name||'')}</td><td>${escapeHtml(c.campaign_name||'—')}</td><td>${escapeHtml(c.ad_group_name||'—')}</td>
-      <td><span class="pill"${categoryPillStyle(c.category)}>${escapeHtml(c.category)}</span></td><td>${escapeHtml(c.field_name || c.subcategory || '—')}</td>
-      <td style="color:var(--bad);">${c.value_confidence==='parsed_from_summary' ? '~' : ''}${displayValue(c.old_value, c.old_value_display, c.value_unit, c.currency)}</td>
-      <td style="color:var(--good);">${c.value_confidence==='parsed_from_summary' ? '~' : ''}${displayValue(c.new_value, c.new_value_display, c.value_unit, c.currency)}</td>
+  body.innerHTML = pageRows.length ? pageRows.map(c=>{
+    const summary = firstLine(c.raw_summary);
+    return `
+    <tr class="datarow" tabindex="0" data-idx="${rowIndex(c)}">
+      <td>${escapeHtml(fmtTs(c))}</td>
+      <td>${c.actor_type==='human' ? escapeHtml(c.user_name||c.user_email||'—') : c.actor_type==='automation' ? `<span class="pill pill-auto">${escapeHtml(c.client_type||c.user_name||'automation')}</span>` : '<span class="pill">unknown</span>'}</td>
+      <td>${escapeHtml(c.account_name||'')}</td><td${c.campaign_confidence==='inferred_from_summary' ? ' title="Campaign name read from the summary text"' : ''}>${escapeHtml(c.campaign_name||'—')}</td><td>${escapeHtml(c.ad_group_name||'—')}</td>
+      <td><span${categoryPillAttrs(c.category)}>${escapeHtml(c.category)}</span></td><td>${escapeHtml(c.field_name || c.subcategory || '—')}</td>
+      <td title="${escapeHtml(c.raw_summary||'')}">${escapeHtml(summary||'—')}</td>
+      <td>${valueCellHtml(c,'old')}</td>
+      <td>${valueCellHtml(c,'new')}</td>
       <td>${ruleState.enabled ? (ruleMatchPillsHtml(computeRuleMatches(c)) || '—') : '—'}</td>
       <td>${escapeHtml(c.source)}</td>
-    </tr>`).join('') : `<tr><td colspan="11" class="empty">No changes match current filters.</td></tr>`;
-  body.querySelectorAll('tr.datarow').forEach(row=> row.addEventListener('click', ()=> openDetail(row.dataset.id)));
+    </tr>`; }).join('') : `<tr><td colspan="12" class="empty">No changes match current filters.</td></tr>`;
+  bindRowOpen(body);
   document.getElementById('pagerInfo').textContent = `Page ${state.page} / ${totalPages} — ${sorted.length.toLocaleString()} rows`;
   document.getElementById('pagerPrev').disabled = state.page<=1;
   document.getElementById('pagerNext').disabled = state.page>=totalPages;
-  document.querySelectorAll('#explorerTable th').forEach(th=>{ th.classList.toggle('sorted', th.dataset.key===state.sortKey); });
+  document.querySelectorAll('#explorerTable th').forEach(th=>{
+    if(th.dataset.key===state.sortKey) th.setAttribute('aria-sort', state.sortDir<0 ? 'descending' : 'ascending'); else th.removeAttribute('aria-sort');
+  });
 }
-function openDetail(changeId){
-  const c = DASH_DATA.changes.find(x=>x.change_id===changeId);
+// Rows that share one event_id came from one source cell split into statements (D-3).
+let eventGroups = null;
+function eventGroup(c){
+  if(!eventGroups){
+    eventGroups = {};
+    DASH_DATA.changes.forEach(r=>{ if(r.event_id){ (eventGroups[r.event_id] = eventGroups[r.event_id] || []).push(r); } });
+  }
+  const g = c.event_id ? eventGroups[c.event_id] : null;
+  return g && g.length > 1 ? g : null;
+}
+let lastFocus = null;
+function openDetail(ref){
+  const c = typeof ref==='number' ? DASH_DATA.changes[ref] : DASH_DATA.changes.find(x=>x.change_id===ref);
   if(!c) return;
-  const prevVal = c.value_unit ? `${c.old_value_display ?? '—'} ${c.value_unit} (raw: ${c.old_value ?? '—'})` : (c.old_value ?? '—');
-  const newVal = c.value_unit ? `${c.new_value_display ?? '—'} ${c.value_unit} (raw: ${c.new_value ?? '—'})` : (c.new_value ?? '—');
+  const vText = which=>{ const t = valueText(c, which); return t ? t + (c.value_confidence==='parsed_from_summary' ? ' (parsed from summary text)' : '') : '—'; };
+  const hasValue = valueParts(c,'old') || valueParts(c,'new');
+  const grp = eventGroup(c);
+  let stmt = null;
+  let fullCell = null;
+  if(grp){
+    const ordered = grp.every(r=>typeof r.statement_index==='number') ? [...grp].sort((a,b)=>a.statement_index-b.statement_index) : grp;
+    const pos = typeof c.statement_index==='number' ? c.statement_index+1 : ordered.indexOf(c)+1;
+    stmt = `${pos} of ${c.statement_count || grp.length} change statements from one source cell`;
+    fullCell = ordered.map(r=>r.raw_summary||'').join('\n');
+  }
   const rows = [
-    ['Date', c.timestamp_iso ? new Date(c.timestamp_iso).toLocaleString() : c.timestamp],
-    ['User', c.actor_type==='human' ? (c.user_name||c.user_email||'—') : `${c.client_type||'Automation'} (automation)`],
-    ['Account', c.account_name||'—'], ['Campaign', c.campaign_name||'—'], ['Ad Group', c.ad_group_name||'—'],
+    ['Date', fmtTs(c) + (c.timezone ? ` (${c.timezone})` : (c.timestamp_utc ? '' : ' (timezone unknown)'))],
+    ['User', c.actor_type==='human' ? (c.user_name||c.user_email||'—') : c.actor_type==='automation' ? `${c.client_type||c.user_name||'Automation'} (automation)` : 'Unknown (no identity in source)'],
+    ['Account', c.account_name||'—'],
+    ['Campaign', (c.campaign_name||'—') + (c.campaign_confidence==='inferred_from_summary' ? ' (read from the summary text)' : '')],
+    ['Ad Group', c.ad_group_name||'—'],
     ['Category', `${c.category} — ${c.subcategory}${c.category_confidence==='fallback_other' ? ' (no rule matched)' : ''}`], ['Field', c.field_name || '—'],
-    ['Previous', prevVal], ['New', newVal],
+    ['Previous', vText('old')], ['New', vText('new')],
     ['Operation', c.operation_confidence==='inferred' ? `${c.operation} (inferred, not stated by source)` : c.operation],
-    ['Source', c.source], ['Value read from', c.value_confidence==='parsed_from_summary' ? 'summary text (parsed, not a structured field)' : 'structured field'],
-    ['Resource', c.resource_path || c.resource_id || '—'],
-    ['Event ID', c.source_event_id || `${c.change_id} (derived, not from source)`],
+    ['Source', c.source],
+    ['Value read from', !hasValue ? 'no value in the source' : c.value_confidence==='parsed_from_summary' ? 'summary text (parsed, not a structured field)' : 'structured field'],
+    ['Summary', c.raw_summary || '—'],
   ];
-  const rowColor = { Previous:'var(--bad)', New:'var(--good)' };
-  document.getElementById('detailBody').innerHTML = rows.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd${rowColor[k] ? ` style="color:${rowColor[k]};"` : ''}>${escapeHtml(v)}</dd>`).join('');
+  if(stmt) rows.push(['Statement', stmt], ['Full source cell', fullCell]);
+  rows.push(['Resource', c.resource_path || c.resource_id || '—'], ['Event ID', c.source_event_id || `${c.change_id} (derived, not from source)`]);
+  document.getElementById('detailBody').innerHTML = rows.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd${k==='Summary' || k==='Operation' || k==='Full source cell' ? ' class="pre"' : ''}>${escapeHtml(v)}</dd>`).join('');
+  lastFocus = document.activeElement;
   document.getElementById('detailOverlay').classList.add('open');
+  document.getElementById('detailClose').focus();
 }
-// Borrowed idea (2026-08-18, dashboard-builder skill): a stated filter
-// context line, always present — not just when something's active — so a
-// screenshot or a paste of this dashboard mid-filter is self-explanatory
-// without the reader having to reconstruct which controls are set.
+function closeDetail(){
+  const ov = document.getElementById('detailOverlay');
+  if(!ov.classList.contains('open')) return;
+  ov.classList.remove('open');
+  if(lastFocus && document.contains(lastFocus)) lastFocus.focus();
+  lastFocus = null;
+}
+// The stated filter-context line, always present (F-6: includes the rule filter; F-7: names the range anchor).
+function rangeLabel(){
+  if(state.range==='all') return '';
+  const span = state.range==='1' ? '24 hours' : `${state.range} days`;
+  return state.anchor==='today' ? `last ${span} to today (${fmtEpochDate(Date.now())})` : `last ${span} of data, to ${fmtEpochDate(dataEndTime())}`;
+}
 function renderFilterContext(){
   const parts = [];
-  if(state.range!=='all') parts.push(state.range==='1' ? 'last 24h' : `last ${state.range}d`);
-  if(state.accounts.size) parts.push(`${state.accounts.size} account${state.accounts.size>1?'s':''}`);
-  if(state.campaigns.size) parts.push(`${state.campaigns.size} campaign${state.campaigns.size>1?'s':''}`);
-  if(state.users.size) parts.push(`${state.users.size} user${state.users.size>1?'s':''}`);
+  const r = rangeLabel(); if(r) parts.push(r);
+  const named = (key, one, many)=>{ const s = state[key]; if(s.size===1) parts.push(`${one}: ${labelFor(key, [...s][0])}`); else if(s.size) parts.push(`${s.size} ${many}`); };
+  named('accounts','account','accounts'); named('campaigns','campaign','campaigns'); named('users','user','users');
   if(state.actor) parts.push(`actor: ${state.actor}`);
-  if(state.categories.size) parts.push(`${state.categories.size} categor${state.categories.size>1?'ies':'y'}`);
-  if(state.operations.size) parts.push(`${state.operations.size} operation type${state.operations.size>1?'s':''}`);
-  if(state.sources.size) parts.push(`${state.sources.size} source${state.sources.size>1?'s':''}`);
+  named('categories','category','categories'); named('operations','operation','operation types'); named('sources','source','sources');
+  if(state.ruleMatch){ const rr = [...MAGNITUDE_RULES, ...STATE_RULES].find(x=>x.id===state.ruleMatch); parts.push(`rule: ${rr ? rr.label : 'matched a rule'}`); }
   if(state.search) parts.push(`search: "${state.search}"`);
   document.getElementById('filterContext').textContent = parts.length ? `Showing: ${parts.join(' · ')}` : 'Showing: all changes, no filters applied';
 }
+// Re-rendering replaces the bar/row buttons; put keyboard focus back on the same item.
+function focusMemo(){
+  const ae = document.activeElement;
+  if(!ae || !ae.dataset || !ae.closest) return null;
+  const host = ae.closest('#userActivity,#accountActivity,#categoryDist,#explorerBody,#ruleMatches');
+  return host ? {host: host.id, tag: ae.tagName, cls: ae.className, ds: {...ae.dataset}} : null;
+}
+function focusRestore(f){
+  if(!f) return;
+  const host = document.getElementById(f.host); if(!host) return;
+  const hit = [...host.querySelectorAll(f.tag)].find(el=> el.className===f.cls && Object.keys(f.ds).every(k=>el.dataset[k]===f.ds[k]));
+  if(hit) hit.focus();
+}
 function render(){
+  clearTimeout(searchTimer);
+  const memo = focusMemo();
   const filtered = getFiltered();
+  syncControls();
   renderFilterContext();
   renderSummary(filtered); renderTimeline(filtered); renderUsers(filtered);
   renderAccounts(filtered); renderCategories(filtered); renderRuleMatches(filtered);
   renderUntouched(filtered); renderExplorer(filtered);
+  focusRestore(memo);
 }
 document.addEventListener('DOMContentLoaded', ()=>{
   const m = DASH_DATA.meta;
+  DASH_DATA.changes.forEach((c,i)=>{ c._i = i; });
+  UI_LOCALE = detectLocale();
+  let first = null, last = null;
+  DASH_DATA.changes.forEach(c=>{ const t = rowTime(c); if(t==null) return; if(!first || t<rowTime(first)) first = c; if(!last || t>rowTime(last)) last = c; });
+  const winStart = first ? fmtWall(first.timestamp_iso || first.timestamp_utc, false) : '—';
+  const winEnd = last ? fmtWall(last.timestamp_iso || last.timestamp_utc, false) : '—';
   document.getElementById('metaLine').textContent =
-    `${m.row_count.toLocaleString()} changes · ${m.data_window_start ? new Date(m.data_window_start).toLocaleDateString() : '—'} – ${m.data_window_end ? new Date(m.data_window_end).toLocaleDateString() : '—'} · Sources: ${m.sources.join(', ')} · Other: ${m.other_pct}%${m.masked_users ? ' · Users masked' : ''} · Generated ${new Date(m.generated_at).toLocaleString()}`;
-  // Detecting "this came from the API" by source_label was unreliable — Layer
-  // 2 (alias-table) matches all get the generic label "alias_match" regardless
-  // of which known_sources pattern they resembled, so a label-string check
-  // silently never fired. source_event_id is only ever populated by the API's
-  // own event-identity field, so it's used as the actual signal instead.
+    `${Number(m.row_count||0).toLocaleString()} changes · ${winStart} – ${winEnd} · Sources: ${(m.sources||[]).join(', ')} · Other: ${m.other_pct}%${m.masked_users ? ' · Users masked' : ''} · Generated ${fmtWall(m.generated_at, true)}`;
+  // source_event_id is only ever populated by the API's own event-identity field.
   const caveats = [];
   if(DASH_DATA.changes.some(c=>c.source_event_id)){
     caveats.push('Includes data from the Google Ads ChangeEvent API. ChangeEvent may not include every entry from the Google Ads UI\'s Change History — treat counts from this source as a lower bound, not a complete history.');
@@ -3231,18 +3426,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if(m.rows_skipped_unparseable_date_pct > 5){
     caveats.push(`${m.rows_skipped_unparseable_date} row(s) (${m.rows_skipped_unparseable_date_pct}% of input) were silently excluded — their date column didn't parse under the format this run resolved. See coverage.txt.`);
   }
-  // What the run read vs. what is shown here — counts only, no verdict.
+  // What the run read vs. what is shown here — counts only, no verdict. Every key optional.
   const dq = m.data_quality;
   if(dq){
-    const n = x => Number(x).toLocaleString();
-    const lim = dq.in_report_with_limits;
+    const n = x => Number(x||0).toLocaleString();
+    const lim = dq.in_report_with_limits || {}, lo = dq.left_out || {};
     const flags = [['category_other','categorized "Other"'],['timezone_unknown','no timezone'],['operation_inferred','operation inferred'],
       ['value_parsed_from_summary','value read from summary text'],['multi_field_unsplit','several fields in one row']]
       .filter(([k])=>lim[k]>0).map(([k,label])=>`${n(lim[k])} ${label}`);
+    const split = [];
+    if(dq.rows_added_by_statement_split>0) split.push(`${n(dq.rows_added_by_statement_split)} added by splitting multi-statement cells`);
+    if(dq.rows_added_by_field_split>0) split.push(`${n(dq.rows_added_by_field_split)} added by splitting multi-field rows`);
+    const left = [`${n(lo.unreadable_date)} unreadable date`, `${n(lo.duplicate)} duplicate`];
+    const dup = dq.possible_duplicate_rows_kept ?? dq.possible_duplicates;
+    if(dup>0) flags.push(`${n(dup)} identical rows kept (possible duplicates)`);
+    if(dq.campaign_inferred_from_summary>0) flags.push(`${n(dq.campaign_inferred_from_summary)} campaign read from summary text`);
+    const dst = (dq.dst_nonexistent_local_time||0) + (dq.dst_ambiguous_local_time||0);
+    if(dst>0) flags.push(`${n(dst)} in a daylight-saving gap or repeated hour`);
     document.getElementById('dataQuality').textContent =
-      `Input: ${n(dq.input_rows)} rows · in this report: ${n(dq.rows_in_report)} · left out: ${n(dq.left_out.unreadable_date)} unreadable date, ${n(dq.left_out.duplicate)} duplicate`
+      `Input: ${n(dq.input_rows)} rows · in this report: ${n(dq.rows_in_report)}` + (split.length ? ` (${split.join(', ')})` : '')
+      + ` · left out: ${left.join(', ')}`
       + (flags.length ? ` · of the rows shown: ${flags.join(', ')}` : '')
-      + (dq.ignored_headers.length ? ` · source columns not used: ${dq.ignored_headers.join(', ')}` : '');
+      + ((dq.ignored_headers||[]).length ? ` · source columns not used: ${dq.ignored_headers.join(', ')}` : '');
+    if(Array.isArray(dq.warnings)) dq.warnings.forEach(w=>{ if(w) caveats.push(typeof w==='string' ? w : (w.message || JSON.stringify(w))); });
+    if(dq.rows_added_by_statement_split>0){
+      document.getElementById('explorerCaption').textContent = '1 row = 1 change statement: a source cell that held several statements is shown as one row per statement (see the Statement line in the detail). ' + document.getElementById('explorerCaption').textContent;
+    }
   }
   const tzUnknown = m.rows_excluded_from_timeline_unknown_tz || 0;
   if(m.row_count && tzUnknown / m.row_count > 0.05){
@@ -3254,19 +3463,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
   initFilters();
   initRuleMatchesConfig();
   document.getElementById('threshBtns').addEventListener('click', e=>{
-    if(e.target.tagName!=='BUTTON') return;
-    [...e.target.parentElement.children].forEach(b=>b.classList.remove('active'));
-    e.target.classList.add('active'); renderUntouched(getFiltered());
+    const b = e.target.closest('button'); if(!b) return;
+    state.minDays = parseInt(b.dataset.min) || 0; syncControls(); renderUntouched(getFiltered());
   });
   document.getElementById('pagerPrev').addEventListener('click', ()=>{ state.page--; renderExplorer(getFiltered()); });
   document.getElementById('pagerNext').addEventListener('click', ()=>{ state.page++; renderExplorer(getFiltered()); });
-  document.querySelectorAll('#explorerTable th').forEach(th=> th.addEventListener('click', ()=>{
-    if(!th.dataset.key) return; // e.g. the "Matches" column — a derived list, not a sortable field
+  document.querySelectorAll('#explorerTable th .th-btn').forEach(btn=> btn.addEventListener('click', ()=>{
+    const th = btn.closest('th');
     if(state.sortKey===th.dataset.key) state.sortDir *= -1; else { state.sortKey=th.dataset.key; state.sortDir=-1; }
     state.page=1; renderExplorer(getFiltered());
   }));
-  document.getElementById('detailClose').addEventListener('click', ()=> document.getElementById('detailOverlay').classList.remove('open'));
-  document.getElementById('detailOverlay').addEventListener('click', e=>{ if(e.target.id==='detailOverlay') e.target.classList.remove('open'); });
+  // C-2: the detail panel is a modal dialog — focus moves in, Esc closes, focus returns to the opener.
+  document.getElementById('detailClose').addEventListener('click', closeDetail);
+  document.getElementById('detailOverlay').addEventListener('click', e=>{ if(e.target.id==='detailOverlay') closeDetail(); });
+  document.addEventListener('keydown', e=>{
+    if(!document.getElementById('detailOverlay').classList.contains('open')) return;
+    if(e.key==='Escape'){ e.preventDefault(); closeDetail(); }
+    else if(e.key==='Tab'){ e.preventDefault(); document.getElementById('detailClose').focus(); }
+  });
   render();
 });
 </script>
@@ -3759,6 +3973,127 @@ if (failures > 0) {
 }
 console.log(passed + ' Rule Matches JS assertions passed');
 """
+
+
+# Round 9 dashboard checks (2026-11-10): drill-down, search fold, ranges,
+# rule-filter reset, thresholds, units, dates, Python/JS status-rule twins.
+_JS_R9_DASHBOARD_SUITE = r"""
+const assert = require('assert');
+let passed = 0, failures = 0;
+function check(desc, fn){ try { fn(); passed++; } catch(e){ failures++; console.error('FAIL: ' + desc + '\n  ' + e.message); } }
+function row(over){ return Object.assign({ subcategory:null, resource_type:null, operation:null, old_value_num:null, new_value_num:null, old_value:null, new_value:null, raw_summary:'' }, over); }
+function ids(){ return getFiltered().map(c=>c.change_id); }
+check('fold is Turkish-aware and accent-insensitive', ()=>{
+  assert.strictEqual(fold('İSTANBUL Şube Işık ğ'), 'istanbul sube isik g');
+  assert.strictEqual(fold('ISTANBUL'), fold('istanbul'));
+});
+check('search reads raw_summary and folds both sides', ()=>{
+  DASH_DATA = { changes:[ row({change_id:'a', raw_summary:'Kampanya değiştirildi\n  Hedef EBM'}), row({change_id:'b', raw_summary:'Bütçe'}) ], meta:{} };
+  resetAll(); state.search = 'DEGISTIRILDI'; assert.deepStrictEqual(ids(), ['a']);
+  state.search = 'hedef ebm'; assert.deepStrictEqual(ids(), ['a']); resetAll();
+});
+check('drill-down filters by account+campaign identity, not a search; same click clears', ()=>{
+  DASH_DATA = { changes:[ row({change_id:'1', account_name:'A', campaign_name:'Kasko'}), row({change_id:'2', account_name:'A', campaign_name:'Kasko Plus'}),
+    row({change_id:'3', account_name:'B', campaign_name:'Kasko'}), row({change_id:'4', account_name:'A'}) ], meta:{} };
+  resetAll(); drillCampaign('A', 'Kasko');
+  assert.deepStrictEqual(ids(), ['1']); assert.strictEqual(state.search, '');
+  drillCampaign('A', 'Kasko'); assert.strictEqual(ids().length, 4);
+  drillCampaign('A', NONE); assert.deepStrictEqual(ids(), ['4']); resetAll();
+});
+check('Unknown actors are their own group and filterable', ()=>{
+  DASH_DATA = { changes:[ row({change_id:'h', actor_type:'human', user_name:'U'}), row({change_id:'u', actor_type:'unknown'}), row({change_id:'x', actor_type:'automation', client_type:'GOOGLE_ADS_SCRIPTS'}) ], meta:{} };
+  resetAll(); toggleOnly('users', actorKey(DASH_DATA.changes[1])); assert.deepStrictEqual(ids(), ['u']);
+  toggleOnly('users', 'a:GOOGLE_ADS_SCRIPTS'); assert.deepStrictEqual(ids(), ['x']); resetAll();
+});
+check('7d range compares timestamp_utc against the newest row (or today)', ()=>{
+  DASH_DATA = { changes:[ row({change_id:'new', timestamp_utc:'2026-08-20T23:30:00+00:00', timestamp_iso:'2026-08-21T02:30:00'}),
+    row({change_id:'in', timestamp_utc:'2026-08-14T00:00:00+00:00', timestamp_iso:'2026-08-14T03:00:00'}),
+    row({change_id:'out', timestamp_utc:'2026-08-13T23:00:00+00:00', timestamp_iso:'2026-08-14T02:00:00'}) ], meta:{} };
+  resetAll(); state.range = '7'; assert.deepStrictEqual(ids(), ['new','in']);
+  state.anchor = 'today'; assert.ok(Date.now() > Date.parse('2026-09-01') ? ids().length === 0 : true); resetAll();
+});
+check('turning highlighting off clears the rule filter', ()=>{
+  state.ruleMatch = '__matched__'; ruleState.enabled = true; setRuleHighlighting(false);
+  assert.strictEqual(state.ruleMatch, ''); assert.strictEqual(ruleState.enabled, false);
+});
+check('threshold validation rejects empty/0/negative/non-numeric/over max', ()=>{
+  for(const bad of ['', '  ', 'abc', '0', '-5', String(PCT_MAX+1)]) assert.strictEqual(parseThreshold(bad).ok, false, bad);
+  assert.strictEqual(parseThreshold('30').value, 30); assert.strictEqual(parseThreshold('12,5').value, 12.5);
+});
+check('Clear filters resets rule state and sort too', ()=>{
+  ruleState.enabled = true; ruleState.pct.budget_magnitude = 5; ruleState.stateOn.campaign_paused = false; state.sortKey = 'source'; state.sortDir = 1;
+  resetAll();
+  assert.deepStrictEqual([ruleState.enabled, ruleState.pct.budget_magnitude, ruleState.stateOn.campaign_paused, state.sortKey, state.sortDir], [false, 50, true, 'timestamp_iso', -1]);
+});
+check('legacy "Durum Değişti" campaign pause matches, fact read from the text', ()=>{
+  const m = computeRuleMatches(row({subcategory:'Paused', resource_type:'CAMPAIGN', raw_summary:'Durum Değişti: ENABLED -> PAUSED'})).find(x=>x.id==='campaign_paused');
+  assert.ok(m && m.detail.includes('ENABLED → PAUSED'), m && m.detail);
+  assert.ok(computeRuleMatches(row({subcategory:'Paused', resource_type:'Kampanya'})).some(x=>x.id==='campaign_paused'));
+  assert.ok(!computeRuleMatches(row({subcategory:'Paused', raw_summary:'Kampanya öğesi değiştirildi'})).some(x=>x.id==='campaign_paused'));
+});
+check('Target CPA / ROAS magnitude rules fire on their subcategories', ()=>{
+  resetAll(); ruleState.pct.target_cpa_magnitude = 10; ruleState.pct.target_roas_magnitude = 10;
+  const a = computeRuleMatches(row({subcategory:'Target CPA', old_value_num:350.34, new_value_num:402.89})).find(x=>x.id==='target_cpa_magnitude');
+  assert.ok(a && a.detail.startsWith('+15%'), a && a.detail);
+  assert.ok(computeRuleMatches(row({subcategory:'Target ROAS', old_value_num:400, new_value_num:300})).some(x=>x.id==='target_roas_magnitude'));
+  resetAll();
+});
+check('units: %, parsed currency code, micros conversion', ()=>{
+  assert.strictEqual(valueText(row({new_value:'+10', value_unit:'%'}), 'new'), '+10%');
+  assert.strictEqual(valueText(row({new_value:'402,89', new_value_display:402.89, value_unit:'TRY', currency:'TRY'}), 'new'), '402,89 TRY');
+  assert.strictEqual(valueText(row({new_value:'50000000', new_value_display:50, value_unit:'TRY', currency:'TRY'}), 'new'), '50 TRY (raw: 50000000)');
+  assert.strictEqual(valueText(row({}), 'new'), '');
+});
+check('dates: dd.mm.yyyy hh:mm in tr-TR, source wall clock', ()=>{
+  UI_LOCALE = 'tr-TR'; assert.strictEqual(fmtWall('2026-08-11T02:33:50', true), '11.08.2026 02:33'); UI_LOCALE = undefined;
+});
+check('status-rule twins agree with the Python summary rules', ()=>{
+  for(const t of TWINS){
+    const r = row({subcategory:t.subcategory, raw_summary:t.text});
+    ruleState.stateOn.campaign_enabled = true;
+    const got = computeRuleMatches(r).some(x=>x.id==='campaign_paused' || x.id==='campaign_enabled');
+    assert.strictEqual(got, t.campaign_level, JSON.stringify(t));
+  }
+  resetAll();
+});
+if (failures > 0) { console.error(failures + ' of ' + (passed + failures) + ' round-9 dashboard JS assertions failed'); process.exit(1); }
+console.log(passed + ' round-9 dashboard JS assertions passed');
+"""
+
+
+def _run_r9_dashboard_cases(td):
+    """Round 9 (2026-11-10) dashboard fixes: static template checks plus a Node suite."""
+    import shutil
+    import subprocess
+    with _test_case('r9 dashboard: no good/bad value colours, labelled filters, dialog semantics, wrapped tables'):
+        t = DASHBOARD_TEMPLATE
+        assert "var(--bad)" not in t and "var(--good)" not in t, "Old/New values must not be coloured red/green"
+        assert "<select multiple" not in t.split("<body")[1] and 'details class="ms"' in t, "multi-select must be the checkbox popover"
+        assert t.count('class="fld-l"') >= 11, "every filter needs a visible label"
+        assert 'role="dialog"' in t and 'aria-modal="true"' in t and "closeDetail" in t
+        assert t.count('class="tbl-wrap"') >= 3 and "@media print" in t
+        print("[PASS] r9 dashboard: neutral values, labelled filters, dialog, wrapped tables")
+    if not shutil.which("node"):
+        print("[SKIP] r9 dashboard JS suite (Node not found on PATH)")
+        return
+    with _test_case('r9 dashboard JS suite (Node), incl. Python/JS status-rule twins'):
+        twins = []
+        for text in ["1 campaign paused in ad group X", "2 campaigns paused", "2 ad groups paused", "3 campaigns active",
+                     "1 ad group active", "5 broad match keywords paused", "2 kampanya duraklatıldı", "1 kampanya etkinleştirildi",
+                     "Durum Değişti: ENABLED -> PAUSED"]:
+            rule = next((r for r in CATEGORY_RULES["summary_text_rules"] if re.search(r["pattern"], text)), None)
+            if not rule or rule["subcategory"] not in ("Paused", "Enabled"):
+                continue
+            level = bool(re.search(r"campaign|kampanya", rule["pattern"], re.I)) and not re.search(r"ad group|keyword|kelime|reklam", rule["pattern"], re.I)
+            twins.append({"text": text, "subcategory": rule["subcategory"], "campaign_level": level})
+        assert len(twins) >= 6, f"twin samples no longer reach Python's status rules: {twins}"
+        body = re.search(r"<script>(.*?)</script>", DASHBOARD_TEMPLATE, re.S).group(1)
+        body = body.replace("const DASH_DATA = /*__DASH_DATA__*/null;", "let DASH_DATA = null;", 1)
+        harness = ("global.document = { addEventListener: function(){} };\n" + body + "\nconst TWINS = "
+                   + json.dumps(twins, ensure_ascii=False) + ";\n" + _JS_R9_DASHBOARD_SUITE)
+        proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=15)
+        assert proc.returncode == 0, f"r9 dashboard JS suite failed:\n{proc.stdout}\n{proc.stderr}"
+        print(f"[PASS] r9 dashboard JS suite (Node): {proc.stdout.strip()}")
 
 
 def _run_js_rule_matches_regression():
@@ -5168,6 +5503,7 @@ def _run_pipeline_cases(td):
     _run_round6_regressions(td)
     _run_round7_cases(td)
     _run_round8_cases(td)
+    _run_r9_dashboard_cases(td)
 
 
 # =====================================================================
