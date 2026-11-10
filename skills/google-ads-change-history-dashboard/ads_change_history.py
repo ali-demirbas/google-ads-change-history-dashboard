@@ -177,10 +177,12 @@ USAGE
 import argparse
 import csv
 import hashlib
+import io
 import json
 import re
 import string
 import sys
+import unicodedata
 import webbrowser
 from collections import Counter, defaultdict
 from datetime import datetime, date, timedelta, timezone as dt_timezone
@@ -188,7 +190,27 @@ from difflib import get_close_matches
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROFILES_DIR = SCRIPT_DIR / "mapping-profiles"
+
+
+def _default_state_dir():
+    """2026-11-10 (B-8): mapping profiles + mask labels live in a per-user data
+    dir, so a read-only skill install still works; skill dir only as fallback."""
+    import os
+    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    user_dir = Path(base) / "google-ads-change-history-dashboard" / "mapping-profiles"
+    for cand in (user_dir, SCRIPT_DIR / "mapping-profiles"):
+        probe = cand
+        while not probe.exists() and probe != probe.parent:
+            probe = probe.parent
+        if os.access(str(probe), os.W_OK):
+            return cand
+    return user_dir
+
+
+PROFILES_DIR = _default_state_dir()
+PROFILE_SCHEMA_VERSION = 2  # profiles without this stamp are ignored (2026-11-10)
+INPUT_ENCODING = None  # set by --encoding; None = auto-detect (2026-11-10, L-1)
+CSV_FIELD_SIZE_LIMIT = 64 * 1024 * 1024
 EMPTY_FRACTION_ABORT_THRESHOLD = 0.30
 SCALE_WARN_THRESHOLD = 150_000
 
@@ -221,7 +243,10 @@ HEADER_ALIASES = {
         ],
     },
     "aliases": {
-        "timestamp": ["Tarih", "Change Date", "Change Date/Time", "Date", "change_date_time", "Değişiklik Tarihi", "Date & time", "Change date", "Zaman"],
+        # Native-export headers in de/es/fr/pt/it/nl added 2026-11-10 (L-7).
+        "timestamp": ["Tarih", "Change Date", "Change Date/Time", "Date", "change_date_time", "Değişiklik Tarihi", "Date & time", "Change date", "Zaman",
+                      "Tarih ve saat", "Date and time", "Datum und Uhrzeit", "Datum", "Fecha y hora", "Fecha", "Date et heure",
+                      "Data e hora", "Data", "Data e ora", "Datum en tijd"],
         "account_id": ["Hesap ID", "Account ID", "Customer ID", "customer_id", "external_customer_id"],
         # Fixed 2026-10-10 (6th audit round): account_name/campaign_name/
         # ad_group_name were each missing their own literal snake_case name —
@@ -229,7 +254,7 @@ HEADER_ALIASES = {
         # with display names (customer_id + account_name, campaign +
         # campaign_name, ...) mapped the ID/path columns and silently dropped
         # all three name columns, so every row rendered as "Campaign <id>".
-        "account_name": ["account_name", "Hesap Adı", "Account", "Account name", "Client", "Hesap"],
+        "account_name": ["account_name", "Hesap Adı", "Account", "Account name", "Client", "Hesap", "Konto", "Cuenta", "Compte", "Conta"],
         # Fixed 2026-08-18 (found via a synthetic-dataset dry run, not a
         # pasted audit): "user_name" itself was missing from its own alias
         # list — user_email/client_type both already self-reference (their
@@ -238,7 +263,9 @@ HEADER_ALIASES = {
         # naming an automation script via "user_name") mapped nothing —
         # actor_type silently fell back to "unknown" for every such row
         # instead of correctly resolving to "automation".
-        "user_name": ["user_name", "Kullanıcı", "Changed by", "User", "Değiştiren", "Değiştiren Kullanıcı"],
+        "user_name": ["user_name", "Kullanıcı", "Changed by", "User", "Değiştiren", "Değiştiren Kullanıcı",
+                      "Nutzer", "Benutzer", "Geändert von", "Usuario", "Modificado por", "Utilisateur", "Modifié par",
+                      "Usuário", "Utilizador", "Alterado por", "Utente", "Modificato da", "Gebruiker", "Gewijzigd door"],
         "user_email": ["user_email", "Email", "Kullanıcı E-postası", "User email", "E-posta"],
         "client_type": ["client_type", "Client", "İstemci Türü", "Client type"],
         "resource_type": ["change_resource_type", "Item type", "Değişiklik Tipi", "Change type", "Level", "Resource type"],
@@ -258,10 +285,13 @@ HEADER_ALIASES = {
         # effectively API-source-specific.
         "source_event_id": ["resource_name"],
         "campaign_id": ["Campaign ID", "Kampanya ID", "campaign.id"],
-        "campaign_name": ["campaign_name", "Campaign", "Kampanya", "campaign.name"],
+        "campaign_name": ["campaign_name", "Campaign", "Kampanya", "campaign.name", "Kampagne", "Campaña", "Campagne", "Campanha", "Campagna"],
         "ad_group_id": ["Ad group ID", "Reklam Grubu ID", "ad_group.id"],
-        "ad_group_name": ["ad_group_name", "Ad group", "Reklam Grubu", "ad_group.name"],
-        "operation": ["resource_change_operation", "Change", "Değişiklik", "Operation"],
+        "ad_group_name": ["ad_group_name", "Ad group", "Reklam Grubu", "ad_group.name", "Anzeigengruppe", "Grupo de anuncios",
+                          "Groupe d'annonces", "Grupo de anúncios", "Gruppo di annunci", "Advertentiegroep"],
+        # Singular "Change"-style headers only map here when the column really
+        # holds operation words; free text goes to raw_summary (2026-11-10, D-4).
+        "operation": ["resource_change_operation", "Change", "Değişiklik", "Operation", "Änderung", "Cambio", "Modification", "Alteração", "Modifica", "Wijziging"],
         "field_name": ["changed_fields", "Field", "Alan", "Değişen Alan"],
         "old_value": ["old_resource", "Eski Teknik Veri", "Before", "Old value", "Önceki", "Old"],
         "new_value": ["new_resource", "Yeni Teknik Veri", "After", "New value", "Yeni", "New"],
@@ -271,7 +301,8 @@ HEADER_ALIASES = {
         # export this session. It's a multi-line free-text cell that can
         # bundle several distinct changes into one row (see the module
         # docstring's note on this format's limits).
-        "raw_summary": ["Değişiklik Özeti (Nereden -> Nereye)", "Değişiklik Özeti", "Change summary", "Summary", "Description", "Changes"],
+        "raw_summary": ["Değişiklik Özeti (Nereden -> Nereye)", "Değişiklik Özeti", "Change summary", "Summary", "Description", "Changes",
+                        "Değişiklikler", "Änderungen", "Cambios", "Modifications", "Alterações", "Modifiche", "Wijzigingen"],
     },
     "value_aliases": {
         "operation": {
@@ -589,7 +620,7 @@ def normalize_header(h):
     return " ".join(h.strip().lower().split())
 
 
-def read_rows(path):
+def read_rows(path, info=None, encoding=None):
     """Raises ValueError with a clear message for every malformed-input case
     this codebase is expected to handle (missing file, invalid JSON, unreadable
     encoding) — never a raw stdlib exception. Fixed 2026-08-18 (audit F-16,
@@ -606,13 +637,19 @@ def read_rows(path):
     path = Path(path)
     if not path.exists():
         raise ValueError(f"Input file not found: {path}")
+    if path.is_dir():
+        raise ValueError(f"Input path is a directory, not a file: {path}")
+    raw = path.read_bytes()
+    for magic, what in _MAGIC_SIGNATURES:
+        if raw.startswith(magic):
+            raise ValueError(f"{path} is {what}, not CSV/JSON. Open it and export/save it as CSV (UTF-8), then re-run on the .csv file.")
 
     if path.suffix.lower() == ".json":
-        with open(path, encoding="utf-8") as f:
-            try:
-                data = json.load(f)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Input file is not valid JSON: {path} ({e})")
+        try:
+            data = json.loads(_decode_input(path, raw, encoding)[0].lstrip("\ufeff"))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Input file is not valid JSON: {path} ({e})")
+        data = _scrub_surrogates(data)
         if isinstance(data, list):
             rows = data
         elif isinstance(data, dict):
@@ -647,27 +684,142 @@ def read_rows(path):
                     headers.append(k)
         return headers, rows
 
-    delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
-    for enc in ("utf-8-sig", "cp1254", "latin-1"):
+    text, enc_used = _decode_input(path, raw, encoding)
+    text = text.replace("\x00", "").replace("\ufeff", "")
+    if path.suffix.lower() == ".tsv":
+        delimiter = "\t"
+    else:
+        delimiter = _sniff_delimiter(text)
+    csv.field_size_limit(CSV_FIELD_SIZE_LIMIT)
+    try:
+        all_rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter))
+    except csv.Error as e:
+        if "field larger than field limit" in str(e):
+            raise ValueError(f"A cell in {path} is larger than {CSV_FIELD_SIZE_LIMIT // (1024 * 1024)} MB — the file is probably not a real CSV export (or a quote is unbalanced).")
+        raise ValueError(f"Could not parse {path} as CSV: {e}")
+    hdr_idx = _find_header_row(all_rows)
+    if info is not None:
+        info.update({"encoding": enc_used, "delimiter": delimiter, "preamble_rows_skipped": hdr_idx})
+    if hdr_idx is None:
+        return [], []
+    headers = [h.strip() for h in all_rows[hdr_idx]]
+    rows = []
+    for rec in all_rows[hdr_idx + 1:]:
+        if not rec:
+            continue  # same as csv.DictReader: blank lines are not rows
+        d = dict(zip(headers, rec))
+        if len(rec) > len(headers):
+            d[None] = rec[len(headers):]
+        elif len(rec) < len(headers):
+            for h in headers[len(rec):]:
+                d.setdefault(h, None)
+        rows.append(d)
+    return headers, rows
+
+
+_MAGIC_SIGNATURES = (
+    (b"PK\x03\x04", "an Excel .xlsx / zip archive"),
+    (b"\x1f\x8b", "a gzip archive"),
+    (b"\xd0\xcf\x11\xe0", "a legacy Excel .xls file"),
+)
+# Mojibake tells: C1 controls, or UTF-8 bytes read as a single-byte code page.
+_MOJIBAKE_RE = re.compile("[\u0080-\u009f]|[\u00c3\u00c4\u00c5\u00c2][\u0080-\u00bf]|\u00c4\u00b1|\u00c5\u0178|\u00c3\u00bc")
+
+
+def _decode_input(path, raw, encoding=None):
+    """2026-11-10 (L-1/L-2/T-7): BOM-aware decode; cp1254/latin-1 fallbacks are
+    rejected when the result looks like mojibake. Returns (text, encoding)."""
+    encoding = encoding or INPUT_ENCODING
+    if encoding:
         try:
-            with open(path, encoding=enc, newline="") as f:
-                reader = csv.DictReader(f, delimiter=delimiter)
-                rows = list(reader)
-                # Fixed 2026-08-18 (audit F-16): reading .fieldnames was
-                # previously done AFTER this `with` block closed the file —
-                # harmless when the file has content (DictReader already
-                # populated .fieldnames while iterating), but an empty file
-                # never triggers that lazy population, and accessing
-                # .fieldnames afterward on the closed handle raised
-                # "I/O operation on closed file." Reading it here, still
-                # inside the open block, fixes both cases uniformly.
-                headers = reader.fieldnames or []
-            if "�" in " ".join(headers):
-                continue
-            return headers, rows
+            return raw.decode(encoding), encoding
+        except (UnicodeDecodeError, LookupError) as e:
+            raise ValueError(f"Could not decode {path} with --encoding {encoding}: {e}")
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            return raw.decode("utf-16"), "utf-16"
+        except UnicodeDecodeError as e:
+            raise ValueError(f"{path} has a UTF-16 byte-order mark but is not valid UTF-16: {e}")
+    if raw[:2000].count(b"\x00") > len(raw[:2000]) // 4:
+        # UTF-16 without a BOM: NUL bytes sit on the odd (LE) or even (BE) side.
+        sample = raw[:2000]
+        le = sample[1::2].count(0) >= sample[0::2].count(0)
+        try:
+            return raw.decode("utf-16-le" if le else "utf-16-be"), ("utf-16-le" if le else "utf-16-be")
+        except UnicodeDecodeError:
+            pass
+    try:
+        return raw.decode("utf-8-sig"), "utf-8"
+    except UnicodeDecodeError:
+        pass
+    for enc in ("cp1254", "latin-1"):
+        try:
+            text = raw.decode(enc)
         except UnicodeDecodeError:
             continue
-    raise ValueError(f"Could not decode {path} with utf-8-sig, cp1254, or latin-1.")
+        letters = [c for c in text[:20000] if c.isalpha()]
+        non_ascii = sum(1 for c in letters if ord(c) > 127)
+        if not _MOJIBAKE_RE.search(text) and non_ascii <= 0.4 * max(len(letters), 1):
+            return text, enc
+    raise ValueError(f"Could not decode {path}: not UTF-8/UTF-16, and the cp1254/latin-1 fallbacks produce garbled text. Re-export it as CSV (UTF-8), or pass --encoding <codec> (e.g. --encoding cp1251).")
+
+
+def _sniff_delimiter(text):
+    """2026-11-10 (L-3): ',' ';' or tab — whichever gives the most rows with the
+    same (largest) column count in the first lines; ',' wins ties."""
+    head = text[:65536]
+    best, best_score = ",", -1
+    for d in (",", ";", "\t"):
+        try:
+            recs = list(csv.reader(io.StringIO(head, newline=""), delimiter=d))[:40]
+        except csv.Error:
+            continue
+        counts = Counter(len(r) for r in recs if len(r) > 1)
+        if not counts:
+            continue
+        width, n = max(counts.items(), key=lambda kv: (kv[1], kv[0]))
+        score = n * 1000 + width
+        if score > best_score:
+            best, best_score = d, score
+    return best
+
+
+def _known_alias_set():
+    out = set()
+    for alias_list in HEADER_ALIASES["aliases"].values():
+        out.update(normalize_header(a) for a in alias_list)
+    return out
+
+
+def _find_header_row(all_rows, scan=30):
+    """2026-11-10 (T-1/B-6): native exports start with title/date-range lines.
+    The header is the first row with >=2 known aliases; else the first row
+    that has the file's most common width (>1 column); else row 0."""
+    if not all_rows:
+        return None
+    aliases = _known_alias_set()
+    head = all_rows[:scan]
+    for i, rec in enumerate(head):
+        if sum(1 for c in rec if normalize_header(c.replace("\ufeff", "")) in aliases) >= 2:
+            return i
+    counts = Counter(len(r) for r in all_rows if len(r) > 1)
+    if counts:
+        width = max(counts.items(), key=lambda kv: (kv[1], kv[0]))[0]
+        for i, rec in enumerate(head):
+            if len(rec) == width:
+                return i
+    return 0
+
+
+def _scrub_surrogates(obj):
+    """Lone surrogates (legal in JSON, illegal in UTF-8 output) -> U+FFFD (2026-11-10, S-7)."""
+    if isinstance(obj, str):
+        return obj.encode("utf-8", "replace").decode("utf-8") if any("\ud800" <= ch <= "\udfff" for ch in obj) else obj
+    if isinstance(obj, list):
+        return [_scrub_surrogates(x) for x in obj]
+    if isinstance(obj, dict):
+        return {_scrub_surrogates(k): _scrub_surrogates(v) for k, v in obj.items()}
+    return obj
 
 
 def detect_duplicate_headers(headers):
@@ -692,8 +844,13 @@ def try_fingerprint_match(headers):
     fp = fingerprint(headers)
     profile_path = PROFILES_DIR / f"{fp}.json"
     if profile_path.exists():
-        with open(profile_path, encoding="utf-8") as f:
-            profile = json.load(f)
+        try:
+            with open(profile_path, encoding="utf-8") as f:
+                profile = json.load(f)
+        except (OSError, ValueError):
+            return None  # unreadable cache is ignored, never fatal (2026-11-10)
+        if not isinstance(profile, dict) or profile.get("schema_version") != PROFILE_SCHEMA_VERSION or not isinstance(profile.get("mapping"), dict):
+            return None  # stale or foreign profile (2026-11-10, B-8)
         # Fixed 2026-10-10 (6th audit round): every "ok" run used to save a
         # profile, including one derived purely from the alias table. That
         # froze the table's state at the time — a later alias fix never
@@ -761,22 +918,66 @@ def _column_looks_like_resource_path(rows, header, n=5):
     return False
 
 
-def try_alias_match(headers, rows=None):
-    alias_lookup = {}
+_CLIENT_TYPE_VALUE_RE = re.compile(r"^[A-Z0-9]+(_[A-Z0-9]+)+$")
+
+
+def _column_is_operation_words(rows, header, n=50):
+    """2026-11-10 (D-4/F-3/T-6): a "Change"-titled column is an operation column
+    only if its values are operation words; multi-line free text is a summary."""
+    vals = sample_values(rows or [], header, n)
+    if not vals:
+        return True
+    if any("\n" in v for v in vals):
+        return False
+    known = sum(1 for v in vals if apply_value_alias("operation", v) in ("CREATE", "UPDATE", "REMOVE") or re.fullmatch(r"[A-Z_]+", v.strip()))
+    wordy = sum(1 for v in vals if len(v.split()) > 2)
+    return known >= 0.5 * len(vals) or wordy < 0.5 * len(vals)
+
+
+def try_alias_match(headers, rows=None, warnings=None):
+    alias_lookup = defaultdict(list)
     for canonical, alias_list in HEADER_ALIASES["aliases"].items():
         for a in alias_list:
-            alias_lookup[normalize_header(a)] = canonical
+            if canonical not in alias_lookup[normalize_header(a)]:
+                alias_lookup[normalize_header(a)].append(canonical)
+    warnings = warnings if warnings is not None else []
     mapping, unmatched = {}, []
     for h in headers:
         if h in API_EXACT_CASE_RESOURCE_ALIASES and _column_looks_like_resource_path(rows, h):
             mapping[API_EXACT_CASE_RESOURCE_ALIASES[h]] = h
             continue
-        nh = normalize_header(h)
-        if nh in alias_lookup:
-            mapping[alias_lookup[nh]] = h
-        else:
+        cands = alias_lookup.get(normalize_header(h))
+        if not cands:
             unmatched.append(h)
+            continue
+        canonical = cands[0]
+        if len(cands) > 1:
+            # 2026-11-10 (L-10): "Client" is an account in MCC exports, a client type in API data.
+            vals = sample_values(rows or [], h, 20)
+            canonical = "client_type" if vals and all(_CLIENT_TYPE_VALUE_RE.match(v.strip()) for v in vals) and "client_type" in cands else [c for c in cands if c != "client_type"][0]
+            warnings.append(f"Column {h!r} could mean {cands}; read it as {canonical}. Pass --map to change that.")
+        if canonical == "operation" and not _column_is_operation_words(rows, h):
+            canonical = "raw_summary"
+        if canonical in mapping:
+            warnings.append(f"Columns {mapping[canonical]!r} and {h!r} both look like {canonical}; using {mapping[canonical]!r}. Pass --map {canonical}=\"...\" to choose.")
+            unmatched.append(h)
+            continue
+        mapping[canonical] = h
     return mapping, unmatched
+
+
+def save_mapping_profile(profile):
+    """Writes a human-confirmed mapping profile; returns a list of warnings, never
+    raises (2026-11-10, B-8: called only once a run reached ok)."""
+    if not profile:
+        return []
+    try:
+        PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+        with open(PROFILES_DIR / f"{profile['fingerprint']}.json", "w", encoding="utf-8") as f:
+            json.dump({k: v for k, v in profile.items() if k != "fingerprint"}, f, indent=2, ensure_ascii=False)
+    except OSError as e:
+        return [f"Could not save the confirmed mapping to {PROFILES_DIR} ({e.strerror or e}); it will be asked again next time."]
+    return []
 
 
 def detect_known_source(headers):
@@ -894,8 +1095,9 @@ def parse_column_map(entries):
 def validate_source(input_path, mapping_file=None, force=False, save_profile=True, default_account_name=None, column_map=None):
     """Returns dict. status=ok includes 'mapping'. Any other status means STOP —
     caller must resolve with a human before continuing."""
+    read_info = {}
     try:
-        headers, rows = read_rows(input_path)
+        headers, rows = read_rows(input_path, info=read_info)
     except ValueError as e:
         # Fixed 2026-08-18 (audit F-16/F-17/F-18): read_rows() used to let
         # FileNotFoundError / JSONDecodeError / a closed-file I/O error
@@ -918,6 +1120,9 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
     # just silently useless output. The check now runs once, after mapping is
     # resolved, regardless of which of the 3 paths produced it.
     unmatched = []
+    map_warnings = []
+    if read_info.get("preamble_rows_skipped"):
+        map_warnings.append(f"Skipped {read_info['preamble_rows_skipped']} title/preamble line(s) before the header row.")
     source_label = "unmapped_confirmed"
     if mapping_file:
         # Fixed 2026-08-18 (4th audit round, confirmed): read_rows() turns
@@ -934,15 +1139,21 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
             return {"status": "error", "message": f"Mapping file not found: {mapping_file}"}
         except json.JSONDecodeError as e:
             return {"status": "error", "message": f"Mapping file is not valid JSON: {mapping_file} ({e})"}
-        mapping = confirmed.get("mapping", confirmed)
-        source_label = confirmed.get("source_label", "user_confirmed")
+        except (OSError, UnicodeDecodeError) as e:
+            return {"status": "error", "message": f"Mapping file could not be read: {mapping_file} ({e})"}
+        # 2026-11-10 (S-7): a non-object mapping used to crash with AttributeError.
+        confirmed = _scrub_surrogates(confirmed)
+        mapping = confirmed.get("mapping", confirmed) if isinstance(confirmed, dict) else None
+        if not isinstance(mapping, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in mapping.items()):
+            return {"status": "error", "message": f"Mapping file must be a JSON object of canonical_field -> column header strings (optionally under a 'mapping' key): {mapping_file}"}
+        source_label = str(confirmed.get("source_label", "user_confirmed"))
     else:
         profile = try_fingerprint_match(headers)
         if profile:
             mapping = profile["mapping"]
             source_label = profile.get("source_label", "fingerprint_match")
         else:
-            mapping, unmatched = try_alias_match(headers, rows)
+            mapping, unmatched = try_alias_match(headers, rows, map_warnings)
             source_label = detect_known_source(headers) or "alias_match"
 
     # Added 2026-10-10: answering needs_mapping used to mean hand-writing a
@@ -960,13 +1171,25 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
         bad_headers = sorted(h for h in column_map.values() if h not in headers)
         if bad_headers:
             return {"status": "error", "message": f"--map: column header(s) {bad_headers} are not in this file. Its headers: {headers}"}
+        # 2026-11-10 (D-4/F-3): an explicitly mapped header belongs to that field only.
+        explicit = set(column_map.values())
+        mapping = {k: h for k, h in mapping.items() if h not in explicit}
         mapping = {**mapping, **column_map}
         unmatched = [h for h in unmatched if h not in column_map.values()]
         if source_label in ({"alias_match", "unmapped_confirmed"} | set(HEADER_ALIASES["known_sources"])):
             source_label = "user_confirmed"
 
+    if mapping.get("operation") and mapping.get("operation") == mapping.get("raw_summary") and "operation" not in (column_map or {}):
+        mapping = {k: h for k, h in mapping.items() if k != "operation"}  # free text is not an operation (D-4)
     missing = check_hard_required(mapping, default_account_name=default_account_name)
     if missing:
+        no_account = "account_name" not in mapping and "account_id" not in mapping
+        instr = ("Show unmapped_headers + sample_values to the user in chat. Ask which canonical field each maps to (see module docstring: CANONICAL SCHEMA). "
+                 "Re-run with one --map canonical_field=\"Column header\" per answer (or put them in a JSON file, {'source_label': ..., 'mapping': {canonical: header}}, and pass --mapping-file <file>).")
+        if "resource_type" in missing:
+            instr += " resource_type is only needed when there is no free-text change-summary column: mapping that column as raw_summary satisfies it."
+        if no_account and not default_account_name:
+            instr += " The file has no account column (normal for a single-account Google Ads UI export): pass --account-name \"<account>\"."
         return {
             "status": "needs_mapping",
             "input": str(input_path),
@@ -976,7 +1199,7 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
             "unmapped_headers": unmatched,
             "sample_values": {h: sample_values(rows, h) for h in unmatched},
             "suggested_mapping": suggest_fuzzy_mapping(unmatched),
-            "instructions": "Show unmapped_headers + sample_values to the user in chat. Ask which canonical field each maps to (see module docstring: CANONICAL SCHEMA). Re-run with one --map canonical_field=\"Column header\" per answer (or put them in a JSON file, {'source_label': ..., 'mapping': {canonical: header}}, and pass --mapping-file <file>). If the source genuinely has no column for a missing field (e.g. no resource_type at all), that field cannot be satisfied by mapping alone — this input can't proceed until the data itself provides it.",
+            "instructions": instr,
         }
 
     review_issues = []
@@ -999,11 +1222,12 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
             "mapping": mapping,
         }
 
+    # 2026-11-10 (B-8): the profile is only handed back here; run_pipeline saves
+    # it once the whole run reached ok, so a failed run never caches a mapping.
+    profile = None
     if save_profile and (mapping_file or column_map):
-        PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-        fp = fingerprint(headers)
-        with open(PROFILES_DIR / f"{fp}.json", "w", encoding="utf-8") as f:
-            json.dump({"source_label": source_label, "confirmed_by": "mapping_file" if mapping_file else "map_flag", "mapping": mapping, "headers_seen": headers}, f, indent=2, ensure_ascii=False)
+        profile = {"schema_version": PROFILE_SCHEMA_VERSION, "fingerprint": fingerprint(headers), "source_label": source_label,
+                   "confirmed_by": "mapping_file" if mapping_file else "map_flag", "mapping": mapping, "headers_seen": headers}
 
     return {
         "status": "ok", "input": str(input_path), "row_count": len(rows),
@@ -1014,7 +1238,8 @@ def validate_source(input_path, mapping_file=None, force=False, save_profile=Tru
         # no alias matched just vanished — which is how three fully-populated
         # name columns went missing with nothing anywhere saying so.
         "ignored_headers": [h for h in headers if h not in set(mapping.values())],
-        "warnings": soft_warnings(mapping) + ([f"Duplicate column header(s) detected: {dup_headers} — only the last occurrence of each is used (stdlib csv.DictReader behavior), earlier columns of the same name are silently discarded."] if dup_headers else []),
+        "_profile": profile,
+        "warnings": map_warnings + soft_warnings(mapping) + ([f"Duplicate column header(s) detected: {dup_headers} — only the last occurrence of each is used (stdlib csv.DictReader behavior), earlier columns of the same name are silently discarded."] if dup_headers else []),
     }
 
 
@@ -1100,11 +1325,123 @@ _NARROW_SPACES = (" ", " ")
 def _normalize_spaces(s):
     for ch in _NARROW_SPACES:
         s = s.replace(ch, " ")
+    for ch in ("\u200e", "\u200f", "\u061c", "\ufeff"):  # bidi marks (2026-11-10, L-5)
+        s = s.replace(ch, "")
     return s
 
 
-YEAR_FIRST_DATE_RE = re.compile(r"^\d{4}[-/]\d{2}[-/]\d{2}")
+YEAR_FIRST_DATE_RE = re.compile(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}")
 SLASH_DATE_RE = re.compile(r"^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})")
+
+# 2026-11-10 (T-1/L-4): spelled-out month names, keyed accent-free and lowercase.
+_MONTH_NAMES = {}
+for _num, _names in enumerate((
+    "oca ocak jan january januar jän janner januari ene enero janv janvier janeiro gen gennaio",
+    "şub şubat feb february februar febrero fév févr février fev fevereiro febbraio februari",
+    "mar mart march mär märz mrz marzo mars março mrt maart",
+    "nis nisan apr april abr abril avr avril aprile",
+    "may mayıs mayis mai mayo maio mag maggio mei",
+    "haz haziran jun june juni junio juin junho giu giugno",
+    "tem temmuz jul july juli julio juil juillet julho lug luglio",
+    "ağu ağustos aug august ago agosto août aout augustus",
+    "eyl eylül sep sept september septiembre set septembre setembro settembre",
+    "eki ekim oct october okt oktober octubre octobre out outubro ott ottobre",
+    "kas kasım kasim nov november noviembre novembre novembro",
+    "ara aralık aralik dec december dez dezember dic diciembre déc décembre dezembro dicembre",
+), start=1):
+    for _n in _names.split():
+        _MONTH_NAMES[unicodedata.normalize("NFD", _n).encode("ascii", "ignore").decode().replace("ı", "i")] = _num
+_DATE_FILLER_WORDS = {"de", "del", "a", "à", "las", "um", "às", "as", "at", "alle", "om", "saat", "le", "el", "o"}
+_TEXT_TIME_RE = re.compile(r"(\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,](\d+))?")
+_AMPM_RE = re.compile(r"(?<![^\W\d_])([ap])\.?\s?m\.?(?![^\W\d_])|(?<![^\W\d_])(öö|ös)(?![^\W\d_])", re.IGNORECASE)
+_TEXT_OFFSET_RE = re.compile(r"\s*(?:gmt|utc)?\s*([+-])(\d{1,2}):?(\d{2})?\s*$", re.IGNORECASE)
+
+
+def _month_key(word):
+    w = word.replace("İ", "i").replace("I", "ı").lower().replace("ı", "i")
+    return unicodedata.normalize("NFD", w).encode("ascii", "ignore").decode().rstrip(".")
+
+
+def parse_text_month_timestamp(raw):
+    """'11 Ağu 2026 02:33:50', 'Aug 16, 2026, 10:42:26 PM', '16. Aug. 2026',
+    '16 de ago. de 2026 22:42', '16 août 2026 à 22:42' -> datetime (aware if an
+    offset is given). Raises ValueError; never guesses a leftover word."""
+    s = _normalize_spaces(str(raw).strip())
+    tz = None
+    m = _TEXT_OFFSET_RE.search(s)
+    if m and _TEXT_TIME_RE.search(s[:m.start()]):
+        sign = 1 if m.group(1) == "+" else -1
+        tz = dt_timezone(sign * timedelta(hours=int(m.group(2)), minutes=int(m.group(3) or 0)))
+        s = s[:m.start()]
+    ampm = None
+    am = _AMPM_RE.search(s)
+    if am:
+        tag = (am.group(1) or am.group(2)).lower()
+        ampm = "am" if tag in ("a", "öö") else "pm"
+        s = s[:am.start()] + " " + s[am.end():]
+    hh = mi = ss = us = 0
+    tm = _TEXT_TIME_RE.search(s)
+    if tm:
+        hh, mi, ss = int(tm.group(1)), int(tm.group(2)), int(tm.group(3) or 0)
+        if tm.group(4):
+            us = int((tm.group(4) + "000000")[:6])
+        s = s[:tm.start()] + " " + s[tm.end():]
+    month = day = year = None
+    numbers = []
+    for tok in re.findall(r"\d+|[^\W\d_]+\.?", s):
+        if tok[0].isdigit():
+            numbers.append(tok)
+            continue
+        key = _month_key(tok)
+        if key in _MONTH_NAMES and month is None:
+            month = _MONTH_NAMES[key]
+        elif key not in _DATE_FILLER_WORDS and tok.lower().rstrip(".") not in _DATE_FILLER_WORDS:
+            raise ValueError(f"unparseable timestamp: {raw}")
+    if month is None or len(numbers) != 2:
+        raise ValueError(f"unparseable timestamp: {raw}")
+    years = [n for n in numbers if len(n) == 4]
+    if len(years) != 1:
+        raise ValueError(f"unparseable timestamp: {raw}")
+    year = int(years[0])
+    day = int([n for n in numbers if n is not years[0]][0])
+    if ampm:
+        if not 1 <= hh <= 12:
+            raise ValueError(f"unparseable timestamp: {raw}")
+        hh = (hh % 12) + (12 if ampm == "pm" else 0)
+    dt = datetime(year, month, day, hh, mi, ss, us)
+    return dt.replace(tzinfo=tz) if tz else dt
+
+
+def _looks_text_month(v):
+    try:
+        parse_text_month_timestamp(v)
+        return True
+    except ValueError:
+        return False
+
+
+def _iso_candidate_fix(c):
+    """Python 3.9 fromisoformat gaps (B-14): 1-digit M/D, ',123' or non-3/6-digit
+    fractions, '+0300' / '+03' offsets."""
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$", c)
+    if not m:
+        return c
+    rest = m.group(4)
+    rest = re.sub(r"^([ T]\d{1,2}:\d{2}:\d{2})[.,](\d+)", lambda x: x.group(1) + "." + (x.group(2) + "000000")[:6], rest)
+    rest = re.sub(r"^([ T])(\d):", lambda x: x.group(1) + "0" + x.group(2) + ":", rest)
+    rest = re.sub(r"([+-])(\d{2})(\d{2})$", r"\1\2:\3", rest)
+    rest = re.sub(r"(\d)\s*([+-])(\d{2})$", r"\1\2\3:00", rest)
+    return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}{rest}"
+
+
+def date_format_question(ts_values):
+    """The needs_date_format answer: the DD/MM question only for real slash
+    dates; otherwise 'unrecognised date shape' with samples (2026-11-10, L-5)."""
+    vals = [v for v in ts_values if v and str(v).strip()]
+    slash = [v for v in vals if SLASH_DATE_RE.match(_normalize_spaces(str(v).strip()))]
+    if slash:
+        return {"status": "needs_date_format", "message": "Timestamp column is ambiguous (DD/MM vs MM/DD). Ask the user, then re-run with --date-format DMY|MDY|ISO.", "sample_values": slash[:5]}
+    return {"status": "needs_date_format", "message": f"unrecognised date shape: {str(vals[0])[:60] if vals else '(empty)'} — this is not a date layout the script knows. Check the timestamp column mapping, or re-export with an ISO (YYYY-MM-DD HH:MM:SS) date column.", "sample_values": vals[:5]}
 
 
 def detect_date_format(values):
@@ -1133,8 +1470,12 @@ def detect_date_format(values):
     if not slash:
         iso = sum(1 for s in sample if YEAR_FIRST_DATE_RE.match(s))
         ui_en = sum(1 for s in sample if GOOGLE_UI_EN_DATETIME_RE.match(s))
-        if not (iso or ui_en):
+        # A spelled-out month is never DD/MM-ambiguous (2026-11-10, T-1/L-4).
+        text = 0 if (iso or ui_en) else sum(1 for s in sample[:500] if _looks_text_month(s))
+        if not (iso or ui_en or text):
             return None
+        if text:
+            return "TEXT_MONTH"
         return "ISO" if iso >= ui_en else "UI_EN"
     for m in slash:
         a, b = int(m.group(1)), int(m.group(2))
@@ -1146,7 +1487,7 @@ def detect_date_format(values):
 
 
 DMY_OFFSET_RE = re.compile(
-    r"^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})[ T]?(\d{1,2}:\d{2}(:\d{2})?)?\s*(Z|[+-]\d{2}:?\d{2})?$"
+    r"^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})\.?(?:,?\s*|T)(\d{1,2}:\d{2}(:\d{2})?)?(?:[.,]\d+)?\s*(Z|[+-]\d{2}:?\d{2})?\s*(?:([AaPp])\.?\s?[Mm]\.?)?$"
 )
 
 
@@ -1183,8 +1524,9 @@ def parse_timestamp(raw, fmt):
         # 2 slashes (the date separators) are ever present in a genuine
         # slash-ISO string, so this is unambiguous when the year-first shape
         # is confirmed first.
-        if re.match(r"^\d{4}/\d{2}/\d{2}", iso_candidate):
+        if re.match(r"^\d{4}/\d{1,2}/\d{1,2}", iso_candidate):
             iso_candidate = iso_candidate.replace("/", "-", 2)
+        iso_candidate = _iso_candidate_fix(iso_candidate)
         try:
             return datetime.fromisoformat(iso_candidate)
         except ValueError:
@@ -1195,14 +1537,17 @@ def parse_timestamp(raw, fmt):
             except ValueError:
                 continue
         raise ValueError(f"unparseable ISO timestamp: {raw}")
-    if fmt == "UI_EN":
+    if fmt in ("UI_EN", "TEXT_MONTH"):
         try:
             return datetime.strptime(s, "%b %d, %Y, %I:%M:%S %p")
         except ValueError:
-            raise ValueError(f"unparseable UI_EN timestamp: {raw}")
+            try:
+                return parse_text_month_timestamp(s)
+            except ValueError:
+                raise ValueError(f"unparseable {fmt} timestamp: {raw}")
     m = DMY_OFFSET_RE.match(s)
     if not m:
-        raise ValueError(f"unparseable timestamp: {raw}")
+        return parse_text_month_timestamp(s)  # a spelled-out month in a DMY/MDY file
     a, b, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
     day, month = (a, b) if fmt == "DMY" else (b, a)
     hh = mm = ss = 0
@@ -1210,6 +1555,10 @@ def parse_timestamp(raw, fmt):
         parts = m.group(4).split(":")
         hh, mm = int(parts[0]), int(parts[1])
         ss = int(parts[2]) if len(parts) > 2 else 0
+    if m.group(7):  # 12h clock (2026-11-10, L-4)
+        if not 1 <= hh <= 12:
+            raise ValueError(f"unparseable timestamp: {raw}")
+        hh = (hh % 12) + (12 if m.group(7).lower() == "p" else 0)
     if y < 100:
         y += 2000
     dt = datetime(y, month, day, hh, mm, ss)
@@ -1380,8 +1729,7 @@ def normalize_changes(input_path, mapping, source_label, date_format=None, decim
         # of slash dates, the human was asked "DD/MM or MM/DD?" while being
         # shown five ISO strings that have no such ambiguity. Same for the
         # decimal-style question below.
-        ambiguous = [v for v in ts_values if v and not YEAR_FIRST_DATE_RE.match(_normalize_spaces(str(v)))]
-        return {"status": "needs_date_format", "message": "Timestamp column is ambiguous (DD/MM vs MM/DD). Ask the user, then re-run with --date-format DMY|MDY|ISO.", "sample_values": (ambiguous or [v for v in ts_values if v])[:5]}
+        return date_format_question(ts_values)
 
     numeric_cols = [mapping[c] for c in ("old_value", "new_value") if c in mapping]
     numeric_values = [r.get(h) for h in numeric_cols for r in rows]
@@ -3413,6 +3761,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     v = validate_source(input_path, mapping_file=mapping_file, force=force_review, default_account_name=account_name, column_map=column_map)
     if v["status"] != "ok":
         return v
+    profile = v.pop("_profile", None)  # saved only once the run is ok (2026-11-10, B-8)
     (out_dir / "resolved_mapping.json").write_text(json.dumps(v, ensure_ascii=False), encoding="utf-8")
 
     n = normalize_changes(input_path, v["mapping"], v["source_label"], date_format=date_format, decimal_style=decimal_style, tz=tz, default_account_name=account_name)
@@ -3522,6 +3871,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         for cat, cnt in Counter({k: v2 for k, v2 in c["category_breakdown"].items()}).most_common():
             f.write(f"  {cat}: {cnt}\n")
 
+    source_warnings = v.get("warnings", []) + save_mapping_profile(profile)
     data = build_dashboard(c["rows"], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at,
                             json_out=out_dir / "change_history.json", rows_skipped_unparseable_date=n["rows_skipped_unparseable_date"],
                             data_quality=data_quality)
@@ -3538,6 +3888,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         "ignored_headers": v["ignored_headers"],
         "data_quality": data_quality,
     }
+    result["source_warnings"] = source_warnings
     if open_browser:
         webbrowser.open(f"file://{(out_dir / 'dashboard.html').resolve()}")
     return result
@@ -3833,6 +4184,186 @@ def _structured_rule_shadows(earlier, later):
     if "field_name_not_contains" in earlier and earlier["field_name_not_contains"] != later.get("field_name_not_contains"):
         return False
     return all(earlier[k] == later.get(k) for k in ("operation", "new_value_equals") if k in earlier)
+
+
+def _run_r9_ingest_cases(td):
+    """2026-11-10 audit round 7 (INGEST): preambles, dates, encodings, mapping, profiles. Synthetic data only."""
+    global PROFILES_DIR, INPUT_ENCODING, CSV_FIELD_SIZE_LIMIT
+    tr_native = ('Değişiklik geçmişi raporu\n1 Ocak 2026 - 19 Ağustos 2026\n'
+                 'Tarih ve saat,Kullanıcı,Kampanya,Reklam grubu,Değişiklik\n'
+                 '11 Ağu 2026 02:33:50,user.a@example.test,Kampanya A,,"Kampanya değiştirildi\n  Durum: Etkin -> Duraklatıldı"\n'
+                 '4 Ağu 2026 16:16:32,user.b@example.test,Kampanya B,Grup 1,"Anahtar kelime eklendi\n  örnek kelime"\n')
+    with _test_case("r9 ingest: TR native export with a title preamble reaches ok with only --account-name/--timezone"):
+        f = td / "r9_tr_native.csv"
+        f.write_text(tr_native, encoding="utf-8")
+        v = validate_source(f, default_account_name="Account A", save_profile=False)
+        assert v["status"] == "ok", v
+        assert v["mapping"].get("timestamp") == "Tarih ve saat" and v["mapping"].get("raw_summary") == "Değişiklik", v["mapping"]
+        assert "operation" not in v["mapping"], "multi-line free text must not map to operation"
+        assert any("preamble" in w for w in v["warnings"]), v["warnings"]
+        r = run_pipeline(f, td / "r9_out_tr", account_name="Account A", tz="Europe/Istanbul", generated_at="2026-08-17T00:00:00")
+        assert r["status"] == "ok" and r["date_format_used"] == "TEXT_MONTH" and r["rows_skipped_unparseable_date"] == 0, r
+        r_map = run_pipeline(f, td / "r9_out_tr_map", account_name="Account A", tz="Europe/Istanbul", column_map={"raw_summary": "Değişiklik"}, generated_at="2026-08-17T00:00:00")
+        assert r_map["status"] == "ok", f"--map on a preamble file must see the real header row: {r_map}"
+        print("[PASS] r9 ingest: TR native export with a title preamble reaches ok with only --account-name/--timezone")
+
+    with _test_case("r9 ingest: EN native export with preamble, CRLF/LF mix and a BOM inside a quoted cell"):
+        en = ('﻿Change history report\r\nJan 1, 2026 - Aug 19, 2026\n'
+              'Date & time,User,Campaign,Ad group,Changes\r\n'
+              '"Aug 16, 2026, 10:42:26 PM",user.a@example.test,Campaign A,,"﻿Campaign paused\r\n  Status: Enabled -> Paused"\n'
+              '"Aug 15, 2026, 9:01:00 AM",user.b@example.test,Campaign B,,Budget changed\r\n')
+        f = td / "r9_en_native.csv"
+        f.write_text(en, encoding="utf-8")
+        headers, rows = read_rows(f)
+        assert headers == ["Date & time", "User", "Campaign", "Ad group", "Changes"] and len(rows) == 2, (headers, len(rows))
+        assert not rows[0]["Changes"].startswith("﻿"), "a BOM inside a cell must be stripped"
+        r = run_pipeline(f, td / "r9_out_en", account_name="Account A", tz="UTC", generated_at="2026-08-17T00:00:00")
+        assert r["status"] == "ok" and r["rows_skipped_unparseable_date"] == 0, r
+        print("[PASS] r9 ingest: EN native export with preamble, CRLF/LF mix and a BOM inside a quoted cell")
+
+    with _test_case("r9 ingest: spelled-out months in tr/en/de/es/fr/pt/it/nl, 12h clock, bidi marks, never DD/MM-ambiguous"):
+        cases = {
+            "11 Ağu 2026 02:33:50": datetime(2026, 8, 11, 2, 33, 50), "3 EKİM 2026 14:00": datetime(2026, 10, 3, 14, 0),
+            "1 Şubat 2026": datetime(2026, 2, 1), "‎5 Kas 2026 10:00:00‏": datetime(2026, 11, 5, 10, 0),
+            "Aug 16, 2026, 10:42:26 PM": datetime(2026, 8, 16, 22, 42, 26), "16 Aug 2026, 12:05 AM": datetime(2026, 8, 16, 0, 5),
+            "16. Aug. 2026, 22:42:26": datetime(2026, 8, 16, 22, 42, 26), "3. März 2026 08:00": datetime(2026, 3, 3, 8, 0),
+            "16 de ago. de 2026 22:42": datetime(2026, 8, 16, 22, 42), "2 dic 2026, 1:00 p. m.": datetime(2026, 12, 2, 13, 0),
+            "16 août 2026 à 22:42": datetime(2026, 8, 16, 22, 42), "5 févr. 2026 07:00": datetime(2026, 2, 5, 7, 0),
+            "16 de set. de 2026 22:42": datetime(2026, 9, 16, 22, 42), "7 out 2026 09:00": datetime(2026, 10, 7, 9, 0),
+            "16 ago 2026 22:42": datetime(2026, 8, 16, 22, 42), "4 mag 2026 10:00": datetime(2026, 5, 4, 10, 0),
+            "16 mrt. 2026 22:42": datetime(2026, 3, 16, 22, 42), "1 mei 2026 06:00": datetime(2026, 5, 1, 6, 0),
+        }
+        for raw, want in cases.items():
+            assert detect_date_format([raw]) == "TEXT_MONTH" or detect_date_format([raw]) == "UI_EN", raw
+            got = parse_timestamp(raw, detect_date_format([raw]))
+            assert got == want, f"{raw!r}: {got} != {want}"
+        for bad in ("11 Ağu 2026 JUNK", "Foo 3 2026", "13 Ağu 26"):
+            try:
+                parse_text_month_timestamp(bad)
+                raise AssertionError(f"must not parse {bad!r}")
+            except ValueError:
+                pass
+        q = date_format_question(["garbage", "more garbage"])
+        assert q["message"].startswith("unrecognised date shape: garbage"), q
+        assert "DD/MM" in date_format_question(["03/04/2026 10:00"])["message"]
+        print("[PASS] r9 ingest: spelled-out months in tr/en/de/es/fr/pt/it/nl, 12h clock, bidi marks, never DD/MM-ambiguous")
+
+    with _test_case("r9 ingest: Python 3.9 fromisoformat gaps and DMY with comma + AM/PM"):
+        assert parse_timestamp("2026-08-01 10:00:00,123+0300", "ISO") == datetime(2026, 8, 1, 10, 0, 0, 123000, tzinfo=dt_timezone(timedelta(hours=3)))
+        assert parse_timestamp("2026-8-1 9:05:00", "ISO") == datetime(2026, 8, 1, 9, 5)
+        assert parse_timestamp("2026-08-01T10:00:00.1Z", "ISO").utcoffset() == timedelta(0)
+        assert parse_timestamp("01/08/2026, 10:00:00 PM", "DMY") == datetime(2026, 8, 1, 22, 0)
+        assert detect_date_format(["2026-8-1 9:05:00"]) == "ISO"
+        print("[PASS] r9 ingest: Python 3.9 fromisoformat gaps and DMY with comma + AM/PM")
+
+    with _test_case("r9 ingest: UTF-16, ';' and tab delimiters, NUL bytes, cp1254 ok, cp1251 rejected unless --encoding"):
+        body = "Tarih,Hesap Adı,Kullanıcı,Değişiklik Özeti\n2026-08-01 10:00:00,Hesap A,Kullanıcı Ş,Bütçe değişti\n"
+        for name, data in (("u16.csv", body.encode("utf-16")), ("semi.csv", body.replace(",", ";").encode("utf-8")),
+                           ("tab.csv", body.replace(",", "\t").encode("utf-8")), ("nul.csv", body.replace("Hesap A", "Hesap\x00 A").encode("utf-8")),
+                           ("c1254.csv", body.encode("cp1254"))):
+            f = td / f"r9_{name}"
+            f.write_bytes(data)
+            headers, rows = read_rows(f)
+            assert headers == ["Tarih", "Hesap Adı", "Kullanıcı", "Değişiklik Özeti"] and rows[0]["Hesap Adı"] == "Hesap A", (name, headers, rows)
+        f = td / "r9_c1251.csv"
+        f.write_bytes("Дата,Аккаунт,Изменения\n2026-08-01 10:00:00,Аккаунт А,Кампания приостановлена\n".encode("cp1251"))
+        try:
+            read_rows(f)
+            raise AssertionError("cp1251 text must not be silently read as cp1254 mojibake")
+        except ValueError as e:
+            assert "--encoding" in str(e), e
+        INPUT_ENCODING = "cp1251"
+        try:
+            assert read_rows(f)[0][0] == "Дата"
+        finally:
+            INPUT_ENCODING = None
+        print("[PASS] r9 ingest: UTF-16, ';' and tab delimiters, NUL bytes, cp1254 ok, cp1251 rejected unless --encoding")
+
+    with _test_case("r9 ingest: xlsx/gzip magic bytes, oversized field and bad --mapping-file give structured errors"):
+        for name, data in (("x.csv", b"PK\x03\x04rest"), ("g.csv", b"\x1f\x8b\x08rest")):
+            f = td / f"r9_{name}"
+            f.write_bytes(data)
+            v = validate_source(f, save_profile=False)
+            assert v["status"] == "error" and "CSV" in v["message"], v
+        f = td / "r9_big.csv"
+        f.write_text("Tarih,Değişiklik Özeti\n2026-08-01 10:00:00," + "x" * 5000 + "\n", encoding="utf-8")
+        saved_limit = CSV_FIELD_SIZE_LIMIT
+        CSV_FIELD_SIZE_LIMIT = 1000
+        try:
+            v = validate_source(f, save_profile=False)
+            assert v["status"] == "error" and "larger than" in v["message"], v
+        finally:
+            CSV_FIELD_SIZE_LIMIT = saved_limit
+            csv.field_size_limit(saved_limit)
+        fm = td / "r9_list_map.json"
+        fm.write_text("[1, 2]", encoding="utf-8")
+        v = validate_source(f, mapping_file=fm, save_profile=False)
+        assert v["status"] == "error" and "JSON object" in v["message"], v
+        fm.write_text('{"mapping": {"timestamp": "Tarih", "raw_summary": "Değişiklik Özeti", "account_name": "\\ud800"}}', encoding="utf-8")
+        v = validate_source(f, mapping_file=fm, save_profile=False)
+        assert v["status"] in ("ok", "needs_mapping", "needs_review", "error"), v
+        json.dumps(v, ensure_ascii=False).encode("utf-8")
+        fj = td / "r9_surrogate.json"
+        fj.write_text('[{"change_date_time": "2026-08-01 10:00:00", "customer_id": "1", "user_email": "a@example.test", "change_resource_type": "CAMPAIGN", '
+                      '"changed_fields": "name", "old_resource": "A\\udc80", "new_resource": "B"}]', encoding="utf-8")
+        r = run_pipeline(fj, td / "r9_out_sur", allow_unknown_categories=True, generated_at="2026-08-17T00:00:00")
+        assert r["status"] == "ok", r
+        print("[PASS] r9 ingest: xlsx/gzip magic bytes, oversized field and bad --mapping-file give structured errors")
+
+    with _test_case("r9 ingest: --map drops other fields on the same header; alias collisions warn; needs_mapping wording"):
+        f = td / "r9_change_col.csv"
+        f.write_text("Date,Client,Change,Item type,Level,Summary\n2026-08-01 10:00:00,Account A,Created,Campaign,Campaign,x\n2026-08-02 10:00:00,Account A,Removed,Ad,Ad,y\n", encoding="utf-8")
+        v = validate_source(f, save_profile=False)
+        assert v["mapping"].get("operation") == "Change" and v["mapping"].get("account_name") == "Client", v["mapping"]
+        assert any("Client" in w for w in v["warnings"]) and any("'Item type' and 'Level'" in w for w in v["warnings"]), v["warnings"]
+        v2 = validate_source(f, column_map={"raw_summary": "Change"}, save_profile=False)
+        assert "operation" not in v2["mapping"] and v2["mapping"]["raw_summary"] == "Change", v2["mapping"]
+        f2 = td / "r9_noacct.csv"
+        f2.write_text("Date,Changes\n2026-08-01 10:00:00,x\n", encoding="utf-8")
+        nm = validate_source(f2, save_profile=False)
+        assert nm["status"] == "needs_mapping" and "can't proceed" not in nm["instructions"] and "--account-name" in nm["instructions"], nm
+        assert not any(m == "resource_type" for m in nm["missing_required"]), nm["missing_required"]
+        f3 = td / "r9_dupe.csv"
+        f3.write_text("Junk title\nDate,Account,Changes,Changes\n2026-08-01 10:00:00,A,x,y\n", encoding="utf-8")
+        v3 = validate_source(f3, save_profile=False)
+        assert any("Duplicate column header" in w and "changes" in w for w in v3["warnings"]), v3["warnings"]
+        print("[PASS] r9 ingest: --map drops other fields on the same header; alias collisions warn; needs_mapping wording")
+
+    with _test_case("r9 ingest: profiles use a user data dir, carry a schema version, are saved only after ok, never crash"):
+        import os
+        saved_env = os.environ.get("XDG_DATA_HOME")
+        os.environ["XDG_DATA_HOME"] = str(td / "xdg")
+        try:
+            assert _default_state_dir() == td / "xdg" / "google-ads-change-history-dashboard" / "mapping-profiles"
+        finally:
+            if saved_env is None:
+                os.environ.pop("XDG_DATA_HOME", None)
+            else:
+                os.environ["XDG_DATA_HOME"] = saved_env
+        saved_dir = PROFILES_DIR
+        PROFILES_DIR = td / "r9_profiles"
+        try:
+            f = td / "r9_prof.csv"
+            f.write_text("When,Who,Acct,What\n03/04/2026 10:00,user.a@example.test,Account A,Budget changed\n", encoding="utf-8")
+            ans = {"timestamp": "When", "user_email": "Who", "account_name": "Acct", "raw_summary": "What"}
+            r = run_pipeline(f, td / "r9_out_prof1", column_map=ans, generated_at="2026-08-17T00:00:00")
+            assert r["status"] == "needs_date_format" and not list(PROFILES_DIR.glob("*.json")), "a run that did not reach ok must not cache a profile"
+            r = run_pipeline(f, td / "r9_out_prof2", column_map=ans, date_format="DMY", allow_unknown_categories=True, generated_at="2026-08-17T00:00:00")
+            assert r["status"] == "ok", r
+            saved = [json.loads(p.read_text(encoding="utf-8")) for p in PROFILES_DIR.glob("*.json")]
+            assert len(saved) == 1 and saved[0]["schema_version"] == PROFILE_SCHEMA_VERSION, saved
+            assert validate_source(f, save_profile=False)["status"] == "ok", "a current-schema profile must be reused"
+            for p in PROFILES_DIR.glob("*.json"):
+                p.write_text(json.dumps({k: v for k, v in saved[0].items() if k != "schema_version"}), encoding="utf-8")
+            assert validate_source(f, save_profile=False)["status"] == "needs_mapping", "a profile without the schema stamp must be ignored"
+            blocker = td / "r9_blocker"
+            blocker.write_text("not a dir", encoding="utf-8")
+            PROFILES_DIR = blocker / "profiles"
+            r = run_pipeline(f, td / "r9_out_prof3", column_map=ans, date_format="DMY", allow_unknown_categories=True, generated_at="2026-08-17T00:00:00")
+            assert r["status"] == "ok" and any("Could not save" in w for w in r["source_warnings"]), r.get("source_warnings")
+        finally:
+            PROFILES_DIR = saved_dir
+        print("[PASS] r9 ingest: profiles use a user data dir, carry a schema version, are saved only after ok, never crash")
 
 
 def _run_round6_regressions(td):
@@ -5168,6 +5699,7 @@ def _run_pipeline_cases(td):
     _run_round6_regressions(td)
     _run_round7_cases(td)
     _run_round8_cases(td)
+    _run_r9_ingest_cases(td)
 
 
 # =====================================================================
@@ -5192,6 +5724,7 @@ def main():
     p_run.add_argument("--account-name", help="Constant account name/id for every row, for a source with no account column at all (e.g. the Google Ads UI's own single-account Change history CSV export).")
     p_run.add_argument("--currency", help="3-letter ISO code (e.g. TRY) of the account's currency. Shown as the unit on budget/bid/target-CPA amounts. Never guessed: without it, amounts stay unit-less. One code for the whole file — don't pass it for a multi-currency MCC export.")
     p_run.add_argument("--open", action="store_true")
+    p_run.add_argument("--encoding", help="Input text encoding (e.g. cp1254, cp1251, utf-16) when auto-detection rejects the file as garbled.")
 
     p_query = sub.add_parser("query", help="Deterministic filter over a changes.jsonl.")
     p_query.add_argument("input")
@@ -5213,6 +5746,8 @@ def main():
         sys.exit(0 if ok else 1)
 
     if args.cmd == "run":
+        global INPUT_ENCODING
+        INPUT_ENCODING = args.encoding or None
         extra_rules = None
         if args.extra_rules:
             # Fixed 2026-08-18 (4th audit round, confirmed): same structured-
