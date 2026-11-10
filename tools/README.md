@@ -29,14 +29,17 @@ python3 skills/google-ads-change-history-dashboard/ads_change_history.py run cha
 **Never** put credentials in a command-line flag, a committed file, or this
 repo — environment variables only, set in your own shell/secret store.
 
+**What it does on the network.** One read-only `change_event` query per run to the Google Ads API, for `--days` calendar days ending today (1-30, an explicit date range) and at most `--limit` rows (1-10,000). Nothing is sent anywhere else. The output file is written with mode 0600 because it holds account data and e-mail addresses. Zero events are written as `[]`; the skill turns that into an empty, valid report.
+
+**Enum values.** proto-plus serializes enums as integers by default; this script asks for names (`PAUSED`, not `3`) and the self-test checks it with a proto-plus-shaped fake.
+
 **API version.** Requests go to Google Ads API **v25** (`API_VERSION` in the
 script; `--api-version` overrides it for one run). Google retires each
-version roughly a year after release and requests to a retired one fail, so
-this has to move forward over time: v25 sunsets in August 2027 per Google's
-[sunset schedule](https://developers.google.com/google-ads/api/docs/sunset-dates).
-`requirements.txt` sets the lowest `google-ads` release that serves v25
-(31.2.0) as a floor, not a pin. The skill's self-test starts failing once the
-recorded sunset date has passed, so a stale version can't sit unnoticed.
+version roughly a year after release and requests to a retired one fail;
+v25 is scheduled to sunset in August 2027. `requirements.txt` sets the lowest
+`google-ads` release that serves v25 (31.2.0) as a floor, not a pin. Once the
+recorded sunset date has passed, the skill's self-test prints a `[WARN]`
+line (it does not fail the build of the offline skill).
 
 **Status: needs a real account to fully verify.** The self-test runs this
 script against a mocked client with synthetic events — that proves the

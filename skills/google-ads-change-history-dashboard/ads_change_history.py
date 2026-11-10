@@ -31,8 +31,12 @@ PIPELINE
           --extra-rules) and the categorize step is re-run.
 
   A resolved column-mapping for a previously-unseen source is saved to
-  mapping-profiles/<fingerprint>.json (next to this script by default) so the
-  same source never has to be re-confirmed.
+  mapping-profiles/<fingerprint>.json in a per-user data folder
+  ($XDG_DATA_HOME or ~/.local/share/google-ads-change-history-dashboard/)
+  after the run reaches ok, so the same source never has to be re-confirmed.
+
+  Exit codes: 0 ok, 2 a needs_* question or a structured input error, 3
+  internal_error (an unexpected exception, wrapped as JSON — a bug).
 
 CANONICAL SCHEMA (one row = one (resource, field, operation) change)
   change_id, event_id, source_event_id, timestamp, timestamp_iso, timezone,
@@ -51,11 +55,11 @@ CANONICAL SCHEMA (one row = one (resource, field, operation) change)
   2026-08-19 found this prose copy had drifted out of sync with it and with
   the actual output dict; both are now current as of this fix)
 
-  change_id is a content hash (account+timestamp+user+resource+field+old+
-  new+source_event_id — source_event_id joined 2026-08-19, see below) — used
-  for DEDUPING (dedupe_rows(), called by run_pipeline before categorization:
-  identical rows from a re-imported/overlapping file collapse, duplicate
-  count reported in coverage.txt). event_id is source_event_id when
+  change_id is a content hash of the row's identity and content (see
+  make_change_id()) — used for DEDUPING (dedupe_rows(), called by
+  run_pipeline before categorization): only genuinely identical rows from
+  overlapping files collapse; rows within one file are never dropped. The
+  count is reported in coverage.txt. event_id is source_event_id when
   the source provides one (verified real for the API: ChangeEvent's own
   top-level resource_name field, format
   customers/{id}/changeEvents/{timestamp_micros}~{command_index}~{mutate_index}
@@ -96,6 +100,8 @@ VALUE PARSING RULES
     currency marker or short unit ("₺150,00", "150.000 TL", "%20", "5km").
     Text that merely contains a digit ("Search | Generic | v1") is text.
   - Dates: DD/MM vs MM/DD is ambiguous unless some value's day exceeds 12.
+    A spelled-out month (Turkish, English and other UI languages) is never
+    ambiguous and is read without asking.
     Ambiguous columns require --date-format DMY|MDY|ISO — never guessed.
     Every row is examined, not a sample. A year-first (ISO) row parses under
     DMY/MDY too, so a file mixing both shapes loses neither.
@@ -137,35 +143,32 @@ SOURCE FORMATS REGISTERED IN KNOWN_SOURCES
     entry the Google Ads UI's own Change History page shows (Google states
     this explicitly) — the dashboard displays a caveat banner when the
     dataset includes API-sourced rows (detected via source_event_id being
-    populated). Nested old_resource/new_resource and the repeated
-    changed_fields FieldMask must already be flattened to one row per
-    field before reaching this script (a live API adapter isn't built here —
-    no credentials were available to build/test one; this script accepts
-    already-flattened JSON).
+    populated). tools/fetch_live_data.py (optional, needs API access)
+    writes this shape; a multi-field event whose old/new are resource
+    snapshots is split into one row per field here.
   - google_ads_ui_export_en_guess: UNVERIFIED, low confidence — not confirmed
     against a real UI export in this session. Deliberately weak so a real
     export safely falls through to Layer 3 (ask+learn) instead of silently
     misapplying a guess.
 
 REPO / PRIVACY NOTES
-  --mask-users defaults OFF (raw user identity shown). With it, every
-  output file loses its e-mail addresses: a human actor becomes "User A"/
-  "User B" (stable across runs — the identity->label table is kept locally
-  in mapping-profiles/mask-labels.json, which is gitignored and must never
-  be shared), and an address sitting on an automation row is removed.
+  --mask-users defaults OFF (raw user identity shown). With it, a human
+  actor becomes "User A"/"User B" (stable across runs — the identity->label
+  table is mask-labels.json in the per-user data folder, never to be
+  shared), and e-mail-shaped text and known identities are scrubbed from
+  every string field of every output file (summary and values included).
   NOT masked, with or without the flag: account, campaign and ad group
-  names, account/campaign/ad-group IDs, resource paths, event IDs, and the
-  old/new values themselves. Showing those is the point of the tool; a
+  names, account/campaign/ad-group IDs, resource paths and event IDs. Showing those is the point of the tool; a
   report that must hide the client's identity needs more than this flag.
 
 USAGE
   python3 ads_change_history.py run <input.csv|.json> --out-dir ./out \\
-      [--timezone Europe/Istanbul] [--date-format DMY] [--decimal-style TR] \\
-      [--currency TRY] \\
+      [--account-name "Account A"] [--timezone Europe/Istanbul] \\
+      [--date-format DMY] [--decimal-style TR] [--currency TRY] [--encoding cp1254] \\
       [--mapping-file confirmed_mapping.json | --map FIELD="Header" ...] \\
       [--mask-users] [--open]
 
-  python3 ads_change_history.py query <out/changes.jsonl> --user "User A" --since 7d
+  python3 ads_change_history.py query <out/changes.jsonl> --user "User A" --since 7d [--since-anchor newest]
 
   python3 ads_change_history.py self-test
       Writes the built-in synthetic fixtures to a temp dir, runs the full
@@ -179,6 +182,7 @@ import csv
 import hashlib
 import io
 import json
+import os
 import re
 import string
 import sys
@@ -1061,12 +1065,16 @@ def suggest_fuzzy_mapping(unmatched):
     return suggestions
 
 
+_SAMPLE_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
 def sample_values(rows, header, n=3):
+    # 2026-11-10 (S-3): samples are shown in chat; e-mail addresses are redacted.
     vals = []
     for r in rows:
         v = r.get(header)
         if v is not None and str(v).strip():
-            vals.append(str(v))
+            vals.append(_SAMPLE_EMAIL_RE.sub("<email>", str(v)))
         if len(vals) >= n:
             break
     return vals
@@ -3691,64 +3699,146 @@ def build_dashboard(rows, out_path, mask_users=False, generated_at=None, json_ou
 # =====================================================================
 # QUERY (deterministic filter — don't eyeball-count rows)
 # =====================================================================
-def query_changes(rows, user=None, account=None, campaign=None, category=None, operation=None, source=None, since=None):
-    """user/account/campaign are substring matches (grep-style — --user
-    "User A" also matches "User AB"), deliberately more forgiving than the
-    dashboard's exact-match filter dropdowns, which are populated from a
-    closed picklist and don't need that leniency. This is a documented,
-    intentional difference between the two interfaces, not an oversight
-    (flagged as an inconsistency in the 2026-08-19 audit; kept as-is rather
-    than made exact, since command-line partial matching is normal/expected
-    CLI ergonomics — see SKILL.md)."""
+_TR_FOLD = str.maketrans({"İ": "i", "I": "i", "ı": "i"})
+
+
+def _fold(text):
+    """Case/accent-insensitive key for query matching, Turkish-aware (2026-11-10):
+    İ/I/ı/i all fold to i, then accents are stripped (ş->s, ğ->g, ü->u)."""
+    import unicodedata
+    t = unicodedata.normalize("NFD", str(text or "").translate(_TR_FOLD)).casefold()
+    return "".join(ch for ch in t if not unicodedata.combining(ch)).replace("ı", "i")
+
+
+def _row_instant(r):
+    """Aware UTC datetime for a row, or None. timestamp_utc first; a naive
+    timestamp_iso is read as this machine's local time (2026-11-10)."""
+    for key in ("timestamp_utc", "timestamp_iso"):
+        val = r.get(key)
+        if not val:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        return (dt if dt.tzinfo else dt.astimezone()).astimezone(dt_timezone.utc)
+    return None
+
+
+def query_changes(rows, user=None, account=None, campaign=None, category=None, operation=None, source=None, since=None,
+                  since_anchor="now", info=None):
+    """user/account/campaign/source are substring matches (grep-style), on a
+    Turkish-aware case/accent fold — deliberately more forgiving than the
+    dashboard's exact-match dropdowns. --since counts back from now by
+    default; since_anchor="newest" counts back from the newest row instead.
+    The anchor used is written to info["since_anchor"] when info is a dict."""
     cutoff = None
     if since:
-        # Fixed 2026-08-18 (4th audit round, confirmed): int(since.rstrip("dwm"))
-        # crashed with a raw ValueError on garbage ("abc", "7x") and silently
-        # accepted a negative count ("-7d") — rstrip only strips the trailing
-        # unit letter, it doesn't validate what's in front of it, so "-7"
-        # parsed as int(-7) without complaint and produced a cutoff in the
-        # future instead of the past, silently returning wrong (usually
-        # empty) results rather than erroring.
         if not SINCE_RE.match(since):
             raise ValueError(f"Invalid --since value: {since!r}. Expected a positive number followed by d/w/m, e.g. '7d', '2w', '1m'.")
+        if since_anchor not in ("now", "newest"):
+            raise ValueError(f"Invalid --since-anchor value: {since_anchor!r}. Expected 'now' or 'newest'.")
         n = int(since[:-1])
         unit = since[-1]
         days = n if unit == "d" else n * 7 if unit == "w" else n * 30
-        ref_times = [r["timestamp_iso"] for r in rows if r.get("timestamp_iso")]
-        ref = max(ref_times) if ref_times else datetime.now().isoformat()
-        from datetime import timedelta
-        cutoff = datetime.fromisoformat(ref) - timedelta(days=days)
+        if days > 3_650_000:
+            raise ValueError(f"--since value {since!r} is too large; use at most 3650000 days.")
+        instants = [t for t in (_row_instant(r) for r in rows) if t]
+        if since_anchor == "newest" and instants:
+            ref = max(instants)
+        else:
+            ref = datetime.now(dt_timezone.utc)
+        cutoff = ref - timedelta(days=days)
+        if isinstance(info, dict):
+            info["since_anchor"] = {"basis": since_anchor if (since_anchor == "now" or instants) else "now", "anchor_utc": ref.isoformat(), "cutoff_utc": cutoff.isoformat()}
+
+    def has(needle, *hay):
+        return _fold(needle) in _fold(" ".join(str(h) for h in hay if h))
 
     def keep(r):
-        if user and user.lower() not in " ".join(filter(None, [r.get("user_name"), r.get("user_email")])).lower():
+        if user and not has(user, r.get("user_name"), r.get("user_email")):
             return False
-        if account and account.lower() not in (r.get("account_name") or "").lower():
+        if account and not has(account, r.get("account_name"), r.get("account_id")):
             return False
-        if campaign and campaign.lower() not in (r.get("campaign_name") or "").lower():
+        if campaign and not has(campaign, r.get("campaign_name")):
             return False
-        if category and category.lower() != (r.get("category") or "").lower():
+        if category and _fold(category) != _fold(r.get("category")):
             return False
         if operation and operation.upper() != (r.get("operation") or "").upper():
             return False
-        if source and source.lower() not in (r.get("source") or "").lower():
+        if source and not has(source, r.get("source")):
             return False
-        if cutoff and (not r.get("timestamp_iso") or datetime.fromisoformat(r["timestamp_iso"]) < cutoff):
-            return False
+        if cutoff is not None:
+            t = _row_instant(r)
+            if t is None or t < cutoff:
+                return False
         return True
 
     matched = [r for r in rows if keep(r)]
-    matched.sort(key=lambda r: r.get("timestamp_iso") or "", reverse=True)
+    matched.sort(key=lambda r: _row_instant(r) or datetime.min.replace(tzinfo=dt_timezone.utc), reverse=True)
     return matched
 
 
 # =====================================================================
 # ORCHESTRATION
 # =====================================================================
+RUN_OUTPUT_FILES = ("dashboard.html", "change_history.json", "changes.jsonl", "coverage.txt",
+                    "resolved_mapping.json", "unknown-fields.json", "run_status.json")
+
+
+def _prepare_out_dir(out_dir):
+    """2026-11-10: refuse to write through a symlinked output file, and clear the
+    previous run's outputs so a failed run never leaves them looking current."""
+    for name in RUN_OUTPUT_FILES:
+        if (out_dir / name).is_symlink():
+            return {"status": "error", "message": f"Refusing to write through a symbolic link: {out_dir / name}. Remove it or choose another --out-dir."}
+    for name in RUN_OUTPUT_FILES:
+        try:
+            (out_dir / name).unlink()
+        except FileNotFoundError:
+            pass
+    return None
+
+
+def _is_empty_event_list(input_path):
+    """True for a JSON file holding an empty list: what tools/fetch_live_data.py
+    writes when the API returned zero events (2026-11-10)."""
+    p = Path(input_path)
+    if p.suffix.lower() != ".json" or not p.is_file() or p.stat().st_size > 64:
+        return False
+    try:
+        return json.loads(p.read_text(encoding="utf-8-sig")) == []
+    except (ValueError, UnicodeDecodeError):
+        return False
+
+
+def _open_dashboard(path):
+    try:
+        return bool(webbrowser.open(Path(path).resolve().as_uri()))
+    except Exception:
+        return False
+
+
 def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decimal_style=None,
                   tz="unknown", mask_users=False, allow_unknown_categories=False, force_review=False,
                   extra_rules=None, open_browser=False, generated_at=None, account_name=None, currency=None, column_map=None):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    blocked = _prepare_out_dir(out_dir)
+    if blocked:
+        return blocked
+    if _is_empty_event_list(input_path):
+        dq = {"input_rows": 0, "rows_added_by_field_split": 0, "left_out": {"unreadable_date": 0, "duplicate": 0}, "rows_in_report": 0,
+              "in_report_with_limits": {}, "ignored_headers": []}
+        (out_dir / "changes.jsonl").write_text("", encoding="utf-8")
+        (out_dir / "coverage.txt").write_text("Input rows: 0\nThe input is an empty event list: no change in the requested range.\n", encoding="utf-8")
+        build_dashboard([], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at, json_out=out_dir / "change_history.json", data_quality=dq)
+        res = {"status": "ok", "out": str(out_dir / "dashboard.html"), "row_count": 0, "empty": True,
+               "message": "The input holds zero change events (nothing changed in the requested range, or the range is outside the API's 30 days).",
+               "data_quality": dq}
+        if open_browser:
+            res["opened"] = _open_dashboard(out_dir / "dashboard.html")
+        return res
 
     if currency is not None and not CURRENCY_CODE_RE.match(currency):
         return {"status": "error", "message": f"Invalid --currency value: {currency!r}. Expected a 3-letter ISO 4217 code in capitals, e.g. 'TRY', 'USD', 'EUR'."}
@@ -3890,7 +3980,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     }
     result["source_warnings"] = source_warnings
     if open_browser:
-        webbrowser.open(f"file://{(out_dir / 'dashboard.html').resolve()}")
+        result["opened"] = _open_dashboard(out_dir / "dashboard.html")
     return result
 
 
@@ -4623,9 +4713,10 @@ def _run_round8_cases(td):
             assert re.fullmatch(r"v\d+", getattr(tool, "API_VERSION", "")), "the API version must be one named constant, API_VERSION"
             literals = set(re.findall(r'version\s*=\s*["\'](v\d+)["\']', src))
             assert not literals, f"hard-coded API version literal(s) {literals} — use API_VERSION so the sunset check below covers every call"
-            assert date.today() < tool.API_VERSION_SUNSET, (
-                f"Google Ads API {tool.API_VERSION} was scheduled to sunset in {tool.API_VERSION_SUNSET:%B %Y} — requests to a sunset version fail. "
-                "Check https://developers.google.com/google-ads/api/docs/sunset-dates, then update API_VERSION, API_VERSION_SUNSET and tools/requirements.txt together.")
+            # 2026-11-10 (T-11): a passed sunset date is a warning, not a failed build of the offline skill.
+            if date.today() >= tool.API_VERSION_SUNSET:
+                print(f"[WARN] Google Ads API {tool.API_VERSION} was scheduled to sunset in {tool.API_VERSION_SUNSET:%B %Y}; update API_VERSION, "
+                      "API_VERSION_SUNSET and tools/requirements.txt together (see Google's API sunset-dates page).")
             req = (tool_path.parent / "requirements.txt").read_text(encoding="utf-8")
             assert re.search(r"^google-ads>=\d+\.\d+", req, re.M), f"requirements.txt must set the minimum google-ads release that serves {tool.API_VERSION}: {req!r}"
             print(f"[PASS] fetch tool: requests one named, still-served Google Ads API version ({tool.API_VERSION}), and requirements.txt can supply it")
@@ -4661,7 +4752,8 @@ def _run_round8_cases(td):
                 for k, v in saved.items():
                     sys.modules.pop(k, None) if v is None else sys.modules.__setitem__(k, v)
             assert seen["version"] == tool.API_VERSION, f"client was created for {seen['version']!r}, not API_VERSION"
-            assert "LAST_7_DAYS" in seen["query"] and "LIMIT 50" in seen["query"]
+            start7 = (date.today() - timedelta(days=6)).isoformat()
+            assert f">= '{start7}'" in seen["query"] and "LIMIT 50" in seen["query"], seen["query"]
             assert (fetched[0]["changed_fields"], fetched[0]["old_resource"], fetched[0]["new_resource"]) == ("amount_micros", "50000000", "75000000"), f"single-field flatten: {fetched[0]}"
             ff = td / "fetched.json"
             ff.write_text(json.dumps(fetched), encoding="utf-8")
@@ -4768,6 +4860,177 @@ def self_test():
     else:
         print("\nAll self-tests passed.")
     return not _SELF_TEST_FAILURES
+
+
+def _run_r9_tools_cases(td):
+    """2026-11-10, round 7 audit fixes: fetch tool, query CLI, CLI envelope,
+    out-dir safety, and the test gaps the mutation run found."""
+    import subprocess
+    import types
+    me = str(Path(__file__).resolve())
+
+    def cli(*argv):
+        proc = subprocess.run([sys.executable, me, *argv], capture_output=True, text=True, encoding="utf-8", timeout=120)
+        return proc.returncode, proc.stdout, proc.stderr
+
+    tool_path = SCRIPT_DIR.parent.parent / "tools" / "fetch_live_data.py"
+    if tool_path.exists():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("fetch_live_data_r9", tool_path)
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        with _test_case("fetch tool: proto-plus enums come out as names, not integers; range, limit, 0600 file, zero events"):
+            names = {2: "ENABLED", 3: "PAUSED"}
+
+            class ProtoLike:
+                """Shaped like proto-plus 1.29: to_dict is a classmethod and defaults to integer enums."""
+                def __init__(self, data):
+                    self._data = data
+
+                @classmethod
+                def to_dict(cls, instance, *, use_integers_for_enums=True, preserving_proto_field_name=True):
+                    conv = (lambda v: v) if use_integers_for_enums else (lambda v: names.get(v, v))
+                    return {k: {f: conv(v) for f, v in inner.items()} for k, inner in instance._data.items()}
+
+            ev = _fake_change_event(1, "CAMPAIGN", "customers/9990001/campaigns/2001", "UPDATE", ["status"], {}, {})
+            ev.change_event.old_resource = ProtoLike({"campaign": {"status": 2}})
+            ev.change_event.new_resource = ProtoLike({"campaign": {"status": 3}})
+            ev.change_event.change_resource_type = "CAMPAIGN"      # a plain value, no .name
+            seen = {}
+
+            class FakeClient:
+                @classmethod
+                def load_from_env(cls, version=None):
+                    return cls()
+
+                def get_service(self, name):
+                    return types.SimpleNamespace(search=lambda customer_id, query: seen.update(query=query) or [ev])
+
+            fakes = {k: types.ModuleType(k) for k in ("google", "google.ads", "google.ads.googleads", "google.ads.googleads.client", "google.ads.googleads.errors")}
+            fakes["google.ads.googleads.client"].GoogleAdsClient = FakeClient
+            fakes["google.ads.googleads.errors"].GoogleAdsException = type("GoogleAdsException", (Exception,), {})
+            saved = {k: sys.modules.get(k) for k in fakes}
+            sys.modules.update(fakes)
+            try:
+                got = tool.fetch("9990001", days=14, limit=99999)
+            finally:
+                for k, v in saved.items():
+                    sys.modules.pop(k, None) if v is None else sys.modules.__setitem__(k, v)
+            assert (got[0]["old_resource"], got[0]["new_resource"]) == ("ENABLED", "PAUSED"), f"enum values must be names: {got[0]}"
+            assert got[0]["change_resource_type"] == "CAMPAIGN"
+            assert f">= '{(date.today() - timedelta(days=13)).isoformat()}'" in seen["query"] and "LIMIT 10000" in seen["query"], seen["query"]
+            assert "DURING LAST_" not in seen["query"], "LAST_n_DAYS is only valid for 7/14/30 and excludes today"
+            out = td / "r9_fetched.json"
+            tool.write_private_json(str(out), [])
+            if os.name == "posix":
+                assert (out.stat().st_mode & 0o777) == 0o600, oct(out.stat().st_mode)
+            r0 = run_pipeline(out, td / "out_r9_empty", generated_at="2026-11-10T00:00:00")
+            assert r0["status"] == "ok" and r0["row_count"] == 0 and r0.get("empty"), f"zero events must give an empty, valid report: {r0}"
+            assert (td / "out_r9_empty" / "dashboard.html").exists()
+            assert json.loads((td / "out_r9_empty" / "change_history.json").read_text(encoding="utf-8"))["changes"] == []
+            print("[PASS] fetch tool: proto-plus enums come out as names, not integers; explicit date range incl. today, limit clamped to 10000, 0600 output; [] builds an empty report")
+
+    with _test_case("query: Turkish-aware matching, --since anchored on now by default, mixed naive/aware rows"):
+        rows = [{"user_name": "İsmail Şahin", "campaign_name": "KIŞ Kampanyası", "timestamp_iso": "2000-01-05T10:00:00+00:00", "timestamp_utc": "2000-01-05T10:00:00+00:00"},
+                {"user_name": "Irmak", "campaign_name": "Yaz", "timestamp_iso": "2000-01-01T10:00:00"}]
+        assert len(query_changes(rows, user="ismail sahin")) == 1 and len(query_changes(rows, campaign="kış")) == 1
+        assert len(query_changes(rows, campaign="kis kampanyasi")) == 1 and len(query_changes(rows, user="ırmak")) == 1
+        info = {}
+        assert query_changes(rows, since="7d", info=info) == [] and info["since_anchor"]["basis"] == "now"
+        assert len(query_changes(rows, since="7d", since_anchor="newest")) == 2
+        try:
+            query_changes(rows, since="99999999999d")
+            raise AssertionError("an absurd --since must raise ValueError, not OverflowError")
+        except ValueError:
+            pass
+        print("[PASS] query: Turkish-aware matching, --since anchored on now by default, mixed naive/aware rows")
+
+    with _test_case("query CLI: missing file, non-JSONL, lone surrogate and internal errors are JSON envelopes, never tracebacks"):
+        code, out, err = cli("query", str(td / "nope.jsonl"))
+        assert code == 2 and json.loads(out)["status"] == "error" and "Traceback" not in err, (code, out, err)
+        bad = td / "r9_bad.jsonl"
+        bad.write_text("Tarih,Kullanıcı\n2026-08-01,a\n", encoding="utf-8")
+        code, out, err = cli("query", str(bad))
+        assert code == 2 and "line 1" in json.loads(out)["message"], (code, out, err)
+        sur = td / "r9_sur.jsonl"
+        sur.write_text('{"user_name": "\\ud800x", "timestamp_iso": "2026-08-01T00:00:00"}\n', encoding="utf-8")
+        code, out, err = cli("query", str(sur), "--format", "json")
+        assert code == 0 and "Traceback" not in err, (code, out, err)
+        code, out, err = cli("query", str(sur), "--since", "1d")
+        assert code == 0 and "counted back from now" in out, (code, out, err)
+        blocker = td / "r9_is_a_file"
+        blocker.write_text("x", encoding="utf-8")
+        code, out, err = cli("run", str(td / "nope.csv"), "--out-dir", str(blocker))
+        assert code == 3 and json.loads(out)["status"] == "internal_error" and "Traceback" not in err, (code, out, err)
+        print("[PASS] query CLI: missing file, non-JSONL, lone surrogate and internal errors are JSON envelopes, never tracebacks")
+
+    with _test_case("out-dir: symlinked output refused, failed run clears stale outputs, --open uses a file URI"):
+        f1 = td / "r9_legacy.csv"
+        f1.write_text(SAMPLE_LEGACY_SUMMARY_TR_CSV, encoding="utf-8")
+        od = td / "out r9 open"
+        opened = []
+        saved_open = webbrowser.open
+        webbrowser.open = lambda url, *a, **k: opened.append(url) or True
+        try:
+            r1 = run_pipeline(f1, od, decimal_style="TR", open_browser=True, generated_at="2026-11-10T00:00:00")
+        finally:
+            webbrowser.open = saved_open
+        assert r1["status"] == "ok" and r1["opened"] is True and opened == [(od / "dashboard.html").resolve().as_uri()], (r1.get("opened"), opened)
+        r2 = run_pipeline(td / "nope.csv", od)
+        assert r2["status"] != "ok" and not (od / "dashboard.html").exists(), "a failed run must not leave the previous dashboard looking current"
+        code, out, err = cli("run", str(td / "nope.csv"), "--out-dir", str(od))
+        assert json.loads((od / "run_status.json").read_text(encoding="utf-8"))["outputs_current"] is False
+        if os.name == "posix":
+            victim = td / "r9_victim.txt"
+            victim.write_text("keep", encoding="utf-8")
+            od2 = td / "out_r9_link"
+            od2.mkdir()
+            (od2 / "dashboard.html").symlink_to(victim)
+            r3 = run_pipeline(f1, od2, decimal_style="TR")
+            assert r3["status"] == "error" and "symbolic link" in r3["message"] and victim.read_text(encoding="utf-8") == "keep", r3
+        print("[PASS] out-dir: symlinked output refused, failed run clears stale outputs, --open uses a file URI and reports opened")
+
+    with _test_case("mutation gaps: >30%-empty gate, structured Budget rule, new_value in change_id, Turkish value phrases"):
+        hdr = SAMPLE_LEGACY_SUMMARY_TR_CSV.splitlines()[0]
+        sparse = td / "r9_sparse.csv"
+        sparse.write_text(hdr + "\n" + "\n".join([
+            ",,2026-08-01 09:00:00,User A,CAMPAIGN,Campaign Alpha,,Durum Değişti: ENABLED -> PAUSED,ENABLED,PAUSED",
+            ",,2026-08-01 09:01:00,User A,CAMPAIGN,Campaign Alpha,,Durum Değişti: PAUSED -> ENABLED,PAUSED,ENABLED",
+            "Account A,111-111-1111,2026-08-01 09:02:00,User A,CAMPAIGN,Campaign Alpha,,Durum Değişti: ENABLED -> PAUSED,ENABLED,PAUSED"]) + "\n", encoding="utf-8")
+        rs = run_pipeline(sparse, td / "out_r9_sparse")
+        assert rs["status"] == "needs_review" and any(i["field"] == "account_name" for i in rs["issues"]), f"2/3 empty account_name must stop the run: {rs}"
+        fa = td / "r9_api.json"
+        fa.write_text(json.dumps(SAMPLE_API_CHANGE_EVENT_JSON), encoding="utf-8")
+        ra = run_pipeline(fa, td / "out_r9_api", generated_at="2026-11-10T00:00:00", allow_unknown_categories=True)
+        assert ra["status"] == "ok", ra
+        rows_a = [json.loads(l) for l in (td / "out_r9_api" / "changes.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        budget = [r for r in rows_a if r["resource_type"] == "CAMPAIGN_BUDGET" and r["operation"] == "UPDATE"]
+        assert budget and all((r["category"], r["subcategory"]) == ("Budget", "Budget changed") for r in budget), [(r["category"], r["subcategory"]) for r in budget]
+        twin = td / "r9_twin.csv"
+        line = "Account A,111-111-1111,2026-08-01 09:12:03,User A,CAMPAIGN_BUDGET,Campaign Alpha,,Bütçe Değişti,150.000,{}"
+        twin.write_text(hdr + "\n" + line.format("200.000") + "\n" + line.format("250.000") + "\n", encoding="utf-8")
+        rt = run_pipeline(twin, td / "out_r9_twin", decimal_style="TR", force_review=True)
+        assert rt["status"] == "ok" and rt["row_count"] == 2, f"rows differing only in new value are two changes: {rt}"
+        ids = [json.loads(l)["change_id"] for l in (td / "out_r9_twin" / "changes.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        assert len(set(ids)) == 2, "change_id must depend on new_value"
+        trv = td / "r9_trvalues.csv"
+        trv.write_text(hdr + "\n" + "\n".join([
+            'Account A,111-111-1111,2026-08-01 10:00:00,User A,CAMPAIGN,Campaign Alpha,,"₺100,00 olan Bütçe, ₺150,00 olarak değiştirildi",,',
+            "Account A,111-111-1111,2026-08-01 10:01:00,User A,CAMPAIGN,Campaign Alpha,,\"40 olan Hedef EBM, 35 değerine azaltıldı\",,",
+            "Account A,111-111-1111,2026-08-01 10:02:00,User A,CAMPAIGN,Campaign Alpha,,\"20 olan Hedef EBM, 25 değerine artırıldı\",,"]) + "\n", encoding="utf-8")
+        rv = run_pipeline(trv, td / "out_r9_trv", decimal_style="TR", force_review=True, allow_unknown_categories=True)
+        assert rv["status"] == "ok", rv
+        got = sorted((json.loads(l)["old_value_num"], json.loads(l)["new_value_num"]) for l in (td / "out_r9_trv" / "changes.jsonl").read_text(encoding="utf-8").splitlines() if l.strip())
+        assert got == [(20, 25), (40, 35), (100, 150)], f"Turkish 'olan ... değerine/olarak' values: {got}"
+        print("[PASS] mutation gaps: >30%-empty gate, structured Budget rule, new_value in change_id, Turkish value phrases all asserted")
+
+    with _test_case("needs_mapping: e-mail addresses in sample_values are redacted"):
+        fu = td / "r9_unknown.csv"
+        fu.write_text("When It Happened,Who Did It,Thing Touched\n2026-08-01 10:00:00,person.x@example.test,x\n", encoding="utf-8")
+        ru = run_pipeline(fu, td / "out_r9_unknown")
+        assert ru["status"] == "needs_mapping", ru
+        assert "@example.test" not in json.dumps(ru.get("sample_values")), ru.get("sample_values")
+        print("[PASS] needs_mapping: e-mail addresses in sample_values are redacted")
 
 
 def _run_pipeline_cases(td):
@@ -5017,7 +5280,7 @@ def _run_pipeline_cases(td):
                 raise AssertionError(f"--since {bad_since!r} should have raised ValueError")
             except ValueError:
                 pass
-        assert query_changes([{"timestamp_iso": "2026-08-01T00:00:00"}], since="0d") == [{"timestamp_iso": "2026-08-01T00:00:00"}]
+        assert query_changes([{"timestamp_iso": "2026-08-01T00:00:00"}], since="0d", since_anchor="newest") == [{"timestamp_iso": "2026-08-01T00:00:00"}]
         print(f"[PASS] query_changes(): --since now validates against ^\\d+[dwm]$ — garbage and negative values raise ValueError instead of crashing or silently returning wrong results")
 
     with _test_case("a >20% unparseable-date rate now stops with needs_date_review instead of silently returning 'ok…"):
@@ -5403,7 +5666,6 @@ def _run_pipeline_cases(td):
         # P2: ISO trailing junk must be rejected, not silently truncated —
         # and must not silently drop a valid offset by falling through to
         # the (previously lenient) fallback parser.
-        assert True  # covered directly by parse_timestamp unit checks below
         try:
             parse_timestamp("2026-08-01T10:00:00+03:00JUNK", "ISO")
             raise AssertionError("P2: trailing-junk ISO timestamp with an offset must be rejected, not silently truncated")
@@ -5700,12 +5962,60 @@ def _run_pipeline_cases(td):
     _run_round7_cases(td)
     _run_round8_cases(td)
     _run_r9_ingest_cases(td)
+    _run_r9_tools_cases(td)
 
 
 # =====================================================================
 # CLI
 # =====================================================================
+def _emit(obj):
+    print(json.dumps(obj, indent=2, ensure_ascii=False))
+
+
+def _read_jsonl(path):
+    """changes.jsonl -> rows, or a structured error dict (2026-11-10, B-12/S-7)."""
+    p = Path(path)
+    if not p.is_file():
+        return {"status": "error", "message": f"Input file not found: {path}"}
+    rows = []
+    try:
+        with open(p, encoding="utf-8") as f:
+            for lineno, line in enumerate(f, 1):
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError as e:
+                    return {"status": "error", "message": f"{path} line {lineno} is not JSON ({e}). query reads the changes.jsonl a run wrote, one JSON object per line."}
+                if not isinstance(row, dict):
+                    return {"status": "error", "message": f"{path} line {lineno} is not a JSON object. query reads the changes.jsonl a run wrote."}
+                rows.append(row)
+    except UnicodeDecodeError as e:
+        return {"status": "error", "message": f"{path} is not UTF-8 text ({e.reason}). query reads the changes.jsonl a run wrote."}
+    return rows
+
+
 def main():
+    """CLI entry. 2026-11-10 (B-4): UTF-8 stdout on any console; an unexpected
+    exception becomes a JSON envelope with status internal_error and exit 3."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
+    try:
+        _main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception as e:
+        _emit({"status": "internal_error", "message": f"Unexpected {type(e).__name__}: {e}",
+               "instructions": "This is a bug in the tool, not in the input. Report it with the command you ran (no customer data)."})
+        sys.exit(3)
+
+
+def _main():
     ap = argparse.ArgumentParser(description="Ads Change History — single-file skill. Run `--help` on a subcommand for details.")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -5734,7 +6044,8 @@ def main():
     p_query.add_argument("--category")
     p_query.add_argument("--operation")
     p_query.add_argument("--source")
-    p_query.add_argument("--since", help="e.g. 7d, 2w, 1m")
+    p_query.add_argument("--since", help="e.g. 7d, 2w, 1m. Counts back from now unless --since-anchor newest.")
+    p_query.add_argument("--since-anchor", choices=["now", "newest"], default="now", help="now (default): count --since back from the current time. newest: from the newest row in the file.")
     p_query.add_argument("--format", choices=["table", "json"], default="table")
 
     sub.add_parser("self-test", help="Run the built-in fixtures end-to-end and assert expected behavior.")
@@ -5775,28 +6086,49 @@ def main():
             allow_unknown_categories=args.allow_unknown_categories, force_review=args.force_review,
             extra_rules=extra_rules, open_browser=args.open, account_name=args.account_name, currency=args.currency,
         )
+        _write_run_status(args.out_dir, result)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         sys.exit(0 if result.get("status") == "ok" else 2)
 
     if args.cmd == "query":
-        rows = []
-        with open(args.input, encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    rows.append(json.loads(line))
+        rows = _read_jsonl(args.input)
+        if isinstance(rows, dict):
+            _emit(rows)
+            sys.exit(2)
+        info = {}
         try:
             matched = query_changes(rows, user=args.user, account=args.account, campaign=args.campaign,
-                                     category=args.category, operation=args.operation, source=args.source, since=args.since)
-        except ValueError as e:
-            print(json.dumps({"status": "error", "message": str(e)}, indent=2, ensure_ascii=False))
+                                     category=args.category, operation=args.operation, source=args.source, since=args.since,
+                                     since_anchor=args.since_anchor, info=info)
+        except (ValueError, OverflowError) as e:
+            _emit({"status": "error", "message": str(e)})
             sys.exit(2)
         if args.format == "json":
-            print(json.dumps({"count": len(matched), "rows": matched}, indent=2, ensure_ascii=False))
+            out = {"count": len(matched), "rows": matched}
+            if info.get("since_anchor"):
+                out["since_anchor"] = info["since_anchor"]
+            _emit(out)
         else:
-            print(f"{len(matched)} matching change(s)\n")
+            print(f"{len(matched)} matching change(s)")
+            if info.get("since_anchor"):
+                a = info["since_anchor"]
+                print(f"--since counted back from {a['basis']} ({a['anchor_utc']}); cutoff {a['cutoff_utc']}")
+            print()
             for r in matched:
                 actor = r.get("user_name") or r.get("user_email") or (f"[{r.get('client_type')}]" if r.get("actor_type") == "automation" else "unknown")
                 print(f"{r.get('timestamp')}  {actor:<20}  {r.get('account_name') or '':<20}  {r.get('campaign_name') or '—':<25}  {r.get('category')}/{r.get('subcategory')}  {r.get('old_value')} -> {r.get('new_value')}")
+
+
+def _write_run_status(out_dir, result):
+    """run_status.json says whether the outputs next to it are from a run that
+    reached ok (2026-11-10, B-11). Best effort: never fails the run."""
+    try:
+        p = Path(out_dir) / "run_status.json"
+        if p.parent.is_dir() and not p.is_symlink():
+            p.write_text(json.dumps({"status": result.get("status"), "written_at": datetime.now().isoformat(),
+                                     "outputs_current": result.get("status") == "ok"}, indent=2), encoding="utf-8")
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":

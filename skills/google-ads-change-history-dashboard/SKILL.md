@@ -1,6 +1,6 @@
 ---
 name: google-ads-change-history-dashboard
-description: Google Ads change history — who changed what, when, in which account/campaign/ad group, old value, new value, category. Never judges whether a change was good or risky. Use when the user asks "who changed X", "what changed in the last 30 days", "show me the change history", "which campaigns haven't been touched", "change history dashboard", or gives a Google Ads change export (CSV, TSV, or pre-flattened Google Ads ChangeEvent JSON) and wants it turned into a report or dashboard. Does NOT read XLSX, Google Sheets URLs, or call the Google Ads API directly — those need converting to CSV/JSON first (correction 2026-08-18: the description used to claim all of these, the code never did).
+description: Google Ads change history — who changed what, when, in which account/campaign/ad group, old value, new value, category; facts only, never whether a change was good or risky. Use when the user asks "who changed X", "what changed in the last 30 days", "show me the change history", "which campaigns haven't been touched", "değişiklik geçmişi", "kim ne değiştirdi", "son 30 günde ne değişti", or gives a Google Ads change export (UI "Change history" CSV/TSV in English or Turkish, the legacy Turkish summary sheet, or ChangeEvent JSON) and wants a report or dashboard. Not for XLSX or Google Sheets URLs (export to CSV first).
 ---
 
 # Ads Change History
@@ -30,28 +30,36 @@ on the strength of its absence — say it doesn't appear in this export.
 | Source | Language | Status |
 |---|---|---|
 | Google Ads API `ChangeEvent`, flattened to JSON/CSV (what `tools/fetch_live_data.py` writes) | field names, not prose | Structured rules. The live fetch itself is unverified against a real account. |
-| Google Ads UI "Change history" CSV download | English, Turkish | Free-text summaries matched by patterns taken from real exports. Phrasings not seen yet fall to "Other". |
+| Google Ads UI "Change history" CSV download, as downloaded (title lines above the header are skipped) | English, Turkish | Free-text summaries matched by patterns taken from real exports; a cell bundling several statements becomes one row per statement. Phrasings not seen yet fall to "Other". Needs `--account-name` (no account column) and `--timezone` (no offset) for the timeline. |
+| Same export | German, Spanish, French, Portuguese, Italian, Dutch | Headers and dates read; categories mostly "Other", and `data_quality` warns that the UI language is the likely cause. |
 | Legacy Turkish summary sheet (`Hesap Adı`/`Tarih`/`Değişiklik Özeti`…) | Turkish | Verified against one real schema. |
 | Anything else | — | Stops with `needs_mapping`; categorization then depends on what the columns contain. |
 
-A UI export in any other language will map its columns (after `needs_mapping`)
-but most rows will be "Other": the summary patterns are language-specific and
-none exist for it. That is reported, not hidden — see `data_quality` below.
+A UI export in any other language may need `needs_mapping`, and most rows
+will be "Other": the summary patterns are language-specific. That is
+reported, not hidden — see `data_quality` below.
 Don't add patterns for a language from guesswork; they come from real rows.
 
 ## Running it
 
+Paths are relative to this skill's folder (where `ads_change_history.py` is):
+
 ```bash
 python3 ads_change_history.py run <input.csv|.json> --out-dir ./out --open
+python3 ads_change_history.py run export.csv --account-name "Account A" --timezone Europe/Istanbul --out-dir ./out
 python3 ads_change_history.py query ./out/changes.jsonl --user "User A" --since 7d
 python3 ads_change_history.py self-test
 ```
 
-`query`'s `--user`/`--account`/`--campaign` are substring matches (`"User A"`
-also matches `"User AB"`) — intentionally more forgiving than the dashboard's
-exact-match filter dropdowns, which are populated from a closed picklist and
-don't need that leniency. Two different interfaces, two different correct
-defaults — not an inconsistency to reconcile.
+`query`'s `--user`/`--account`/`--campaign` are substring matches that ignore
+case and accents, Turkish-aware (`ismail` finds `İsmail`, `kis` finds `KIŞ`) —
+more forgiving than the dashboard's exact-match filters, on purpose.
+`--since 7d` counts back from now; `--since-anchor newest` counts back from
+the newest row instead (useful for an old export). The anchor is printed.
+
+Exit codes: 0 ok, 2 a question or an input error (JSON `status`), 3
+`internal_error` (a bug in the tool; say so, don't retry with other flags).
+`--open` reports `opened: true/false`; if false, give the user the `out` path.
 
 ## When the pipeline stops and asks
 
@@ -68,10 +76,14 @@ settle it, ask again — never fill it in.
 | `needs_decimal_style` | `sample_values` | "Is 150.000 one hundred and fifty thousand, or 150?" | `--decimal-style TR` (thousand) or `US` (150) |
 | `needs_date_review` | the count and % of unreadable dates | "N of M dates couldn't be read as *format*. Is the date column right?" | fix `--date-format`/`--map timestamp=…`, or `--force-review` if the bad dates are real |
 | `needs_category_review` | each `unknown_combinations` entry with its example old/new | "What kind of change is `proximity_target` on a campaign criterion?" | a rule in a JSON list passed with `--extra-rules`, or — if they'd rather not decide — `--allow-unknown-categories` (those rows become "Other" and are counted) |
+| `needs_mapping` with no account column | `missing_required` lists the account | "Which name should this account have in the report?" | `--account-name "…"` |
+| `ok`, but `timezone_unknown` > 0 | the count | "Which time zone are these times in?" | `--timezone Europe/Istanbul` |
+| `error` about encoding / unreadable text | `message` | "Do you know the file's encoding?" (often `cp1254` for an older Turkish Windows export) | `--encoding cp1254` |
 | `error` | `message` | nothing to decide — the input or a flag is wrong | fix what the message names |
 
-`--map` answers are remembered per column-header set (in
-`mapping-profiles/`), so the same export shape is asked about once. Two
+`--map` answers are remembered per column-header set (in a per-user data
+folder, `$XDG_DATA_HOME` or `~/.local/share/google-ads-change-history-dashboard/`,
+saved only after a run reaches ok), so the same export shape is asked about once. Two
 different sources with identical headers would share that answer — a known,
 deliberate tradeoff. `--mapping-file` (a JSON file with the same answers)
 still works.
@@ -87,7 +99,9 @@ and `change_history.json` → `meta.data_quality`, and shown under the
 dashboard title) says what happened to the rows:
 
 - `input_rows` → `rows_in_report`, with `left_out.unreadable_date` and
-  `left_out.duplicate` between them. The numbers add up.
+  `left_out.duplicate` between them, plus rows added by splitting multi-field
+  events and bundled statements. The numbers add up. Rows are never dropped
+  as duplicates within one file.
 - `in_report_with_limits` — rows that are in the report but less than
   complete: `category_other` (no rule matched), `timezone_unknown` (not on
   the timeline; ask for `--timezone`), `operation_inferred`,
@@ -112,7 +126,10 @@ multi-currency MCC export).
 single-file `dashboard.html` (no CDN, works offline — Filters, Summary,
 Activity Timeline, User Activity split by human/automation, Account/Campaign
 drill-down, Category Distribution, Campaign Last Changes, Change Explorer with
-detail panel), `coverage.txt`, `unknown-fields.json` when applicable. The
+detail panel), `coverage.txt`, `run_status.json` (`outputs_current: false`
+after a run that stopped; that run also cleared the previous outputs),
+`unknown-fields.json` when applicable. An input with zero events (`[]`)
+gives an empty, valid report. The
 dashboard prints cleanly (browser Print → Save as PDF: landscape A4, the
 Explorer's current page with every column wrapped instead of clipped).
 
@@ -129,11 +146,12 @@ in any other output surface this skill grows.
 
 ## Privacy
 
-`--mask-users` (default off) removes e-mail addresses from every output file:
-a human becomes "User A"/"User B" (the same label on every later run), and an
-address on a script/bulk/rule row is dropped. It does **not** mask account,
-campaign or ad group names, any ID, resource paths, or old/new values — if
+`--mask-users` (default off) replaces each human with "User A"/"User B" (the
+same label on every later run) and scrubs e-mail-shaped text and the known
+identities from every string field of every output file, summary text and
+old/new values included. It does **not** mask account, campaign or ad group
+names, any ID, or resource paths — if
 the user wants to share a report without revealing whose account it is, say
 plainly that this flag doesn't do that. The label table
-(`mapping-profiles/mask-labels.json`) holds the real identities; never share
+(`mask-labels.json`, in the same per-user data folder) holds the real identities; never share
 or commit it. This repo is public: only synthetic data goes in it.

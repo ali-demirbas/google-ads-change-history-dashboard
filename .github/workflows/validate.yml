@@ -11,14 +11,29 @@ permissions:
 jobs:
   self-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 = macOS system Python; the skill must stay compatible with it.
+        python-version: ["3.9", "3.12"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
-          python-version: "3.12"
-      - name: Run the skill's own self-test suite
-        working-directory: skills/google-ads-change-history-dashboard
-        run: python3 ads_change_history.py self-test
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "20"
+      - name: Validate plugin manifests
+        run: |
+          for f in .claude-plugin/*.json; do python3 -m json.tool "$f" > /dev/null || { echo "invalid JSON: $f"; exit 1; }; done
       - name: Import check
         working-directory: skills/google-ads-change-history-dashboard
         run: python3 -c "import ads_change_history"
+      - name: Run the skill's own self-test suite (the JS suite must run, not skip)
+        working-directory: skills/google-ads-change-history-dashboard
+        run: |
+          set -o pipefail
+          python3 ads_change_history.py self-test | tee self-test.log
+          if grep -q "^\[SKIP\] Rule Matches JS" self-test.log; then echo "Node suite was skipped in CI"; exit 1; fi
+          if grep -q "^\[WARN\]" self-test.log; then echo "::warning::$(grep '^\[WARN\]' self-test.log | head -1)"; fi

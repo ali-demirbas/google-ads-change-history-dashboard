@@ -3,7 +3,6 @@
 [![validate](https://github.com/ali-demirbas/google-ads-change-history-dashboard/actions/workflows/validate.yml/badge.svg)](https://github.com/ali-demirbas/google-ads-change-history-dashboard/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 ![Single file](https://img.shields.io/badge/skill-single_file-blue)
-![Tests](https://img.shields.io/badge/self--tests-57_passing-brightgreen)
 
 A Claude Code skill that turns a Google Ads change-history export (CSV, TSV, or a pre-flattened `ChangeEvent` JSON) into a filterable, offline, single-file HTML dashboard — who changed what, in which account/campaign/ad group, old value to new value, and what category it falls into.
 
@@ -20,9 +19,9 @@ A Claude Code skill that turns a Google Ads change-history export (CSV, TSV, or 
 ## What it won't do
 
 - Won't tell you if a change was a *good* one.
-- Won't read XLSX or a Google Sheets URL directly, and won't call the Google Ads API live — export to CSV/JSON first.
+- Won't read XLSX or a Google Sheets URL directly (an XLSX/ZIP/GZIP file stops with "export as CSV"), and the skill itself never calls the network — the optional `tools/fetch_live_data.py` is the only part that talks to the Google Ads API.
 - Won't say anything about a campaign that isn't in the export. No row means no evidence — not "unchanged", and not even that the campaign exists.
-- Won't categorize a UI export in a language it has no patterns for (today: English and Turkish). The columns still map; the rows it can't read land in "Other", and the run says how many.
+- Won't categorize a UI export in a language it has no patterns for. English and Turkish UI exports, the legacy Turkish sheet and API data are categorized. German, Spanish, French, Portuguese, Italian and Dutch exports have their headers and dates read, but most rows land in "Other", and `data_quality` warns that the UI language is the likely cause.
 - Won't guess past a genuine ambiguity (an unrecognized column, an ambiguous date format like `03/04/2026`, an unrecognized category combination) — it stops and asks instead of silently picking an answer.
 
 ## Install
@@ -54,13 +53,24 @@ python3 ads_change_history.py query ./out/changes.jsonl --user "User A" --since 
 python3 ads_change_history.py self-test
 ```
 
-Two optional facts only you know, never guessed: `--timezone Europe/Istanbul` for a source whose timestamps carry no offset (without it those rows are left out of the timeline, and the run says how many), and `--currency TRY` to show budget/bid amounts with their unit.
+Facts only you know, never guessed:
 
-When the input has a column the skill doesn't recognize, an ambiguous date/number format, or an uncategorized combination of resource type + field + operation, it exits non-zero with a structured JSON `status` instead of guessing — read that JSON, answer the question it's asking, and re-run with the flag it names (`--map`, `--date-format`, `--decimal-style`, `--extra-rules`, or `--force-review`). A successful run ends with a `data_quality` block: how many input rows are in the report, how many were left out and why, and how many are in it with a limitation (no timezone, categorized "Other", …).
+- `--account-name "My account"` for a UI export, which has no account column.
+- `--timezone Europe/Istanbul` for timestamps without an offset (UI exports). Without it those rows are left out of the timeline, and the run says how many.
+- `--currency TRY` to show budget/bid amounts with their unit, when the text doesn't already carry a currency sign.
+- `--encoding cp1254` (or another codec) when the file isn't UTF-8/UTF-16 and the run says it can't read it cleanly.
+
+A UI export can be fed as downloaded: the title lines above the header row are skipped, `;`- and tab-separated files are detected, and spelled-out month names (`10 Kas 2026`, `Nov 10, 2026, 2:15 PM`) are read without asking.
+
+`query --since 7d` counts back from now; add `--since-anchor newest` to count back from the newest row in the file. The anchor used is printed with the results.
+
+When the input has a column the skill doesn't recognize, an ambiguous date/number format, or an uncategorized combination of resource type + field + operation, it exits non-zero with a structured JSON `status` instead of guessing — read that JSON, answer the question it's asking, and re-run with the flag it names (`--map`, `--date-format`, `--decimal-style`, `--account-name`, `--extra-rules`, or `--force-review`). Exit codes: 0 ok, 2 a question or an input error, 3 an internal error (a bug — the JSON says so, never a bare traceback). A successful run ends with a `data_quality` block: how many input rows are in the report, how many were left out and why, and how many are in it with a limitation (no timezone, categorized "Other", …).
 
 ## Output
 
-`changes.jsonl` (one row per canonical change), `change_history.json` (aggregated), a single-file `dashboard.html` (works fully offline, no CDN — Filters, Summary, Activity Timeline, User Activity split by human/automation, Account/Campaign drill-down, Category Distribution, Rule Matches, Campaign Last Changes, and a sortable/searchable Change Explorer with a before/after detail panel), `coverage.txt`, and `unknown-fields.json` when applicable.
+`changes.jsonl` (one row per canonical change), `change_history.json` (aggregated), a single-file `dashboard.html` (works fully offline, no CDN — Filters, Summary, Activity Timeline, User Activity split by human/automation, Account/Campaign drill-down, Category Distribution, Rule Matches, Campaign Last Changes, and a sortable/searchable Change Explorer with a before/after detail panel), `coverage.txt`, `run_status.json` (whether the files next to it come from a run that reached ok — a run that stops clears the previous run's outputs first), and `unknown-fields.json` when applicable. The tool refuses to write through a symbolic link in the output folder.
+
+One row is one change statement: a summary cell that bundles several statements is split into one row each, sharing an `event_id`. Rows are never dropped as duplicates within one file; only identical rows coming from overlapping files collapse, and the count is reported.
 
 The dashboard stays one file at any size: the rows are embedded column-packed (about a quarter of the plain-JSON size — 25,000 changes is roughly 9 MB) and it has a print stylesheet, so the browser's *Print → Save as PDF* gives a landscape report with no clipped columns.
 
@@ -68,11 +78,11 @@ The dashboard stays one file at any size: the rows are embedded column-packed (a
 
 ## Privacy
 
-`--mask-users` (default off) removes e-mail addresses from every output file: a person becomes `User A`/`User B` (the same label on every later run), and an address attached to a script, bulk-upload or rule change is dropped. It does **not** mask account, campaign or ad group names, IDs, resource paths, or the old/new values — a report that has to hide whose account it is needs more than this flag. The identity-to-label table is kept locally in `mapping-profiles/mask-labels.json` (gitignored); don't share it.
+`--mask-users` (default off) replaces each person with `User A`/`User B` (the same label on every later run) and scrubs e-mail-shaped text and the known identities from every string field of every output file, including the summary text and old/new values. It does **not** mask account, campaign or ad group names, IDs or resource paths — a report that has to hide whose account it is needs more than this flag. The identity-to-label table (`mask-labels.json`) and learned column mappings are kept in a per-user data folder (`$XDG_DATA_HOME` or `~/.local/share/google-ads-change-history-dashboard/`), outside the repo; don't share them. `needs_mapping` sample values shown in chat have e-mail addresses redacted.
 
 ## How this repo is organized
 
-The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_change_history.py`](skills/google-ads-change-history-dashboard/ads_change_history.py) — canonical schema, source detection, category rules, the pipeline, the dashboard template, built-in synthetic sample data, and the self-test suite that *is* the test framework. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before making a change. `docs/` holds the first five rounds of self-audit history plus real-usage dogfooding notes — every confirmed finding, how it was reproduced, and how it was fixed. Later rounds are recorded where the fixes are: in the commit messages and in the dated notes beside the code and its test cases.
+The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_change_history.py`](skills/google-ads-change-history-dashboard/ads_change_history.py) — canonical schema, source detection, category rules, the pipeline, the dashboard template, built-in synthetic sample data, and the self-test suite that *is* the test framework. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before making a change. `docs/` holds the self-audit history (rounds 1-5 and round 7) plus real-usage dogfooding notes — every confirmed finding, how it was reproduced, and how it was fixed. Later rounds are recorded where the fixes are: in the commit messages and in the dated notes beside the code and its test cases.
 
 ## License
 
