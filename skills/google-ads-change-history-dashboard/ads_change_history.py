@@ -2500,6 +2500,8 @@ body.lab {
     .bar-row { grid-template-columns: 110px minmax(0, 1fr) 44px; gap: 10px; }
     .acc-head { grid-template-columns: 16px minmax(0, 110px) minmax(0, 1fr) 44px; }
     .fld { flex: 1 1 140px; }
+    .fld-range { flex-basis: 100%; }
+    .rangebtns, .threshbtns { border-radius: 22px; }
     .ms > summary { max-width: none; min-width: 0; }
     .ms-panel { position: static; width: 100%; min-width: 0; max-width: none; margin-top: 4px; }
     .lab details:not(.ms) > summary { padding: 12px 0; }
@@ -2532,6 +2534,7 @@ body.lab {
     .filters, .explorer-fld, .pager button, #detailOverlay, .threshbtns, #ruleMatchesConfig { display: none !important; }
     #filterContext { margin: 0; }
     .timeline { overflow: visible; }
+    .tl-bar .tip, #timelineReadout { display: none !important; }
     .tbl-wrap { overflow: visible !important; }
     table { font-size: 9.5px; table-layout: auto; }
     th, td { max-width: none; padding: 4px 6px; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; vertical-align: top; }
@@ -2586,7 +2589,7 @@ body.lab {
           <option value="">All changes</option>
           <option value="__matched__">Matched a rule</option>
         </select></label>
-      <div class="fld"><span class="fld-l" id="lRange">Date range</span>
+      <div class="fld fld-range"><span class="fld-l" id="lRange">Date range</span>
         <div class="rangebtns" id="rangeBtns" role="group" aria-labelledby="lRange">
           <button type="button" data-range="all" class="active" aria-pressed="true">All</button>
           <button type="button" data-range="30" aria-pressed="false">30d</button>
@@ -2814,7 +2817,8 @@ function valueParts(c, which){
   if(unit && disp!==null && disp!==undefined && (/micros/i.test(unit) || (cur && unit===cur && fromMicros))){
     return {main: `${disp}${cur ? ' '+cur : ''}`, raw: s};
   }
-  if(unit && !/micros/i.test(unit) && !s.includes(unit)) return {main: unit==='%' ? s+'%' : `${s} ${unit}`};
+  // a raw value that already carries its currency symbol (₺350,34) gets no second unit
+  if(unit && !/micros/i.test(unit) && !s.includes(unit) && !(cur && /[₺€$£¥]/.test(s))) return {main: unit==='%' ? s+'%' : `${s} ${unit}`};
   return {main: s};
 }
 function valueText(c, which){ const p = valueParts(c, which); return p ? p.main + (p.raw ? ` (raw: ${p.raw})` : '') : ''; }
@@ -4042,6 +4046,7 @@ check('units: %, parsed currency code, micros conversion', ()=>{
   assert.strictEqual(valueText(row({new_value:'+10', value_unit:'%'}), 'new'), '+10%');
   assert.strictEqual(valueText(row({new_value:'402,89', new_value_display:402.89, value_unit:'TRY', currency:'TRY'}), 'new'), '402,89 TRY');
   assert.strictEqual(valueText(row({new_value:'50000000', new_value_display:50, value_unit:'TRY', currency:'TRY'}), 'new'), '50 TRY (raw: 50000000)');
+  assert.strictEqual(valueText(row({new_value:'₺402,89', new_value_display:402.89, value_unit:'TRY', currency:'TRY'}), 'new'), '₺402,89');
   assert.strictEqual(valueText(row({}), 'new'), '');
 });
 check('dates: dd.mm.yyyy hh:mm in tr-TR, source wall clock', ()=>{
