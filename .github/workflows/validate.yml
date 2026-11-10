@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   self-test:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest (26.04) no longer ships a Python 3.9 build.
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
