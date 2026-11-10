@@ -58,7 +58,8 @@ VERIFIED vs BEST-EFFORT — read before trusting the output blindly:
 import argparse
 import json
 import sys
-from datetime import date
+import os
+from datetime import date, timedelta
 
 # The Google Ads API version every request here is made against. Google
 # retires each version about a year after release, and a request to a
@@ -74,18 +75,32 @@ API_VERSION_SUNSET = date(2027, 8, 1)
 
 
 def _to_dict(proto_plus_message):
-    """proto-plus message -> plain dict, tolerant of exactly which spelling
-    of .to_dict() this library version exposes (classmethod on the wrapper
-    type vs instance method both exist across versions). Returns {} rather
-    than raising for an unset oneof member (a CREATE has no "old" state)."""
+    """proto-plus message -> plain dict with enum NAMES ("PAUSED"), not numbers.
+    proto-plus's to_dict is a classmethod on the message type and defaults to
+    use_integers_for_enums=True (checked 2026-11-10 against proto-plus 1.29),
+    which turned every status/type value into a bare integer. Returns {} for
+    an unset oneof member (a CREATE has no "old" state)."""
+    if proto_plus_message is None:
+        return {}
+    to_dict = getattr(type(proto_plus_message), "to_dict", None)
+    if to_dict is not None:
+        for kwargs in ({"use_integers_for_enums": False, "preserving_proto_field_name": True}, {"use_integers_for_enums": False}):
+            try:
+                return to_dict(proto_plus_message, **kwargs) or {}
+            except TypeError:
+                continue
+            except Exception:
+                return {}
     try:
-        return type(proto_plus_message).to_dict(proto_plus_message)
-    except Exception:
-        pass
-    try:
-        return proto_plus_message.to_dict()
+        return proto_plus_message.to_dict() or {}
     except Exception:
         return {}
+
+
+def _enum_name(value):
+    """Enum field -> its name; tolerant of a plain int/str (non-proto-plus mode)."""
+    name = getattr(value, "name", None)
+    return name if isinstance(name, str) else str(value)
 
 
 def _to_camel(snake):
@@ -147,10 +162,23 @@ SELECT
   change_event.feed_item,
   change_event.asset
 FROM change_event
-WHERE change_event.change_date_time DURING LAST_{days}_DAYS
+WHERE change_event.change_date_time >= '{start}'
+  AND change_event.change_date_time <= '{end}'
 ORDER BY change_event.change_date_time DESC
 LIMIT {limit}
 """
+
+
+MAX_LIMIT = 10000
+
+
+def build_query(days, limit, today=None):
+    """2026-11-10 (S-6): GAQL only has LAST_7/14/30_DAYS, so LAST_{n}_DAYS was
+    invalid for any other --days and never included today. An explicit date
+    range covers `days` calendar days ending today (account time zone)."""
+    today = today or date.today()
+    start = today - timedelta(days=days - 1)
+    return CHANGE_EVENT_QUERY.format(start=start.isoformat(), end=f"{today.isoformat()} 23:59:59", limit=limit)
 
 
 def fetch(customer_id, days=30, limit=10000, api_version=API_VERSION):
@@ -167,6 +195,8 @@ def fetch(customer_id, days=30, limit=10000, api_version=API_VERSION):
     if days > 30:
         print(f"Note: Google's ChangeEvent API only retains 30 days regardless of what's requested — capping at 30 (you asked for {days}).", file=sys.stderr)
         days = 30
+    days = max(1, int(days))
+    limit = min(max(1, int(limit)), MAX_LIMIT)
 
     try:
         client = GoogleAdsClient.load_from_env(version=api_version)
@@ -180,7 +210,7 @@ def fetch(customer_id, days=30, limit=10000, api_version=API_VERSION):
         sys.exit(2)
 
     ga_service = client.get_service("GoogleAdsService")
-    query = CHANGE_EVENT_QUERY.format(days=days, limit=limit)
+    query = build_query(days, limit)
 
     rows_out = []
     try:
@@ -194,11 +224,11 @@ def fetch(customer_id, days=30, limit=10000, api_version=API_VERSION):
                 "customer_id": customer_id,
                 "resource_name": ce.resource_name,
                 "change_date_time": ce.change_date_time,
-                "change_resource_type": ce.change_resource_type.name,
+                "change_resource_type": _enum_name(ce.change_resource_type),
                 "change_resource_name": ce.change_resource_name,
-                "client_type": ce.client_type.name,
+                "client_type": _enum_name(ce.client_type),
                 "user_email": ce.user_email or None,
-                "resource_change_operation": ce.resource_change_operation.name,
+                "resource_change_operation": _enum_name(ce.resource_change_operation),
                 "changed_fields": field_paths if len(field_paths) != 1 else field_paths[0],
                 "old_resource": flatten_changed_value(old_dict, field_paths),
                 "new_resource": flatten_changed_value(new_dict, field_paths),
@@ -216,24 +246,42 @@ def fetch(customer_id, days=30, limit=10000, api_version=API_VERSION):
     return rows_out
 
 
+def write_private_json(path, data):
+    """Owner-only (0600) output: the file holds account data and e-mails (S-9).
+    Zero events are written as [] -- the skill renders that as an empty report."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+    except (AttributeError, OSError):
+        pass
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=None)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--customer-id", required=True, help="Target Google Ads customer ID (digits only, no dashes).")
-    ap.add_argument("--days", type=int, default=30, help="How many days back to fetch (capped at 30 — Google's own retention limit).")
-    ap.add_argument("--limit", type=int, default=10000, help="Row cap (Google's own hard limit is 10,000 per query).")
+    ap.add_argument("--days", type=int, default=30, help="Calendar days to fetch, ending today (1-30; more is capped at 30, Google's own retention limit).")
+    ap.add_argument("--limit", type=int, default=MAX_LIMIT, help="Row cap, 1-10000 (Google's own hard limit is 10,000 per query).")
     ap.add_argument("--out", required=True, help="Output JSON file path.")
     ap.add_argument("--api-version", default=API_VERSION, help=f"Google Ads API version to call (default: {API_VERSION}). Must be one your installed google-ads library supports.")
     args = ap.parse_args()
 
     customer_id = args.customer_id.replace("-", "")
+    if not customer_id.isdigit():
+        ap.error("--customer-id must be digits (dashes allowed)")
+    if args.days < 1:
+        ap.error("--days must be at least 1")
+    if not 1 <= args.limit <= MAX_LIMIT:
+        ap.error(f"--limit must be between 1 and {MAX_LIMIT}")
     rows = fetch(customer_id, days=args.days, limit=args.limit, api_version=args.api_version)
 
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=None)
+    write_private_json(args.out, rows)
 
     print(json.dumps({
         "status": "ok",
         "rows_fetched": len(rows),
+        "note": "No change events in the requested range; the skill will build an empty report." if not rows else None,
         "out": args.out,
         "next_step": f"python3 skills/google-ads-change-history-dashboard/ads_change_history.py run {args.out} --out-dir ./out --open",
     }, indent=2))
