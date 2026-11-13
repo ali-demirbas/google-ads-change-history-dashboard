@@ -87,3 +87,7 @@ The entire skill is one file: [`skills/google-ads-change-history-dashboard/ads_c
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
+
+---
+
+Built by [Ali Demirbaş](https://alidemirbas.com.tr)
