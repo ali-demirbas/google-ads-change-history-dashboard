@@ -79,7 +79,7 @@ When the input has a column the skill doesn't recognize, an ambiguous date/numbe
 
 **digest.md** — a short Markdown summary to paste into Slack or e-mail: period and source files, totals, changes per category, per user (masked with `--mask-users`), per account and per ISO week, the ten most-changed campaigns, campaigns whose last change is 14 or 30+ days before the newest row, coverage notes and one data-quality line. Turkish for a Turkish export, English otherwise; `--digest-lang tr|en` overrides it.
 
-**Coverage notes** — every run lists, in `meta.coverage_notes`, the dashboard and the digest, what its sources cannot show: API change history covers 30 days and may miss Google Ads Editor and auto-applied changes, a UI export and API data can differ, and recent conversions are still maturing.
+**Coverage notes** — every run lists, in `meta.coverage_notes`, the dashboard and the digest, what its sources cannot show: API change history covers 30 days, does not return Google Ads Editor changes and may miss auto-applied changes, a UI export and API data can differ, and recent conversions are still maturing.
 
 One row is one change statement: a summary cell that bundles several statements is split into one row each, sharing an `event_id`. Rows are never dropped as duplicates within one file; only identical rows coming from overlapping files collapse, and the count is reported.
 

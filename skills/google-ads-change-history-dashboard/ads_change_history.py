@@ -622,6 +622,7 @@ AUTOMATION_CLIENT_TYPE = re.compile(r"(AUTOMATED|RULE|SCRIPT|RECOMMENDATION|BULK
 # Calling it "human" was an earlier design call that turned out to be too
 # confident — leave it "unknown" unless client_type OR the user_name pattern
 # says otherwise. Fixed 2026-08-18.
+# 2026-11-15 R-5: the API does not return Editor changes; EDITOR stays listed in case a UI export or a future API version carries it.
 HUMAN_CLIENT_TYPE = re.compile(r"(WEB_CLIENT|MOBILE_APP|EDITOR)", re.IGNORECASE)
 # B-9 2026-11-10: every summary regex runs on one line capped at SUMMARY_LINE_CAP chars.
 SUMMARY_LINE_CAP = 2000
@@ -1693,6 +1694,8 @@ def parse_statement_values(text, operation=None):
     """Old/new value strings parsed from one summary statement, plus its unit:
     (old, new, unit) or None. Each pattern runs per line (B-9 length cap)."""
     lines = [l[:SUMMARY_LINE_CAP] for l in str(text or "").split("\n")]
+    # 2026-11-15 R-1: target-set lines only on change headlines; a CREATE keeps its budget value (or none).
+    is_change = (operation or infer_operation(text)) == "UPDATE" and not _OP_CREATE_RE.search(split_statement(str(text or ""))[0])
     for line in lines:
         m = SUMMARY_OLD_NEW_RE.search(line) or SUMMARY_TR_OLAN_DEGERINE_RE.search(line)
         if m:
@@ -1707,7 +1710,7 @@ def parse_statement_values(text, operation=None):
         m = SUMMARY_PERCENT_SET_RE.search(line)
         if m:
             return None, (m.group(1) or m.group(2)), "%"
-        m = SUMMARY_TARGET_SET_RE.search(line)
+        m = SUMMARY_TARGET_SET_RE.search(line) if is_change else None
         if m:
             if m.group(3):
                 return None, m.group(3).strip(), _currency_of(m.group(3))
@@ -3016,6 +3019,9 @@ body.lab {
 }
 /* lab-ui:end */
 
+  /* 2026-11-15 B-1: the hidden attribute wins over .filters/.fld display:flex */
+  [hidden] { display: none !important; }
+
   /* ---- the dashboard, on Lab UI (the site's visual language: stone ink on
      white paper, the brand blue, plain-case labels, tiles) -------------- */
   /* 2026-11-10: dashboard-only tokens, so dark mode can re-point them (pills, active buttons) */
@@ -4196,7 +4202,7 @@ function renderExplorer(filtered){
     return `
     <tr class="datarow" tabindex="0" data-idx="${rowIndex(c)}">
       <td>${escapeHtml(fmtTs(c))}</td>
-      <td>${c.actor_type==='human' ? escapeHtml(c.user_name||c.user_email||'—') : c.actor_type==='automation' ? `<span class="pill pill-auto">${escapeHtml(c.client_type||c.user_name||'automation')}</span>` : '<span class="pill">unknown</span>'}</td>
+      <td>${c.actor_type==='human' ? escapeHtml(c.user_name||c.user_email||'—') : c.actor_type==='automation' ? `<span class="pill pill-auto">${escapeHtml(c.client_type||c.user_name||'automation')}</span>` : (c.user_name||c.user_email) ? `<span class="pill">${escapeHtml(actorLabel(c))}</span>` : '<span class="pill">unknown</span>'}</td>
       <td>${escapeHtml(c.account_name||'')}</td><td${c.campaign_confidence==='inferred_from_summary' ? ' title="Campaign name read from the summary text"' : ''}>${escapeHtml(c.campaign_name||'—')}</td><td>${escapeHtml(c.ad_group_name||'—')}</td>
       <td><span${categoryPillAttrs(c.category)}>${escapeHtml(c.category)}</span></td><td>${escapeHtml(c.field_name || c.subcategory || '—')}</td>
       <td title="${escapeHtml(c.raw_summary||'')}">${escapeHtml(summary||'—')}</td>
@@ -4628,29 +4634,75 @@ def _open_dashboard(path):
 # =====================================================================
 # MULTI-INPUT, COVERAGE NOTES, BEFORE/AFTER METRICS (2026-11-14)
 # =====================================================================
+class InputAccountError(ValueError):
+    """2026-11-15 R-7: an --input-account FILE that matches several inputs; carries the candidates."""
+    def __init__(self, message, candidates=None):
+        super().__init__(message)
+        self.candidates = candidates or []
+
+
+def _resolved(p):
+    try:
+        return str(Path(p).resolve())
+    except OSError:
+        return str(p)
+
+
+def _dedupe_inputs(inputs):
+    """2026-11-15 R-6: the same file given twice (by any path spelling) is read once."""
+    seen, out, dups = set(), [], []
+    for p in inputs:
+        k = _resolved(p)
+        if k in seen:
+            dups.append(str(p))
+            continue
+        seen.add(k)
+        out.append(str(p))
+    return out, dups
+
+
 def parse_input_accounts(entries, inputs):
     """--input-account FILE=NAME -> {input path: name}. FILE is matched against
-    the given path or its basename; a FILE that names no input is an error (2026-11-14)."""
+    the given path first, then the basename; a FILE that names no input is an error
+    (2026-11-14), one that names several different files too (2026-11-15 R-7)."""
     out = {}
+    uniq, _ = _dedupe_inputs(inputs)
     for e in entries or []:
-        hit = None
-        for p in inputs:
-            for ref in (str(p), Path(p).name):
-                if e.startswith(ref + "=") and e[len(ref) + 1:].strip():
-                    hit = (str(p), e[len(ref) + 1:].strip())
-                    break
-            if hit:
+        hits = []
+        for refs in ((lambda p: str(p)), (lambda p: Path(p).name)):
+            hits = [p for p in uniq if e.startswith(refs(p) + "=") and e[len(refs(p)) + 1:].strip()]
+            if hits:
                 break
-        if not hit:
-            raise ValueError(f"--input-account {e!r}: expected FILE=NAME where FILE is one of the inputs: {[Path(p).name for p in inputs]}")
-        out[hit[0]] = hit[1]
+        if not hits:
+            raise ValueError(f"--input-account {e!r}: expected FILE=NAME where FILE is one of the inputs: {[Path(p).name for p in uniq]}")
+        if len(hits) > 1:
+            raise InputAccountError(f"--input-account {e!r}: {Path(hits[0]).name!r} matches {len(hits)} inputs; give the path as passed to tell them apart: {hits}", hits)
+        p = hits[0]
+        ref = str(p) if e.startswith(str(p) + "=") else Path(p).name
+        out[str(p)] = e[len(ref) + 1:].strip()
     return out
 
 
 def _source_file_names(inputs):
-    """Basename per input; the given path when two inputs share a basename."""
+    """Basename per input; when two inputs share a basename, the shortest unique
+    "<parent>/<basename>" tail (2026-11-15 R-7: never a full local path)."""
     names = Counter(Path(p).name for p in inputs)
-    return {str(p): (Path(p).name if names[Path(p).name] == 1 else str(p)) for p in inputs}
+    out = {}
+    for p in inputs:
+        base = Path(p).name
+        if names[base] == 1:
+            out[str(p)] = base
+            continue
+        mine = Path(_resolved(p)).parts
+        others = [Path(_resolved(q)).parts for q in inputs if str(q) != str(p) and Path(q).name == base]
+        label = None
+        for k in range(2, len(mine)):
+            tail = mine[-k:]
+            if all(o[-k:] != tail for o in others):
+                label = "/".join(tail)
+                break
+        out[str(p)] = label or f"{base}#{list(inputs).index(p) + 1}"
+    return out
 
 
 def _is_api_source(source_label, path):
@@ -4686,7 +4738,7 @@ def build_sources_meta(rows, file_infos):
 
 
 COVERAGE_NOTE_TEXT = {
-    "editor_changes_absent": "Changes made in Google Ads Editor may not appear in the API change history data.",
+    "editor_changes_absent": "The Google Ads API change history does not return changes made in Google Ads Editor, so they are not in the API data.",  # 2026-11-15 R-5: as Google documents it
     "api_30_day_window": "The Google Ads API returns change history for the last 30 days only; older changes are not in the API data.",
     "auto_applied_may_be_missing": "Recommendations auto-applied by Google and some automated changes may be missing or appear under a system user.",
     "ui_export_may_differ_from_api": "The Google Ads UI export and the API data can list the same change differently, so their row counts may differ.",
@@ -5000,7 +5052,7 @@ _DIGEST_TEXT = {
 }
 # Turkish wording for the pipeline's coverage note ids; an unknown id keeps its English text.
 _COVERAGE_NOTES_TR = {
-    "editor_changes_absent": "API verisi Google Ads Editor ile yapılan değişikliklerin hepsini içermeyebilir.",
+    "editor_changes_absent": "Google Ads API değişiklik geçmişi, Google Ads Editor ile yapılan değişiklikleri döndürmez; bu değişiklikler API verisinde yer almaz.",
     "api_30_day_window": "API değişiklik geçmişi yalnız son 30 günü kapsar.",
     "auto_applied_may_be_missing": "Otomatik uygulanan öneriler bu veride eksik olabilir.",
     "ui_export_may_differ_from_api": "Arayüz dışa aktarımı ile API verisi aynı değişikliği farklı satırlarla gösterebilir.",
@@ -5138,8 +5190,11 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
                   input_accounts=None, metrics=None, window_days=7, conversion_lag_days=7):
     # 2026-11-14: input_path may be a list of files (one run, several exports/accounts).
     inputs = [str(p) for p in input_path] if isinstance(input_path, (list, tuple)) else [str(input_path)]
+    inputs, dup_inputs = _dedupe_inputs(inputs)
     multi = len(inputs) > 1
-    input_accounts = input_accounts or {}
+    # 2026-11-15 R-6: account names keyed by any spelling of the same file.
+    _acc_res = {_resolved(k): v for k, v in (input_accounts or {}).items()}
+    input_accounts = {p: _acc_res[_resolved(p)] for p in inputs + [str(m) for m in (metrics or [])] if _resolved(p) in _acc_res}
     metrics = [str(m) for m in (metrics or [])]
     names = _source_file_names(inputs)
     out_dir = Path(out_dir)
@@ -5337,6 +5392,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
             f.write(f"  {cat}: {cnt}\n")
 
     source_warnings = [w for _, v in validated if v for w in v.get("warnings", [])] + [w for pr in profiles for w in save_mapping_profile(pr)]
+    source_warnings += [f"{Path(d).name} was given more than once; it was read once." for d in dup_inputs]
     data = build_dashboard(c["rows"], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at,
                             json_out=out_dir / "change_history.json", rows_skipped_unparseable_date=n["rows_skipped_unparseable_date"],
                             data_quality=data_quality, meta_extra={"sources": sources_meta, "coverage_notes": build_coverage_notes(file_infos, bool(metrics_files))},
@@ -5794,6 +5850,8 @@ def _run_r10_dashboard_cases(td):
         for el in ('id="coverageSection" aria-labelledby="hCoverage" hidden', 'id="rollupSection" aria-labelledby="hRollup" hidden',
                    'id="fldSourceFile" hidden', 'id="baCtl" hidden', 'id="tlMetricCtl" hidden', 'id="baTh" class="num" hidden'):
             assert el in t, el
+        # 2026-11-15 B-1: display:flex on .filters/.fld must not override hidden.
+        assert re.search(r"(?m)^\s*\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}", t), "global [hidden]{display:none !important} rule missing"
         assert 'class="tl-bar' in t and '<button type="button" class="tl-bar' in t and 'aria-pressed="${state.day===d}"' in t
         print("[PASS] r10 dashboard: neutral wording, labelled new controls, optional sections hidden by default")
     with _test_case('r10 dashboard: a run without round-10 fields still embeds and renders the same shape'):
@@ -6148,7 +6206,7 @@ def _run_r10_fix3_cases(td):
     """2026-11-14: eval-set fixes (TR target set value, EN asset removed, system actors) + metrics_daily."""
     with _test_case("fix3: new-only target set lines give new value + unit, old stays None"):
         got = [parse_statement_values(t) for t in ("Kampanya değiştirildi\n  Hedef EBM: ₺180,00", "Kampanya değiştirildi\n  Hedef ROAS: %300",
-                                                    "Kampanya oluşturuldu\n  Teklif sınırı: ₺15,00", "Campaign changed\n  Target CPA: $20.00")]
+                                                    "Kampanya değiştirildi\n  Teklif sınırı: ₺15,00", "Campaign changed\n  Target CPA: $20.00")]
         assert got == [(None, "₺180,00", "TRY"), (None, "300", "%"), (None, "₺15,00", "TRY"), (None, "$20.00", "USD")], got
         assert normalize_number("₺180,00".lstrip("₺"), "TR") == 180.0
         print("[PASS] fix3: Hedef EBM / Hedef ROAS / Teklif sınırı / Target CPA set lines parse as new-only values")
@@ -6190,6 +6248,95 @@ def _run_r10_fix3_cases(td):
         assert next(x for x in multi if x["date"] == "2026-10-08")["conversions"] is None and len(multi) == 10, multi
         assert "metrics_daily" not in json.loads((td / "out_r10_single" / "change_history.json").read_text(encoding="utf-8")), "only with --metrics"
         print("[PASS] fix3: metrics_daily hand-checked sums, missing metric -> null, no campaign/ad-group double count")
+
+
+_JS_R11_EXPLORER_SUITE = r"""
+const assert = require('assert');
+function row(over){ return Object.assign({ subcategory:null, resource_type:null, operation:null, old_value_num:null, new_value_num:null, old_value:null, new_value:null, raw_summary:'', category:'Other', source:'ui_export' }, over); }
+DASH_DATA = { changes:[row({change_id:'n', actor_type:'unknown', user_name:'Rep Named', timestamp_iso:'2026-08-05T11:00:00'}),
+                       row({change_id:'z', actor_type:'unknown', timestamp_iso:'2026-08-04T11:00:00'})], meta:{} };
+resetAll();
+renderExplorer(getFiltered());
+const html = document.getElementById('explorerBody').innerHTML;
+const want = actorLabel(DASH_DATA.changes[0]);
+assert.strictEqual(want, 'Rep Named (actor type unknown)');
+assert.ok(html.includes('>' + want + '<'), 'Explorer User cell must show actorLabel(): ' + html.slice(0, 400));
+assert.ok(html.includes('<span class="pill">unknown</span>'), 'a nameless unknown actor keeps the unknown pill');
+console.log('r11 explorer user cell matches actorLabel');
+"""
+
+
+def _run_r11_cases(td):
+    """2026-11-15: round-11 regressions (R-1 create value, B-2 explorer actor label, R-6 same file twice, R-7 shared basenames)."""
+    import shutil
+    import subprocess
+    with _test_case("r11 R-1: a created campaign keeps its budget value; target-set lines only on change headlines"):
+        tr_create = "Kampanya oluşturuldu\n  Bütçe tutarı: ₺500,00\n  Hedef EBM: ₺40,00"
+        en_create = "Campaign created\n  Budget amount: $50.00\n  Target CPA: $5.00"
+        assert parse_statement_values(tr_create, "CREATE") == (None, "₺500,00", "TRY"), parse_statement_values(tr_create, "CREATE")
+        assert parse_statement_values(tr_create) is None, "no operation, no budget path (as before R-1)"
+        assert parse_statement_values(en_create, "CREATE") == (None, "$50.00", "USD")
+        assert parse_statement_values("Kampanya oluşturuldu\n  Hedef EBM: ₺40,00", "CREATE") is None, "no budget line: no value"
+        assert parse_statement_values("Kampanya oluşturuldu\n  Teklif sınırı: ₺15,00") is None
+        assert parse_statement_values("Kampanya değiştirildi\n  Hedef EBM: ₺180,00", "UPDATE") == (None, "₺180,00", "TRY")
+        f = _r9_csv(td, "r11_create.csv", [["2026-10-10 10:00:00", "u1@example.test", "Camp New", "", tr_create],
+                                           ["2026-10-11 10:00:00", "u1@example.test", "Camp Old", "", "Kampanya değiştirildi\n  Hedef EBM: ₺180,00"]])
+        r = run_pipeline(f, td / "out_r11_create", account_name="Acc", tz="Europe/Istanbul", generated_at="2026-11-15T00:00:00")
+        assert r["status"] == "ok", r
+        got = {x["campaign_name"]: (x["operation"], x["old_value_num"], x["new_value_num"], x.get("currency")) for x in _r9_rows(td / "out_r11_create")}
+        assert got["Camp New"][:3] == ("CREATE", None, 500.0), got
+        assert got["Camp Old"][:3] == ("UPDATE", None, 180.0), got
+        print("[PASS] r11 R-1: creation statement keeps the budget value, change statement keeps the target-set value")
+
+    with _test_case("r11 R-6: the same file given twice (two spellings) is read once, with a source warning"):
+        f = _r9_csv(td, "r11_twice.csv", [["2026-10-10 10:00:00", "u1@example.test", "Camp A", "", "1 dil eklendi\n  Dil A"]])
+        alt = td / "." / "r11_twice.csv"
+        r = run_pipeline([f, alt], td / "out_r11_twice", account_name="Acc", tz="Europe/Istanbul", input_accounts={str(alt): "Acc Two"})
+        assert r["status"] == "ok" and r["row_count"] == 1, r
+        assert r["data_quality"]["left_out"].get("duplicate_across_files", 0) == 0, r["data_quality"]
+        assert any("given more than once" in w for w in r["source_warnings"]), r["source_warnings"]
+        rows = _r9_rows(td / "out_r11_twice")
+        assert [x["source_file"] for x in rows] == ["r11_twice.csv"] and rows[0]["account_name"] == "Acc Two", rows
+        assert parse_input_accounts(["r11_twice.csv=X"], [str(f), str(alt)]) == {str(f): "X"}, "same file twice is not ambiguous"
+        print("[PASS] r11 R-6: one file passed twice is read once; account name follows it; warning says so")
+
+    with _test_case("r11 R-7: a basename shared by two inputs is a structured error for --input-account and never a full path in outputs"):
+        (td / "r11_d1").mkdir(exist_ok=True)
+        (td / "r11_d2").mkdir(exist_ok=True)
+        p1 = _r9_csv(td / "r11_d1", "export.csv", [["2026-10-10 10:00:00", "u1@example.test", "Camp A", "", "1 dil eklendi\n  Dil A"]])
+        p2 = _r9_csv(td / "r11_d2", "export.csv", [["2026-10-12 10:00:00", "u2@example.test", "Camp B", "", "1 dil eklendi\n  Dil B"]])
+        try:
+            parse_input_accounts(["export.csv=X"], [str(p1), str(p2)])
+            raise AssertionError("an ambiguous --input-account must be an error")
+        except InputAccountError as e:
+            assert e.candidates == [str(p1), str(p2)] and "matches 2 inputs" in str(e), (e, e.candidates)
+        assert parse_input_accounts([f"{p2}=Y"], [str(p1), str(p2)]) == {str(p2): "Y"}, "the full path still picks one"
+        cli = subprocess.run([sys.executable, str(Path(__file__).resolve()), "run", str(p1), str(p2), "--out-dir", str(td / "out_r11_cli"),
+                              "--input-account", "export.csv=X"], capture_output=True, text=True, timeout=60)
+        err = json.loads(cli.stdout)
+        assert cli.returncode == 2 and err["status"] == "error" and err["candidates"] == [str(p1), str(p2)], (cli.returncode, cli.stdout)
+        out = td / "out_r11_shared"
+        r = run_pipeline([p1, p2], out, account_name="Acc", tz="Europe/Istanbul", generated_at="2026-11-15T00:00:00")
+        assert r["status"] == "ok", r
+        assert sorted(x["source_file"] for x in _r9_rows(out)) == ["r11_d1/export.csv", "r11_d2/export.csv"], [x["source_file"] for x in _r9_rows(out)]
+        for name in ("changes.jsonl", "change_history.json", "dashboard.html"):
+            assert str(td.resolve()) not in (out / name).read_text(encoding="utf-8") and str(td) not in (out / name).read_text(encoding="utf-8"), f"{name} carries a local path"
+        print("[PASS] r11 R-7: ambiguous basename is a structured error naming candidates; outputs use <parent>/<basename>")
+
+    if not shutil.which("node"):
+        print("[SKIP] r11 explorer JS check (Node not found on PATH)")
+        return
+    with _test_case("r11 B-2: Explorer User cell uses actorLabel() for a named unknown actor (Node)"):
+        body = re.search(r"<script>(.*?)</script>", DASHBOARD_TEMPLATE, re.S).group(1)
+        body = body.replace("const DASH_DATA = /*__DASH_DATA__*/null;", "let DASH_DATA = null;", 1)
+        stub = ("const __els = {};\nfunction __el(){ return {hidden:false, innerHTML:'', textContent:'', disabled:false, dataset:{}, style:{}, "
+                "classList:{add(){}, remove(){}, toggle(){}, contains(){ return false; }}, setAttribute(){}, removeAttribute(){}, getAttribute(){ return null; }, "
+                "addEventListener(){}, querySelectorAll(){ return []; }, querySelector(){ return null; }, appendChild(){}}; }\n"
+                "global.document = { addEventListener(){}, getElementById(id){ return __els[id] || (__els[id] = __el()); }, "
+                "querySelectorAll(){ return []; }, querySelector(){ return null; }, createElement(){ return __el(); }, body: __el() };\n")
+        proc = subprocess.run(["node", "-e", stub + body + "\n" + _JS_R11_EXPLORER_SUITE], capture_output=True, text=True, timeout=15)
+        assert proc.returncode == 0, f"r11 explorer JS check failed:\n{proc.stdout}\n{proc.stderr}"
+        print(f"[PASS] r11 B-2 (Node): {proc.stdout.strip()}")
 
 
 def _run_round6_regressions(td):
@@ -7959,6 +8106,7 @@ def _run_pipeline_cases(td):
     _run_r10_docs_cases(td)
     _run_r10_dashboard_cases(td)
     _run_r10_fix3_cases(td)
+    _run_r11_cases(td)
 
 
 # =====================================================================
@@ -8082,7 +8230,10 @@ def _main():
             column_map = parse_column_map(args.map)
             input_accounts = parse_input_accounts(args.input_account, args.inputs + (args.metrics or []))
         except ValueError as e:
-            print(json.dumps({"status": "error", "message": str(e)}, indent=2, ensure_ascii=False))
+            err = {"status": "error", "message": str(e)}
+            if getattr(e, "candidates", None):
+                err["candidates"] = e.candidates
+            print(json.dumps(err, indent=2, ensure_ascii=False))
             sys.exit(2)
         result = run_pipeline(
             args.inputs if len(args.inputs) > 1 else args.inputs[0], args.out_dir, mapping_file=args.mapping_file, column_map=column_map or None, date_format=args.date_format,
