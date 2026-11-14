@@ -4370,7 +4370,7 @@ _COVERAGE_NOTES_TR = {
 def _digest_lang(rows, meta, lang):
     if lang in ("tr", "en"):
         return lang
-    labels = {r.get("source") for r in rows} | {s if isinstance(s, str) else (s or {}).get("source_label") for s in (meta.get("sources") or [])}
+    labels = {r.get("source") for r in rows} | set(meta.get("source_labels") or []) | {s if isinstance(s, str) else (s or {}).get("source_label") for s in (meta.get("sources") or [])}
     if "legacy_summary_tr" in labels:
         return "tr"
     tr = en = 0
@@ -4417,8 +4417,9 @@ def write_digest(out_dir, rows, aggregation, meta, lang):
     else:
         fc = Counter(r.get("source_file") for r in rows if r.get("source_file"))
         files = list(fc.items())
-    if not files and srcs:
-        L += [f"**{t['source_types']}:** " + ", ".join(cell(x) for x in srcs), ""]
+    labels = meta.get("source_labels") or [x for x in srcs if isinstance(x, str)]
+    if not files and labels:
+        L += [f"**{t['source_types']}:** " + ", ".join(cell(x) for x in labels), ""]
     if files:
         L += [f"**{t['sources']}:** " + ", ".join(f"{cell(f)} ({num(n)} {t['rows']})" if n is not None else cell(f) for f, n in files), ""]
     if not rows:
