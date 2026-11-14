@@ -1,0 +1,100 @@
+{
+ "case": "multi_file_mcc",
+ "description": "Two accounts in three single-account UI exports; two Alfa rows appear in both Alfa files and must be counted once.",
+ "expected": {
+  "status": "ok",
+  "rows_in_report": 6,
+  "dropped": 0,
+  "duplicate_across_files": 2,
+  "meta": {
+   "sources_count": 3
+  }
+ },
+ "thresholds": {
+  "category_accuracy": 1.0,
+  "operation_accuracy": 1.0,
+  "value_match_rate": 1.0
+ },
+ "events": [
+  {
+   "ts": "31 Tem 2026 18:00:00",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 300.0,
+     "new": 350.0
+    }
+   ],
+   "account_name": "Alfa Demo"
+  },
+  {
+   "ts": "30 Tem 2026 12:00:00",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "old": 90.0,
+     "new": 95.0
+    }
+   ],
+   "account_name": "Alfa Demo"
+  },
+  {
+   "ts": "15 Tem 2026 09:00:00",
+   "statements": [
+    {
+     "head": "2 sıralı eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    }
+   ],
+   "account_name": "Alfa Demo"
+  },
+  {
+   "ts": "5 Ağu 2026 10:00:00",
+   "statements": [
+    {
+     "head": "1 kampanya duraklatıldı",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ],
+   "account_name": "Alfa Demo"
+  },
+  {
+   "ts": "6 Ağu 2026 11:00:00",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı azaltıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 500.0,
+     "new": 450.0
+    }
+   ],
+   "account_name": "Beta Demo"
+  },
+  {
+   "ts": "31 Tem 2026 18:00:00",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 300.0,
+     "new": 350.0
+    }
+   ],
+   "account_name": "Beta Demo"
+  }
+ ]
+}

@@ -1,0 +1,199 @@
+{
+ "case": "en_native_preamble",
+ "description": "English Google Ads UI change-history export with preamble, AM/PM dates and multi-statement cells.",
+ "expected": {
+  "status": "ok",
+  "rows_in_report": 19,
+  "dropped": 0
+ },
+ "thresholds": {
+  "category_accuracy": 1.0,
+  "operation_accuracy": 1.0,
+  "value_match_rate": 1.0
+ },
+ "events": [
+  {
+   "ts": "Sep 2, 2026, 4:05:12 PM",
+   "statements": [
+    {
+     "head": "Campaign changed",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "old": 25.0,
+     "new": 28.5
+    }
+   ]
+  },
+  {
+   "ts": "Sep 1, 2026, 9:30:00 AM",
+   "statements": [
+    {
+     "head": "1 budget amount increased",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 120.0,
+     "new": 145.0
+    }
+   ]
+  },
+  {
+   "ts": "Aug 31, 2026, 9:31:40 AM",
+   "statements": [
+    {
+     "head": "1 budget amount decreased",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 1200.0,
+     "new": 950.0
+    }
+   ]
+  },
+  {
+   "ts": "Aug 27, 2026, 3:15:45 PM",
+   "statements": [
+    {
+     "head": "Campaign asset changed",
+     "category": "Asset",
+     "operation": "REMOVE",
+     "subcategory": "Asset removed"
+    },
+    {
+     "head": "Campaign asset created",
+     "category": "Asset",
+     "operation": "CREATE",
+     "subcategory": "Asset added"
+    }
+   ]
+  },
+  {
+   "ts": "Aug 25, 2026, 10:00:00 AM",
+   "statements": [
+    {
+     "head": "3 phrase match keywords added",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    },
+    {
+     "head": "2 negative phrase match keywords added",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Negative keyword"
+    },
+    {
+     "head": "1 broad match keyword removed",
+     "category": "Keyword",
+     "operation": "REMOVE",
+     "subcategory": "Keyword removed"
+    }
+   ]
+  },
+  {
+   "ts": "Aug 20, 2026, 8:45:00 AM",
+   "statements": [
+    {
+     "head": "1 campaign paused",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ]
+  },
+  {
+   "ts": "Aug 18, 2026, 1:00:00 PM",
+   "statements": [
+    {
+     "head": "Campaign changed",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Strategy changed"
+    }
+   ]
+  },
+  {
+   "ts": "Aug 15, 2026, 12:30:00 PM",
+   "statements": [
+    {
+     "head": "Budget created",
+     "category": "Budget",
+     "operation": "CREATE",
+     "subcategory": "Budget created",
+     "new": 50.0
+    },
+    {
+     "head": "Campaign created",
+     "category": "Campaign",
+     "operation": "CREATE",
+     "subcategory": "Campaign created"
+    },
+    {
+     "head": "1 language added",
+     "category": "Targeting",
+     "operation": "CREATE",
+     "subcategory": "Language targeting changed"
+    },
+    {
+     "head": "1 country added",
+     "category": "Targeting",
+     "operation": "CREATE",
+     "subcategory": "Location targeting changed"
+    }
+   ]
+  },
+  {
+   "ts": "Aug 15, 2026, 12:41:03 PM",
+   "statements": [
+    {
+     "head": "Ad group created",
+     "category": "AdGroup",
+     "operation": "CREATE",
+     "subcategory": "Ad group created"
+    },
+    {
+     "head": "1 responsive search ad created",
+     "category": "Ad",
+     "operation": "CREATE",
+     "subcategory": "Ad created"
+    }
+   ]
+  },
+  {
+   "ts": "Aug 12, 2026, 6:00:00 PM",
+   "statements": [
+    {
+     "head": "1 responsive search ad changed",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ]
+  },
+  {
+   "ts": "Aug 10, 2026, 11:20:00 AM",
+   "statements": [
+    {
+     "head": "1 campaign active",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Enabled"
+    }
+   ]
+  },
+  {
+   "ts": "Aug 5, 2026, 2:22:22 PM",
+   "statements": [
+    {
+     "head": "Campaign changed",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "old": 30.0,
+     "new": 25.0
+    }
+   ]
+  }
+ ]
+}

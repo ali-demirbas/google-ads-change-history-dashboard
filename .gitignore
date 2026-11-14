@@ -28,3 +28,6 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Synthetic evaluation inputs (invented names only) are committed.
+!evals/cases/**/*.csv

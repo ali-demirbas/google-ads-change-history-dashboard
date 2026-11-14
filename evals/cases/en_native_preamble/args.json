@@ -1,0 +1,14 @@
+{
+ "inputs": [
+  "change_history.csv"
+ ],
+ "args": [
+  "--account-name",
+  "Demo Insurance",
+  "--timezone",
+  "America/New_York",
+  "--currency",
+  "USD"
+ ],
+ "requires": []
+}

@@ -1,0 +1,63 @@
+{
+ "case": "unsupported_language",
+ "description": "Spanish UI export: no category rules exist for it, so the expected result is Other plus a data_quality warning, never a guess.",
+ "expected": {
+  "status": "ok",
+  "rows_in_report": 4,
+  "dropped": 0,
+  "warnings_contain": [
+   "UI language"
+  ]
+ },
+ "thresholds": {
+  "category_accuracy": 0.0,
+  "operation_accuracy": 1.0,
+  "value_match_rate": 1.0
+ },
+ "events": [
+  {
+   "ts": "14 sept 2026, 10:15:02",
+   "statements": [
+    {
+     "head": "1 importe de presupuesto aumentado",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed"
+    }
+   ]
+  },
+  {
+   "ts": "12 sept 2026, 9:00:00",
+   "statements": [
+    {
+     "head": "3 palabras clave de concordancia de frase añadidas",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    }
+   ]
+  },
+  {
+   "ts": "10 sept 2026, 18:30:00",
+   "statements": [
+    {
+     "head": "1 campaña en pausa",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ]
+  },
+  {
+   "ts": "2 sept 2026, 11:00:00",
+   "statements": [
+    {
+     "head": "Campaña modificada",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA"
+    }
+   ]
+  }
+ ]
+}

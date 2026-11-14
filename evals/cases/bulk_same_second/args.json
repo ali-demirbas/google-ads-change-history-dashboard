@@ -1,0 +1,12 @@
+{
+ "inputs": [
+  "bulk.csv"
+ ],
+ "args": [
+  "--account-name",
+  "Demo Sigorta",
+  "--timezone",
+  "Europe/Istanbul"
+ ],
+ "requires": []
+}

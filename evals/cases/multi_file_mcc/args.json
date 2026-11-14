@@ -1,0 +1,20 @@
+{
+ "inputs": [
+  "alfa_temmuz.csv",
+  "alfa_agustos.csv",
+  "beta_agustos.csv"
+ ],
+ "args": [
+  "--input-account",
+  "alfa_temmuz.csv=Alfa Demo",
+  "--input-account",
+  "alfa_agustos.csv=Alfa Demo",
+  "--input-account",
+  "beta_agustos.csv=Beta Demo",
+  "--timezone",
+  "Europe/Istanbul"
+ ],
+ "requires": [
+  "multi_input"
+ ]
+}

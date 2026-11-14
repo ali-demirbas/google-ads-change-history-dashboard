@@ -1,0 +1,12 @@
+{
+ "inputs": [
+  "historial_de_cambios.csv"
+ ],
+ "args": [
+  "--account-name",
+  "Demo Seguros",
+  "--timezone",
+  "Europe/Madrid"
+ ],
+ "requires": []
+}

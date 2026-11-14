@@ -1,0 +1,93 @@
+{
+ "case": "automation_users",
+ "description": "Changes made by auto-applied recommendations, automated rules, scripts and an API service account next to two people (one with 'bot' inside the surname).",
+ "expected": {
+  "status": "ok",
+  "rows_in_report": 6,
+  "dropped": 0
+ },
+ "thresholds": {
+  "category_accuracy": 1.0,
+  "operation_accuracy": 1.0,
+  "value_match_rate": 1.0,
+  "actor_accuracy": 1.0
+ },
+ "events": [
+  {
+   "ts": "Sep 3, 2026, 2:00:00 AM",
+   "statements": [
+    {
+     "head": "2 broad match keywords added",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    }
+   ],
+   "actor_type": "automation"
+  },
+  {
+   "ts": "Sep 2, 2026, 6:00:00 AM",
+   "statements": [
+    {
+     "head": "1 campaign paused",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ],
+   "actor_type": "automation"
+  },
+  {
+   "ts": "Sep 1, 2026, 3:00:00 AM",
+   "statements": [
+    {
+     "head": "1 budget amount increased",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 100.0,
+     "new": 110.0
+    }
+   ],
+   "actor_type": "automation"
+  },
+  {
+   "ts": "Aug 31, 2026, 4:30:00 AM",
+   "statements": [
+    {
+     "head": "Campaign changed",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "old": 20.0,
+     "new": 22.0
+    }
+   ],
+   "actor_type": "automation"
+  },
+  {
+   "ts": "Aug 30, 2026, 10:00:00 AM",
+   "statements": [
+    {
+     "head": "1 campaign active",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Enabled"
+    }
+   ],
+   "actor_type": "human"
+  },
+  {
+   "ts": "Aug 29, 2026, 11:15:00 AM",
+   "statements": [
+    {
+     "head": "1 negative exact match keyword added",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Negative keyword"
+    }
+   ],
+   "actor_type": "human"
+  }
+ ]
+}

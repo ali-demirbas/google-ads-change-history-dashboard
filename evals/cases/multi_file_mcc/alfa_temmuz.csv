@@ -1,0 +1,10 @@
+Değişiklik geçmişi raporu
+1 Temmuz 2026 - 31 Temmuz 2026
+Tarih ve saat,Kullanıcı,Kampanya,Reklam grubu,Değişiklik
+31 Tem 2026 18:00:00,ayse.yilmaz@ornek.test,Alfa - Marka,,"1 bütçenin tutarı artırıldı
+  Alfa - Marka: ₺300,00 olan Bütçe tutarı, ₺350,00 olarak değiştirildi"
+30 Tem 2026 12:00:00,ayse.yilmaz@ornek.test,Alfa - Jenerik,,"Kampanya değiştirildi
+  ₺90,00 olan Hedef EBM değeri, ₺95,00 değerine artırıldı"
+15 Tem 2026 09:00:00,mehmet.kaya@ornek.test,Alfa - Jenerik,Genel,"2 sıralı eşlemeli anahtar kelimeler eklendi
+  ""alfa teklif""
+  ""alfa fiyat"""

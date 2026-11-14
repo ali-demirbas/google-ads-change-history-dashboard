@@ -1,0 +1,313 @@
+{
+ "case": "tr_native_preamble",
+ "description": "Turkish Google Ads UI change-history export: 2-line preamble, multi-statement cells, spelled-out month dates, TL amounts.",
+ "expected": {
+  "status": "ok",
+  "rows_in_report": 32,
+  "dropped": 0,
+  "data_quality": {
+   "possible_duplicate_rows_kept": 0
+  }
+ },
+ "thresholds": {
+  "category_accuracy": 1.0,
+  "operation_accuracy": 1.0,
+  "value_match_rate": 1.0
+ },
+ "events": [
+  {
+   "ts": "14 Eyl 2026 10:15:02",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "old": 250.0,
+     "new": 280.5
+    }
+   ]
+  },
+  {
+   "ts": "13 Eyl 2026 17:40:11",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 1200.0,
+     "new": 1450.0
+    }
+   ]
+  },
+  {
+   "ts": "13 Eyl 2026 17:38:45",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı azaltıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 800.0,
+     "new": 650.0
+    }
+   ]
+  },
+  {
+   "ts": "2 Eyl 2026 09:05:30",
+   "statements": [
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Bid modifier changed",
+     "new": 20.0
+    },
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Bid modifier changed",
+     "new": -100.0
+    },
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Bid modifier changed",
+     "new": 10.0
+    }
+   ]
+  },
+  {
+   "ts": "28 Ağu 2026 16:20:00",
+   "statements": [
+    {
+     "head": "Kampanya öğesi değiştirildi",
+     "category": "Asset",
+     "operation": "REMOVE",
+     "subcategory": "Asset removed"
+    },
+    {
+     "head": "Kampanya öğesi oluşturuldu",
+     "category": "Asset",
+     "operation": "CREATE",
+     "subcategory": "Asset added"
+    },
+    {
+     "head": "Kampanya öğesi değiştirildi",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 11:11:11",
+   "statements": [
+    {
+     "head": "3 sıralı eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    },
+    {
+     "head": "2 negatif sıralı eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Negative keyword"
+    },
+    {
+     "head": "1 geniş eşlemeli anahtar kelime kaldırıldı",
+     "category": "Keyword",
+     "operation": "REMOVE",
+     "subcategory": "Keyword removed"
+    }
+   ]
+  },
+  {
+   "ts": "9 Ağu 2026 08:00:00",
+   "statements": [
+    {
+     "head": "1 kampanya duraklatıldı",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ]
+  },
+  {
+   "ts": "8 Ağu 2026 14:30:12",
+   "statements": [
+    {
+     "head": "Öğe oluşturuldu",
+     "category": "Asset",
+     "operation": "CREATE",
+     "subcategory": "Asset added"
+    }
+   ]
+  },
+  {
+   "ts": "27 Tem 2026 13:00:00",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Strategy changed"
+    }
+   ]
+  },
+  {
+   "ts": "16 Tem 2026 10:00:00",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "old": 300.0,
+     "new": 250.0
+    }
+   ]
+  },
+  {
+   "ts": "3 Tem 2026 09:30:00",
+   "statements": [
+    {
+     "head": "Bütçe oluşturuldu",
+     "category": "Budget",
+     "operation": "CREATE",
+     "subcategory": "Budget created",
+     "new": 500.0
+    },
+    {
+     "head": "Bütçe \"Demo - Jenerik - Konut\" olarak ayarlandı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed"
+    },
+    {
+     "head": "Kampanya oluşturuldu",
+     "category": "Campaign",
+     "operation": "CREATE",
+     "subcategory": "Campaign created"
+    },
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "operation": "CREATE",
+     "subcategory": "Language targeting changed"
+    },
+    {
+     "head": "1 ülke eklendi",
+     "category": "Targeting",
+     "operation": "CREATE",
+     "subcategory": "Location targeting changed"
+    },
+    {
+     "head": "4 platformlar eklendi",
+     "category": "Targeting",
+     "operation": "CREATE",
+     "subcategory": "Device targeting changed"
+    }
+   ]
+  },
+  {
+   "ts": "3 Tem 2026 09:41:20",
+   "statements": [
+    {
+     "head": "Reklam grubu oluşturuldu",
+     "category": "AdGroup",
+     "operation": "CREATE",
+     "subcategory": "Ad group created"
+    },
+    {
+     "head": "1 duyarlı arama ağı reklamı oluşturuldu",
+     "category": "Ad",
+     "operation": "CREATE",
+     "subcategory": "Ad created"
+    },
+    {
+     "head": "2 tam eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    }
+   ]
+  },
+  {
+   "ts": "18 Haz 2026 12:00:00",
+   "statements": [
+    {
+     "head": "1 duyarlı arama ağı reklamı değiştirildi",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ]
+  },
+  {
+   "ts": "17 Haz 2026 15:20:00",
+   "statements": [
+    {
+     "head": "1 duyarlı arama ağı reklamı değiştirildi",
+     "category": "Ad",
+     "operation": "UPDATE",
+     "subcategory": "Ad changed"
+    }
+   ]
+  },
+  {
+   "ts": "10 Haz 2026 10:10:10",
+   "statements": [
+    {
+     "head": "\"Rakip Terimler - Demo\" negatif anahtar kelime listesi uygulandı",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Negative keyword"
+    },
+    {
+     "head": "1 kampanya etkin",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Enabled"
+    }
+   ]
+  },
+  {
+   "ts": "5 Haz 2026 11:30:00",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 600.0,
+     "new": 800.0
+    },
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "new": 180.0
+    }
+   ]
+  },
+  {
+   "ts": "2 Haz 2026 09:00:00",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "old": 139.0,
+     "new": null
+    }
+   ]
+  }
+ ]
+}

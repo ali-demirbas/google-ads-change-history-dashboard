@@ -1,0 +1,138 @@
+{
+ "case": "bulk_same_second",
+ "description": "One bulk edit: the same ad text and keyword pushed to several ad groups in one second, plus one exact duplicate row that must be kept.",
+ "expected": {
+  "status": "ok",
+  "rows_in_report": 11,
+  "dropped": 0,
+  "data_quality": {
+   "possible_duplicate_rows_kept": 1
+  }
+ },
+ "thresholds": {
+  "category_accuracy": 1.0,
+  "operation_accuracy": 1.0,
+  "value_match_rate": 1.0
+ },
+ "events": [
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 duyarlı arama ağı reklamı oluşturuldu",
+     "category": "Ad",
+     "operation": "CREATE",
+     "subcategory": "Ad created"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 duyarlı arama ağı reklamı oluşturuldu",
+     "category": "Ad",
+     "operation": "CREATE",
+     "subcategory": "Ad created"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 duyarlı arama ağı reklamı oluşturuldu",
+     "category": "Ad",
+     "operation": "CREATE",
+     "subcategory": "Ad created"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 sıralı eşlemeli anahtar kelime eklendi",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 sıralı eşlemeli anahtar kelime eklendi",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 sıralı eşlemeli anahtar kelime eklendi",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "2 tam eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "operation": "CREATE",
+     "subcategory": "Keyword added"
+    },
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Bid modifier changed",
+     "new": -50.0
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 400.0,
+     "new": 450.0
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 sıralı eşlemeli anahtar kelime duraklatıldı",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Paused"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 15:02:07",
+   "statements": [
+    {
+     "head": "1 sıralı eşlemeli anahtar kelime etkin",
+     "category": "Status",
+     "operation": "UPDATE",
+     "subcategory": "Enabled"
+    }
+   ]
+  }
+ ]
+}
