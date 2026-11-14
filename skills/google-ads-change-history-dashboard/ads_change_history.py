@@ -3422,13 +3422,14 @@ const NONE = '__none__';
 function actorKey(c){
   if(c.actor_type==='human'){ const u = userIdentity(c); return u ? 'h:'+u : 'u:'; }
   if(c.actor_type==='automation') return 'a:'+(c.client_type||c.user_name||'Automation');
-  return 'u:';
+  // 2026-11-14: an unknown-type actor can still carry a name (e.g. a Google rep acting with permission).
+  return 'u:'+(c.user_name||c.user_email||'');
 }
 function actorLabel(c){
   const k = actorKey(c);
   if(k.startsWith('h:')) return c.user_name||c.user_email;
   if(k.startsWith('a:')) return k.slice(2)+' (automation)';
-  return 'Unknown (no identity in source)';
+  return k.length>2 ? k.slice(2)+' (actor type unknown)' : 'Unknown (no identity in source)';
 }
 // Turkish-aware, accent-insensitive fold (F-5/B-2): İ/I/ı -> i, ş -> s, ğ -> g, NFD marks stripped. Used on both sides.
 function fold(s){
@@ -4240,7 +4241,7 @@ function openDetail(ref){
   }
   const rows = [
     ['Date', fmtTs(c) + (c.timezone ? ` (${c.timezone})` : (c.timestamp_utc ? '' : ' (timezone unknown)'))],
-    ['User', c.actor_type==='human' ? (c.user_name||c.user_email||'—') : c.actor_type==='automation' ? `${c.client_type||c.user_name||'Automation'} (automation)` : 'Unknown (no identity in source)'],
+    ['User', c.actor_type==='human' ? (c.user_name||c.user_email||'—') : c.actor_type==='automation' ? `${c.client_type||c.user_name||'Automation'} (automation)` : ((c.user_name||c.user_email) ? `${c.user_name||c.user_email} (actor type unknown)` : 'Unknown (no identity in source)')],
     ['Account', c.account_name||'—'],
     ['Campaign', (c.campaign_name||'—') + (c.campaign_confidence==='inferred_from_summary' ? ' (read from the summary text)' : '')],
     ['Ad Group', c.ad_group_name||'—'],
