@@ -3069,8 +3069,28 @@ body.lab {
   .bar-n { display: block; text-align: right; font-size: 13px; font-weight: 500; color: var(--lab-text-subtle); font-variant-numeric: tabular-nums; }
   .grp-label { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--lab-text-strong); }
   .grp-label ~ .grp-label { margin-top: 16px; }
-  .timeline { display: flex; align-items: flex-end; gap: 3px; height: 128px; overflow-x: auto; padding: 30px 0 4px; }
-  .tl-bar { position: relative; min-width: 8px; flex: 1 0 8px; border-radius: 6px 6px 2px 2px; background: var(--lab-brand); }
+  /* 2026-11-14: bars are buttons (day filter); the scroll box also holds the metrics line */
+  .tl-scroll { position: relative; overflow-x: auto; padding-top: 30px; }
+  .timeline { display: flex; align-items: flex-end; gap: 3px; height: 98px; padding: 0 0 4px; width: max-content; min-width: 100%; }
+  .tl-bar { position: relative; min-width: 8px; flex: 1 0 8px; padding: 0; border: 0; border-radius: 6px 6px 2px 2px; background: var(--lab-brand); font: inherit; color: inherit; cursor: pointer; }
+  .tl-slot { min-width: 8px; flex: 1 0 8px; }
+  .tl-bar[aria-pressed="true"] { background: var(--lab-primary-800); outline: 2px solid var(--lab-text-strong); outline-offset: 1px; }
+  .tl-bar:focus-visible { outline: 2px solid var(--lab-text-strong); outline-offset: 2px; }
+  #tlMetric { display: block; height: 44px; margin-top: 4px; }
+  #tlMetric .ml { fill: none; stroke: var(--lab-text-muted); stroke-width: 1.5; }
+  #tlMetric .mk { fill: var(--lab-surface); stroke: var(--lab-text-strong); stroke-width: 1.5; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip-row:not(:empty) { margin: 6px 0 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 9999px; background: var(--lab-surface-soft); color: var(--lab-text-strong); box-shadow: inset 0 0 0 1px var(--lab-line-strong); font: 500 13px/1 var(--lab-font); cursor: pointer; }
+  .chip:hover { box-shadow: inset 0 0 0 2px var(--lab-brand); }
+  .link-btn { padding: 0; border: 0; background: none; color: var(--lab-brand-ink); font: inherit; text-align: left; text-decoration: underline; cursor: pointer; overflow-wrap: anywhere; }
+  .ba { margin-top: 18px; }
+  .lab .ba h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; color: var(--lab-text-strong); }
+  .ba th, .ba td { max-width: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ba ul, .cov-list { margin: 6px 0 0 18px; padding: 0; font-size: 13.5px; }
+  .ba li, .cov-list li { margin: 4px 0; }
+  @media (max-width: 640px) { .ba th, .ba td { padding: 8px 5px; } }
   .tl-bar.edge { background: var(--lab-primary-300); }
   .tl-bar:hover, .tl-bar:focus { background: var(--lab-primary-700); }
   .tl-bar .tip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px; padding: 4px 8px; border-radius: 8px; background: var(--lab-ink-950); color: #fff; font-size: 12px; white-space: nowrap; z-index: 5; }
@@ -3149,6 +3169,8 @@ body.lab {
   @media (max-width: 640px), (pointer: coarse) {
     .filters select, .filters input[type=search], .explorer-search, .ms > summary, .clearbtn, .rangebtns button, .threshbtns button, .pager button, .detail-card .close, .ms-clear { min-height: 44px; }
     .ms-opt, .bar-row, .acc-head { min-height: 44px; }
+    .chip { min-height: 44px; }
+    .link-btn { display: inline-flex; align-items: center; min-height: 44px; }
     .th-btn { min-height: 44px; }
     tr.datarow td { padding-top: 13px; padding-bottom: 13px; }
   }
@@ -3167,7 +3189,8 @@ body.lab {
     .stat .n { font-size: 1.1rem; overflow-wrap: anywhere; }
     .filters, .explorer-fld, .pager button, #detailOverlay, .threshbtns, #ruleMatchesConfig { display: none !important; }
     #filterContext { margin: 0; }
-    .timeline { overflow: visible; }
+    .timeline, .tl-scroll { overflow: visible; }
+    .chip-row, #tlMetricCtl, #baCtl { display: none !important; }
     .tl-bar .tip, #timelineReadout { display: none !important; }
     .tbl-wrap { overflow: visible !important; }
     table { font-size: 9.5px; table-layout: auto; }
@@ -3201,6 +3224,13 @@ body.lab {
   </details>
 </header>
 <main>
+  <!-- 2026-11-14: coverage notes and metrics files, shown only when the run supplies them -->
+  <section id="coverageSection" aria-labelledby="hCoverage" hidden>
+    <h2 id="hCoverage">Coverage notes</h2>
+    <div class="section-caption">What this input can and can't show, as stated for this run.</div>
+    <ul class="cov-list" id="coverageList"></ul>
+    <div class="note" id="metricsNote"></div>
+  </section>
   <section id="filtersSection" aria-labelledby="hFilters">
     <h2 id="hFilters">Filters</h2>
     <!-- 2026-11-10 (C-2/F-12): every control has a visible label; multi-selects are checkbox popovers -->
@@ -3218,6 +3248,7 @@ body.lab {
       <div class="fld"><span class="fld-l" id="lCategory">Category</span><details class="ms" id="fCategory" data-state="categories" data-all="All categories"><summary aria-labelledby="lCategory fCategorySum"><span id="fCategorySum">All categories</span></summary><div class="ms-panel" role="group" aria-labelledby="lCategory"></div></details></div>
       <div class="fld"><span class="fld-l" id="lOperation">Operation</span><details class="ms" id="fOperation" data-state="operations" data-all="All types"><summary aria-labelledby="lOperation fOperationSum"><span id="fOperationSum">All types</span></summary><div class="ms-panel" role="group" aria-labelledby="lOperation"></div></details></div>
       <div class="fld"><span class="fld-l" id="lSource">Source</span><details class="ms" id="fSource" data-state="sources" data-all="All sources"><summary aria-labelledby="lSource fSourceSum"><span id="fSourceSum">All sources</span></summary><div class="ms-panel" role="group" aria-labelledby="lSource"></div></details></div>
+      <div class="fld" id="fldSourceFile" hidden><span class="fld-l" id="lSourceFile">Source file</span><details class="ms" id="fSourceFile" data-state="sourceFiles" data-all="All files"><summary aria-labelledby="lSourceFile fSourceFileSum"><span id="fSourceFileSum">All files</span></summary><div class="ms-panel" role="group" aria-labelledby="lSourceFile"></div></details></div>
       <label class="fld"><span class="fld-l">Rule match</span>
         <select id="fRuleMatch" aria-label="Rule match filter">
           <option value="">All changes</option>
@@ -3248,9 +3279,15 @@ body.lab {
   </section>
   <section>
     <h2>Activity Timeline <span class="note" id="timelineBasis">(day buckets)</span></h2>
-    <div class="section-caption">Bar height is relative to the busiest day shown. Hover, tap or tab to a bar for its exact date and count.</div>
-    <div class="timeline" id="timeline" role="list" aria-label="Changes per day"></div>
+    <div class="section-caption">Bar height is relative to the busiest day shown. Hover, tap or tab to a bar for its exact date and count; select a bar to show only that day in the Change Explorer.</div>
+    <div class="tl-scroll" id="tlScroll">
+      <div class="timeline" id="timeline" role="group" aria-label="Changes per day"></div>
+      <svg id="tlMetric" role="img" aria-label="" style="display:none;" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div id="timelineNote"></div>
     <div id="timelineReadout" aria-live="polite"></div>
+    <div class="chip-row day-chip"></div>
+    <div class="filters" id="tlMetricCtl" hidden><label class="fld"><span class="fld-l">Metrics line</span><select id="fMetricLine" aria-label="Metrics line"></select></label><span class="note" id="tlMetricNote"></span></div>
   </section>
   <section>
     <h2>User Activity</h2>
@@ -3261,6 +3298,12 @@ body.lab {
     <h2>Account / Campaign Activity</h2>
     <div class="section-caption">Each account expands to the campaigns it contains, ranked by number of changes. Select a campaign to filter by it.</div>
     <div id="accountActivity"></div>
+  </section>
+  <section id="rollupSection" aria-labelledby="hRollup" hidden>
+    <h2 id="hRollup">Per-account rollup</h2>
+    <div class="section-caption">One row per account under the current filters. Counts only. Select an account name to filter by it.</div>
+    <div id="accountRollup"></div>
+    <div id="inputFiles"></div>
   </section>
   <section>
     <h2>Category Distribution</h2>
@@ -3302,13 +3345,19 @@ body.lab {
   <section>
     <h2>Change Explorer</h2>
     <div class="section-caption" id="explorerCaption">Select any row (click, or Tab then Enter) for full before/after detail. Select a column header to sort by it.</div>
+    <div class="chip-row day-chip"></div>
+    <div class="filters explorer-fld" id="baCtl" hidden>
+      <label class="cfg-check" style="min-height:36px;"><input type="checkbox" id="baColToggle"> Before/After column</label>
+      <label class="fld"><span class="fld-l">Before/After metric</span><select id="fBaMetric" aria-label="Before/After metric"></select></label>
+      <span class="note" id="baLegend">Column shows: before | after | difference | % difference. * = the after window includes days still maturing (conversion lag).</span>
+    </div>
     <label class="fld explorer-fld"><span class="fld-l">Search within Explorer</span><input type="search" class="explorer-search" id="explorerSearch" aria-label="Search within Explorer" placeholder="Same search as the filter above…"></label>
     <div class="tbl-wrap" tabindex="0" role="region" aria-label="Change Explorer table">
     <table id="explorerTable">
       <thead><tr>
         <th data-key="timestamp_iso" aria-sort="descending"><button type="button" class="th-btn">Date</button></th><th data-key="user_name"><button type="button" class="th-btn">User</button></th><th data-key="account_name"><button type="button" class="th-btn">Account</button></th>
         <th data-key="campaign_name"><button type="button" class="th-btn">Campaign</button></th><th data-key="ad_group_name"><button type="button" class="th-btn">Ad Group</button></th><th data-key="category"><button type="button" class="th-btn">Category</button></th>
-        <th data-key="field_name"><button type="button" class="th-btn">Change</button></th><th data-key="raw_summary"><button type="button" class="th-btn">Summary</button></th><th data-key="old_value"><button type="button" class="th-btn">Old Value</button></th><th data-key="new_value"><button type="button" class="th-btn">New Value</button></th><th>Matches</th><th data-key="source"><button type="button" class="th-btn">Source</button></th>
+        <th data-key="field_name"><button type="button" class="th-btn">Change</button></th><th data-key="raw_summary"><button type="button" class="th-btn">Summary</button></th><th data-key="old_value"><button type="button" class="th-btn">Old Value</button></th><th data-key="new_value"><button type="button" class="th-btn">New Value</button></th><th>Matches</th><th id="baTh" class="num" hidden>Before/After</th><th data-key="source"><button type="button" class="th-btn">Source</button></th>
       </tr></thead>
       <tbody id="explorerBody"></tbody>
     </table>
@@ -3323,6 +3372,7 @@ body.lab {
     <button type="button" class="close" id="detailClose" aria-label="Close detail">✕</button>
     <h3 id="detailTitle">Change Detail</h3>
     <dl id="detailBody"></dl>
+    <div id="detailBA"></div>
   </div>
 </div>
 <script>
@@ -3478,6 +3528,127 @@ const HUES = ['#2f6bff','#8d54ff','#00baa7','#f99c00','#ff2357','#00a5ef'];
 function barFillStyle(color, pct){
   return `width:${Math.max(2,pct)}%;background:${color};`;
 }
+// ---- round 10 (2026-11-14): day filter, before/after, coverage notes, files, rollup.
+// Every field read here is optional; absent fields render nothing (never 0).
+const BA_METRICS = [['impressions','Impressions'],['clicks','Clicks'],['cost','Cost'],['conversions','Conversions'],['conversion_value','Conv. value']];
+const view = { baCol:false, baMetric:'clicks', metric:'clicks' };
+function dmeta(){ return (DASH_DATA && DASH_DATA.meta) || {}; }
+function asObj(v){ return v && typeof v==='object' && !Array.isArray(v) ? v : null; }
+function baData(){ return DASH_DATA ? asObj(DASH_DATA.before_after || dmeta().before_after) : null; }
+function metricsMeta(){ return DASH_DATA ? asObj(DASH_DATA.metrics_meta || dmeta().metrics_meta) : null; }
+function baFor(c){ const b = baData(); return b && c && c.change_id!=null ? asObj(b[c.change_id]) : null; }
+function numOrNull(v){ return typeof v==='number' && isFinite(v) ? v : null; }
+function fmtNum(v, digits){ return v==null ? '—' : Number(v).toLocaleString(UI_LOCALE, {maximumFractionDigits: digits==null ? 2 : digits}); }
+function fmtSigned(v, digits, suffix){ return v==null ? '—' : (v>0 ? '+' : '') + fmtNum(v, digits) + (suffix||''); }
+function baMetricList(){
+  const mm = metricsMeta(); const names = mm && Array.isArray(mm.metrics) ? mm.metrics : null;
+  const l = names ? BA_METRICS.filter(([k])=>names.includes(k)) : [];
+  return l.length ? l : BA_METRICS;
+}
+function baMaturing(ba){ const m = ba && numOrNull((ba.after||{}).maturing_days); return m && m>0 ? m : 0; }
+// Plain arithmetic: difference = after - before; % only when before is a non-zero number.
+function baMetricRow(ba, key){
+  const b = numOrNull(((ba&&ba.before)||{})[key]), a = numOrNull(((ba&&ba.after)||{})[key]);
+  const diff = b!=null && a!=null ? a-b : null;
+  return {key, before:b, after:a, diff, pct: diff!=null && b!==0 ? diff/Math.abs(b)*100 : null};
+}
+function baCellText(ba, key){
+  if(!ba) return '—';
+  const r = baMetricRow(ba, key);
+  return `${fmtNum(r.before)} | ${fmtNum(r.after)}${baMaturing(ba) ? '*' : ''} | ${fmtSigned(r.diff)} | ${fmtSigned(r.pct, 1, '%')}`;
+}
+let changeById = null;
+function changeByIdGet(id){
+  if(!changeById || changeById._rows!==DASH_DATA.changes){ changeById = new Map(); changeById._rows = DASH_DATA.changes; DASH_DATA.changes.forEach(r=>{ if(r.change_id!=null && !changeById.has(r.change_id)) changeById.set(r.change_id, r); }); }
+  return changeById.get(id) || null;
+}
+function baDetailHtml(c){
+  const mm = metricsMeta(), ba = baFor(c);
+  if(!ba) return mm ? '<div class="ba"><h4>Before / after</h4><p class="note">No metrics rows matched this change\'s account and campaign (or ad group).</p></div>' : '';
+  const n = numOrNull(ba.window_days) ?? numOrNull(mm && mm.window_days);
+  const lvl = ba.level==='ad_group' ? 'Ad group' : 'Campaign';
+  const bd = numOrNull((ba.before||{}).days_with_data), ad = numOrNull((ba.after||{}).days_with_data), mat = baMaturing(ba);
+  const cap = `Before: the ${n ?? '?'} full days before the change's day (${bd ?? '—'} with data). After: the change's day and the next ${n!=null ? n-1 : '?'} days (${ad ?? '—'} with data)`
+    + (mat ? `; ${mat} of them still maturing (conversion lag), so their figures can still change` : '') + '. Sums from the metrics file, shown as plain numbers.';
+  const rows = baMetricList().map(([k,l])=>{ const r = baMetricRow(ba, k);
+    return `<tr><th scope="row">${escapeHtml(l)}</th><td class="num">${fmtNum(r.before)}</td><td class="num">${fmtNum(r.after)}${mat ? '*' : ''}</td><td class="num">${fmtSigned(r.diff)}</td><td class="num">${fmtSigned(r.pct, 1, '%')}</td></tr>`; }).join('');
+  let html = `<div class="ba"><h4>Before / after</h4><p class="note">${escapeHtml(lvl)}: ${escapeHtml(ba.entity || '—')}. ${escapeHtml(cap)}</p>`
+    + `<div class="tbl-wrap" tabindex="0" role="region" aria-label="Before and after metrics"><table><thead><tr><th>Metric</th><th class="num">Before</th><th class="num">After</th><th class="num">Difference</th><th class="num">% difference</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    + (mat ? '<p class="note">* includes maturing days.</p>' : '');
+  const ov = asObj(ba.overlapping);
+  const ids = ov && Array.isArray(ov.change_ids) ? ov.change_ids : [];
+  const cnt = ov ? (numOrNull(ov.count) ?? ids.length) : 0;
+  if(cnt > 0){
+    html += `<p class="note">${cnt} other change${cnt===1?'':'s'} on the same ${lvl.toLowerCase()} inside these windows${ids.length < cnt ? ` (first ${ids.length} listed)` : ''}:</p><ul>` + ids.map(id=>{
+      const r = changeByIdGet(id);
+      if(!r) return `<li>${escapeHtml(id)} (not in this report)</li>`;
+      const t = `${fmtTs(r)} · ${r.subcategory || r.category || ''}${firstLine(r.raw_summary) ? ' · '+firstLine(r.raw_summary) : ''}`;
+      return `<li><button type="button" class="link-btn" data-open="${escapeHtml(id)}">${escapeHtml(t.length>140 ? t.slice(0,139)+'…' : t)}</button></li>`;
+    }).join('') + '</ul>';
+  }
+  return html + '</div>';
+}
+function coverageNotes(){
+  const n = dmeta().coverage_notes;
+  return Array.isArray(n) ? n.map(x=> typeof x==='string' ? {id:'', text:x} : x && x.text ? {id:String(x.id||''), text:String(x.text)} : null).filter(Boolean) : [];
+}
+function metricsNoteText(){
+  const mm = metricsMeta(); if(!mm) return '';
+  const files = (Array.isArray(mm.files) ? mm.files : []).map(f=> typeof f==='string' ? f : f && (f.file || f.name)).filter(Boolean);
+  const parts = [`Metrics: ${files.join(', ') || 'metrics file'}`];
+  if(mm.date_min || mm.date_max) parts.push(`${fmtWall(mm.date_min, false)} – ${fmtWall(mm.date_max, false)}`);
+  if(Array.isArray(mm.levels) && mm.levels.length) parts.push(`level: ${mm.levels.map(l=>String(l).replace('_',' ')).join(', ')}`);
+  if(numOrNull(mm.window_days)!=null) parts.push(`window: ${mm.window_days} days`);
+  if(numOrNull(mm.conversion_lag_days)!=null) parts.push(`conversion lag: ${mm.conversion_lag_days} days`);
+  if(Array.isArray(mm.ignored_columns) && mm.ignored_columns.length) parts.push(`columns not used: ${mm.ignored_columns.join(', ')}`);
+  return parts.join(' · ');
+}
+// meta.source_labels (round 10), else meta.sources as plain labels (older runs) or per-file objects.
+function sourceLabels(m){ const s = Array.isArray(m.source_labels) ? m.source_labels : Array.isArray(m.sources) ? m.sources : []; return [...new Set(s.map(x=> asObj(x) ? x.source_label : x).filter(Boolean))]; }
+function sourceFilesMeta(m){ return (Array.isArray(m.sources) ? m.sources : []).filter(x=> asObj(x) && x.file); }
+// Day bucket of a row: same basis as the timeline (account-local, or UTC when the run had no zone).
+function dayKey(c){
+  if(!c.timestamp_utc) return null;
+  const utc = dmeta().timeline_reference_tz==='UTC';
+  return String(utc ? c.timestamp_utc : (c.timestamp_iso || c.timestamp_utc)).slice(0,10);
+}
+function accountRollup(rows){
+  const m = new Map();
+  rows.forEach(c=>{
+    const k = accountIdentity(c) || NONE;
+    let a = m.get(k);
+    if(!a){ a = {key:k, name: c.account_name || (c.account_id ? `Account ${c.account_id}` : '(no account)'), changes:0, camps:new Set(), humans:new Set(), automation:0, first:null, last:null, files:new Set()}; m.set(k, a); }
+    a.changes++;
+    const ck = campaignIdentity(c); if(ck) a.camps.add(ck);
+    if(c.actor_type==='human'){ const u = userIdentity(c); if(u) a.humans.add(u); } else if(c.actor_type==='automation') a.automation++;
+    const t = rowTime(c);
+    if(t!=null){ if(!a.first || t<rowTime(a.first)) a.first = c; if(!a.last || t>rowTime(a.last)) a.last = c; }
+    if(c.source_file) a.files.add(c.source_file);
+  });
+  return [...m.values()].map(a=>({key:a.key, name:a.name, changes:a.changes, campaigns:a.camps.size, users:a.humans.size, automation:a.automation, first:a.first, last:a.last, files:[...a.files].sort()}))
+    .sort((x,y)=> y.changes-x.changes || String(x.name).localeCompare(String(y.name)));
+}
+// Daily metrics totals for the timeline line: optional `metrics_daily` (or metrics_meta.daily), [{date, clicks, cost, ...}].
+function metricsDaily(){
+  const d = DASH_DATA && (DASH_DATA.metrics_daily || (metricsMeta()||{}).daily);
+  if(!Array.isArray(d)) return null;
+  const map = {}; d.forEach(r=>{ if(r && r.date) map[String(r.date).slice(0,10)] = r; });
+  return Object.keys(map).length ? map : null;
+}
+function lineMetrics(daily){ return daily ? [['clicks','Clicks'],['cost','Cost']].filter(([k])=>Object.values(daily).some(r=>numOrNull(r[k])!=null)) : []; }
+// Day axis: only days with changes, or (with a metrics line) every calendar day in range, at most 400.
+function timelineAxis(counts, daily){
+  const days = Object.keys(counts).sort();
+  if(!daily) return days;
+  let all = [...days, ...Object.keys(daily)].sort();
+  if(!all.length) return [];
+  let lo = all[0], hi = all[all.length-1];
+  const span = (Date.parse(hi+'T00:00:00Z') - Date.parse(lo+'T00:00:00Z'))/86400000;
+  if(span > 400 && days.length){ lo = days[0]; hi = days[days.length-1]; }
+  const out = [];
+  for(let t = Date.parse(lo+'T00:00:00Z'), end = Date.parse(hi+'T00:00:00Z'); t <= end && out.length < 400; t += 86400000) out.push(new Date(t).toISOString().slice(0,10));
+  return out;
+}
 // =====================================================================
 // RULE MATCHES (V1: Magnitude + State) — deterministic, user-adjustable
 // thresholds. A match means "this row crossed a value you set," never a
@@ -3571,7 +3742,7 @@ function setRuleHighlighting(on){
   state.page = 1;
 }
 function defaultState(){
-  return { accounts:new Set(), campaigns:new Set(), users:new Set(), actor:'', categories:new Set(), operations:new Set(), sources:new Set(), ruleMatch:'', range:'all', anchor:'data', search:'', page:1, pageSize:200, sortKey:'timestamp_iso', sortDir:-1, minDays:0 };
+  return { accounts:new Set(), campaigns:new Set(), users:new Set(), actor:'', categories:new Set(), operations:new Set(), sources:new Set(), sourceFiles:new Set(), day:'', ruleMatch:'', range:'all', anchor:'data', search:'', page:1, pageSize:200, sortKey:'timestamp_iso', sortDir:-1, minDays:0 };
 }
 const state = defaultState();
 // F-13: Clear filters resets everything, rule state and sort included.
@@ -3592,8 +3763,10 @@ function drillCampaign(accKey, campKey){
   state.campaigns = same ? new Set() : new Set([campKey]);
   state.page = 1;
 }
-function getFiltered(){
+// opt.ignoreDay: the timeline itself is drawn without the day filter, so the other days stay selectable.
+function getFiltered(opt){
   const q = fold((state.search||'').trim());
+  const useDay = state.day && !(opt && opt.ignoreDay);
   return DASH_DATA.changes.filter(c=>{
     if(state.accounts.size && !state.accounts.has(accountIdentity(c)||NONE)) return false;
     if(state.campaigns.size && !state.campaigns.has(campaignIdentity(c)||NONE)) return false;
@@ -3602,6 +3775,8 @@ function getFiltered(){
     if(state.categories.size && !state.categories.has(c.category)) return false;
     if(state.operations.size && !state.operations.has(c.operation)) return false;
     if(state.sources.size && !state.sources.has(c.source)) return false;
+    if(state.sourceFiles.size && !state.sourceFiles.has(c.source_file||NONE)) return false;
+    if(useDay && dayKey(c)!==state.day) return false;
     if(state.ruleMatch){
       const matches = computeRuleMatches(c);
       if(state.ruleMatch==='__matched__'){ if(!matches.length) return false; }
@@ -3613,12 +3788,12 @@ function getFiltered(){
   });
 }
 // ---- filter controls -------------------------------------------------
-const MS_IDS = ['fAccount','fCampaign','fUser','fCategory','fOperation','fSource'];
+const MS_IDS = ['fAccount','fCampaign','fUser','fCategory','fOperation','fSource','fSourceFile'];
 const optionLabels = {};   // state key -> Map(value -> label)
 function buildOptions(){
   const rows = DASH_DATA.changes;
   const add = (map, v, l)=>{ if(v!==null && v!==undefined && v!=='' && !map.has(v)) map.set(v, l); };
-  const acc = new Map(), camp = new Map(), usr = new Map(), cat = new Map(), op = new Map(), src = new Map();
+  const acc = new Map(), camp = new Map(), usr = new Map(), cat = new Map(), op = new Map(), src = new Map(), sf = new Map();
   rows.forEach(c=>{
     add(acc, accountIdentity(c)||NONE, c.account_name || (c.account_id ? `Account ${c.account_id}` : '(no account)'));
     add(camp, campaignIdentity(c)||NONE, c.campaign_name || (c.campaign_id ? `Campaign ${c.campaign_id}` : '(no campaign)'));
@@ -3626,8 +3801,9 @@ function buildOptions(){
     add(cat, c.category, c.category);
     add(op, c.operation, (s=>s.length>80 ? s.slice(0,79)+'…' : s)(firstLine(c.operation)));
     add(src, c.source, c.source);
+    add(sf, c.source_file||NONE, c.source_file||'(no file)');
   });
-  Object.assign(optionLabels, {accounts:acc, campaigns:camp, users:usr, categories:cat, operations:op, sources:src});
+  Object.assign(optionLabels, {accounts:acc, campaigns:camp, users:usr, categories:cat, operations:op, sources:src, sourceFiles:sf});
 }
 function msFill(el){
   const key = el.dataset.state;
@@ -3649,10 +3825,14 @@ function syncControls(){
   document.getElementById('fRuleMatch').value = state.ruleMatch;
   document.getElementById('fAnchor').value = state.anchor;
   document.getElementById('ruleMatchesToggle').checked = ruleState.enabled;
+  document.getElementById('baColToggle').checked = view.baCol;
+  document.getElementById('fBaMetric').value = view.baMetric;
+  document.getElementById('fMetricLine').value = view.metric;
   ['fSearch','explorerSearch'].forEach(id=>{ const inp = document.getElementById(id); if(document.activeElement!==inp) inp.value = state.search; });
   document.querySelectorAll('#rangeBtns button').forEach(b=>{ const on = b.dataset.range===state.range; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); });
   document.querySelectorAll('#threshBtns button').forEach(b=>{ const on = parseInt(b.dataset.min)===state.minDays; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); });
 }
+function sourceFileCount(){ return optionLabels.sourceFiles ? [...optionLabels.sourceFiles.keys()].filter(k=>k!==NONE).length : 0; }
 function closePopovers(except){ document.querySelectorAll('details.ms[open]').forEach(d=>{ if(d!==except) d.open = false; }); }
 let searchTimer = null;
 function initFilters(){
@@ -3695,6 +3875,24 @@ function initFilters(){
   };
   document.getElementById('fSearch').addEventListener('input', onSearch);
   document.getElementById('explorerSearch').addEventListener('input', onSearch);
+  // 2026-11-14: source-file filter only when the run read more than one file
+  document.getElementById('fldSourceFile').hidden = sourceFileCount() < 2;
+  const baOpts = baMetricList().map(([k,l])=>`<option value="${k}">${escapeHtml(l)}</option>`).join('');
+  document.getElementById('fBaMetric').innerHTML = baOpts;
+  if(!baMetricList().some(([k])=>k===view.baMetric)) view.baMetric = baMetricList()[0][0];
+  document.getElementById('baCtl').hidden = !baData();
+  document.getElementById('baColToggle').addEventListener('change', e=>{ view.baCol = e.target.checked; renderExplorer(getFiltered()); });
+  document.getElementById('fBaMetric').addEventListener('change', e=>{ view.baMetric = e.target.value; renderExplorer(getFiltered()); });
+  const lm = lineMetrics(metricsDaily());
+  document.getElementById('tlMetricCtl').hidden = !lm.length;
+  document.getElementById('fMetricLine').innerHTML = lm.map(([k,l])=>`<option value="${k}">${l}</option>`).join('') + '<option value="">Off</option>';
+  if(!lm.some(([k])=>k===view.metric)) view.metric = lm.length ? lm[0][0] : '';
+  document.getElementById('fMetricLine').addEventListener('change', e=>{ view.metric = e.target.value; render(); });
+  document.addEventListener('click', e=>{
+    const b = e.target.closest && e.target.closest('.day-chip .chip'); if(!b) return;
+    const d = state.day; state.day = ''; state.page = 1; render();
+    const bar = document.querySelector(`#timeline .tl-bar[data-day="${d}"]`); if(bar) bar.focus();
+  });
   document.getElementById('clearFilters').addEventListener('click', ()=>{
     resetAll(); closePopovers(null);
     document.querySelectorAll('#ruleMatchesMagnitudeInputs input').forEach(inp=>{ inp.value = ruleState.pct[inp.dataset.ruleId]; inp.removeAttribute('aria-invalid'); });
@@ -3739,27 +3937,74 @@ function renderSummary(filtered){
 function renderTimeline(filtered){
   const counts = {}; let excluded = 0; const tzs = new Set();
   // same basis as the JSON (meta.timeline_reference_tz): UTC days only when the run had no zone
-  const utcDays = !!(DASH_DATA.meta && DASH_DATA.meta.timeline_reference_tz==='UTC');
+  const utcDays = dmeta().timeline_reference_tz==='UTC';
   filtered.forEach(c=>{
-    if(c.timestamp_utc){ const d = String(utcDays ? c.timestamp_utc : (c.timestamp_iso || c.timestamp_utc)).slice(0,10); counts[d]=(counts[d]||0)+1; if(c.timezone) tzs.add(c.timezone); }
+    const d = dayKey(c);
+    if(d){ counts[d]=(counts[d]||0)+1; if(c.timezone) tzs.add(c.timezone); }
     else excluded++;
   });
-  const basis = (DASH_DATA.meta && DASH_DATA.meta.timeline_basis) || (utcDays ? 'UTC day buckets' : tzs.size===1 ? `${[...tzs][0]} day buckets` : tzs.size>1 ? 'day buckets in each row\'s own timezone' : 'day buckets');
+  const basis = dmeta().timeline_basis || (utcDays ? 'UTC day buckets' : tzs.size===1 ? `${[...tzs][0]} day buckets` : tzs.size>1 ? 'day buckets in each row\'s own timezone' : 'day buckets');
   document.getElementById('timelineBasis').textContent = `(${basis})`;
-  const days = Object.keys(counts).sort();
-  const max = Math.max(1,...days.map(d=>counts[d]));
+  const daily = view.metric ? metricsDaily() : null;
+  const mLabel = daily ? (lineMetrics(daily).find(([k])=>k===view.metric)||[])[1] : null;
+  const axis = timelineAxis(counts, mLabel ? daily : null);
+  const max = Math.max(1,...Object.values(counts));
   const el = document.getElementById('timeline');
   document.getElementById('timelineReadout').textContent = '';
-  if(!days.length){ el.innerHTML = '<div class="empty">No timezone-resolved rows to plot.</div>'; return; }
-  el.innerHTML = days.map((d,i)=>{
-    const edge = i===0 || i===days.length-1;
+  document.getElementById('timelineNote').innerHTML = excluded ? `<div class="note">${excluded} row(s) excluded — timezone unknown.</div>` : '';
+  renderDayChips();
+  if(!axis.length){ el.innerHTML = '<div class="empty">No timezone-resolved rows to plot.</div>'; drawMetricLine(null); return; }
+  const firstDay = Object.keys(counts).sort()[0], lastDay = Object.keys(counts).sort().pop();
+  el.innerHTML = axis.map(d=>{
+    if(!counts[d]) return '<span class="tl-slot" aria-hidden="true"></span>';
+    const edge = d===firstDay || d===lastDay;
     const h = Math.max(4, Math.round(counts[d]/max*100));
-    const text = `${fmtWall(d,false)}: ${counts[d]} change${counts[d]===1?'':'s'}`;
+    const mv = mLabel ? numOrNull((daily[d]||{})[view.metric]) : null;
+    const text = `${fmtWall(d,false)}: ${counts[d]} change${counts[d]===1?'':'s'}` + (mLabel ? ` · ${mLabel.toLowerCase()} ${fmtNum(mv)}` : '');
     // one colour, height only; first/last day lighter (may be partial)
-    return `<div class="tl-bar${edge?' edge':''}" role="listitem" tabindex="0" aria-label="${escapeHtml(text)}" data-text="${escapeHtml(text)}" style="height:${h}%;"><div class="tip" aria-hidden="true">${escapeHtml(text)}</div></div>`;
-  }).join('') + (excluded ? `<div class="note" style="width:100%;margin-top:6px;">${excluded} row(s) excluded — timezone unknown.</div>` : '');
+    return `<button type="button" class="tl-bar${edge?' edge':''}" data-day="${d}" aria-pressed="${state.day===d}" aria-label="${escapeHtml(text)}" data-text="${escapeHtml(text)}" style="height:${h}%;"><span class="tip" aria-hidden="true">${escapeHtml(text)}</span></button>`;
+  }).join('');
+  drawMetricLine(mLabel ? {axis, daily, key:view.metric, label:mLabel, counts} : null);
   const show = e=>{ const b = e.target.closest('.tl-bar'); if(b) document.getElementById('timelineReadout').textContent = b.dataset.text; };
-  if(!el._bound){ el.addEventListener('click', show); el.addEventListener('focusin', show); el._bound = true; }
+  if(!el._bound){
+    el.addEventListener('focusin', show);
+    el.addEventListener('click', e=>{
+      const b = e.target.closest('.tl-bar'); if(!b) return;
+      state.day = state.day===b.dataset.day ? '' : b.dataset.day; state.page = 1; render(); show(e);
+    });
+    el._bound = true;
+  }
+}
+// The "day: … ×" chips (timeline and Explorer) clear the day filter.
+function renderDayChips(){
+  const label = state.day ? fmtWall(state.day, false) : '';
+  document.querySelectorAll('.day-chip').forEach(slot=>{
+    slot.innerHTML = state.day ? `<button type="button" class="chip" aria-label="day: ${escapeHtml(label)}, clear this filter">day: ${escapeHtml(label)} <span aria-hidden="true">×</span></button>` : '';
+  });
+}
+// Neutral grey line of one daily metric under the bars, x = each day's bar centre; dots = days with changes.
+let lastMetricLine = null;
+function drawMetricLine(spec){
+  lastMetricLine = spec;
+  const svg = document.getElementById('tlMetric'), tl = document.getElementById('timeline');
+  const note = document.getElementById('tlMetricNote');
+  if(!spec){ svg.style.display = 'none'; svg.innerHTML = ''; if(note) note.textContent = ''; return; }
+  const {axis, daily, key, label, counts} = spec;
+  const kids = [...tl.children];
+  const vals = axis.map(d=> numOrNull((daily[d]||{})[key]));
+  const present = vals.filter(v=>v!=null);
+  if(!present.length || kids.length!==axis.length){ svg.style.display = 'none'; svg.innerHTML = ''; note.textContent = `No daily ${label.toLowerCase()} in the metrics file for these days.`; return; }
+  const hi = Math.max(...present), lo = Math.min(0, ...present), H = 44, pad = 5, W = Math.max(tl.scrollWidth, 1);
+  const x = i=> kids[i].offsetLeft + kids[i].offsetWidth/2;
+  const y = v=> (H - pad - (v-lo)/((hi-lo)||1)*(H-2*pad)).toFixed(1);
+  let d = '', pen = false;
+  vals.forEach((v,i)=>{ if(v==null){ pen = false; return; } d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v)} `; pen = true; });
+  const dots = axis.map((day,i)=> counts[day] && vals[i]!=null ? `<circle class="mk" cx="${x(i).toFixed(1)}" cy="${y(vals[i])}" r="3"></circle>` : '').join('');
+  svg.setAttribute('width', W); svg.setAttribute('height', H); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('aria-label', `Daily ${label.toLowerCase()} from the metrics file, all metrics rows (not filtered): lowest ${fmtNum(Math.min(...present))}, highest ${fmtNum(hi)}. Dots mark days with at least one change.`);
+  svg.innerHTML = `<path class="ml" d="${d.trim()}"></path>${dots}`;
+  svg.style.display = 'block';
+  note.textContent = `Grey line: daily ${label.toLowerCase()} (all metrics rows, not filtered), ${fmtNum(Math.min(...present))} to ${fmtNum(hi)}. Dots: days with changes.`;
 }
 // items: {key, name, count, color?}; each bar is a real button (keyboard and screen-reader operable).
 function barList(container, items, onClick, color, selected){
@@ -3931,6 +4176,8 @@ function renderExplorer(filtered){
   state.page = Math.max(1, Math.min(state.page, totalPages));
   const pageRows = sorted.slice((state.page-1)*state.pageSize, state.page*state.pageSize);
   const body = document.getElementById('explorerBody');
+  const baOn = !!(view.baCol && baData());
+  document.getElementById('baTh').hidden = !baOn;
   body.innerHTML = pageRows.length ? pageRows.map(c=>{
     const summary = firstLine(c.raw_summary);
     return `
@@ -3943,8 +4190,9 @@ function renderExplorer(filtered){
       <td>${valueCellHtml(c,'old')}</td>
       <td>${valueCellHtml(c,'new')}</td>
       <td>${ruleState.enabled ? (ruleMatchPillsHtml(computeRuleMatches(c)) || '—') : '—'}</td>
+      ${baOn ? `<td class="num" title="before | after | difference | % difference">${escapeHtml(baCellText(baFor(c), view.baMetric))}</td>` : ''}
       <td>${escapeHtml(c.source)}</td>
-    </tr>`; }).join('') : `<tr><td colspan="12" class="empty">No changes match current filters.</td></tr>`;
+    </tr>`; }).join('') : `<tr><td colspan="${baOn ? 13 : 12}" class="empty">No changes match current filters.</td></tr>`;
   bindRowOpen(body);
   document.getElementById('pagerInfo').textContent = `Page ${state.page} / ${totalPages} — ${sorted.length.toLocaleString()} rows`;
   document.getElementById('pagerPrev').disabled = state.page<=1;
@@ -3993,9 +4241,14 @@ function openDetail(ref){
   ];
   if(stmt) rows.push(['Statement', stmt], ['Full source cell', fullCell]);
   rows.push(['Resource', c.resource_path || c.resource_id || '—'], ['Event ID', c.source_event_id || `${c.change_id} (derived, not from source)`]);
+  if(c.source_file) rows.push(['Source file', c.source_file]);
   document.getElementById('detailBody').innerHTML = rows.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd${k==='Summary' || k==='Operation' || k==='Full source cell' ? ' class="pre"' : ''}>${escapeHtml(v)}</dd>`).join('');
-  lastFocus = document.activeElement;
-  document.getElementById('detailOverlay').classList.add('open');
+  document.getElementById('detailBA').innerHTML = baDetailHtml(c);
+  const ov = document.getElementById('detailOverlay');
+  // an overlapping-change link opens inside the open dialog: keep the original opener for focus return
+  if(!ov.classList.contains('open')) lastFocus = document.activeElement;
+  ov.classList.add('open');
+  document.getElementById('detailCard').scrollTop = 0;
   document.getElementById('detailClose').focus();
 }
 function closeDetail(){
@@ -4017,7 +4270,8 @@ function renderFilterContext(){
   const named = (key, one, many)=>{ const s = state[key]; if(s.size===1) parts.push(`${one}: ${labelFor(key, [...s][0])}`); else if(s.size) parts.push(`${s.size} ${many}`); };
   named('accounts','account','accounts'); named('campaigns','campaign','campaigns'); named('users','user','users');
   if(state.actor) parts.push(`actor: ${state.actor}`);
-  named('categories','category','categories'); named('operations','operation','operation types'); named('sources','source','sources');
+  named('categories','category','categories'); named('operations','operation','operation types'); named('sources','source','sources'); named('sourceFiles','file','files');
+  if(state.day) parts.push(`day: ${fmtWall(state.day, false)}`);
   if(state.ruleMatch){ const rr = [...MAGNITUDE_RULES, ...STATE_RULES].find(x=>x.id===state.ruleMatch); parts.push(`rule: ${rr ? rr.label : 'matched a rule'}`); }
   if(state.search) parts.push(`search: "${state.search}"`);
   document.getElementById('filterContext').textContent = parts.length ? `Showing: ${parts.join(' · ')}` : 'Showing: all changes, no filters applied';
@@ -4026,7 +4280,7 @@ function renderFilterContext(){
 function focusMemo(){
   const ae = document.activeElement;
   if(!ae || !ae.dataset || !ae.closest) return null;
-  const host = ae.closest('#userActivity,#accountActivity,#categoryDist,#explorerBody,#ruleMatches');
+  const host = ae.closest('#userActivity,#accountActivity,#categoryDist,#explorerBody,#ruleMatches,#timeline,#accountRollup');
   return host ? {host: host.id, tag: ae.tagName, cls: ae.className, ds: {...ae.dataset}} : null;
 }
 function focusRestore(f){
@@ -4035,14 +4289,39 @@ function focusRestore(f){
   const hit = [...host.querySelectorAll(f.tag)].find(el=> el.className===f.cls && Object.keys(f.ds).every(k=>el.dataset[k]===f.ds[k]));
   if(hit) hit.focus();
 }
+// Per-account rollup (round 10): shown when the data holds more than one account or input file.
+function renderRollup(filtered){
+  const sec = document.getElementById('rollupSection');
+  const files = sourceFilesMeta(dmeta());
+  const multi = (optionLabels.accounts && optionLabels.accounts.size > 1) || files.length > 1 || sourceFileCount() > 1;
+  sec.hidden = !multi;
+  if(!multi) return;
+  const list = accountRollup(filtered), anyFiles = list.some(a=>a.files.length);
+  const el = document.getElementById('accountRollup');
+  el.innerHTML = list.length ? `<div class="tbl-wrap" tabindex="0" role="region" aria-label="Per-account rollup table"><table><thead><tr><th>Account</th><th class="num">Changes</th><th class="num">Campaigns changed</th><th class="num">Named users</th><th class="num">Automation changes</th><th>First change</th><th>Last change</th>${anyFiles ? '<th>Files</th>' : ''}</tr></thead><tbody>${
+    list.map(a=>`<tr><td><button type="button" class="link-btn" data-acc="${escapeHtml(a.key)}" aria-pressed="${state.accounts.size===1 && state.accounts.has(a.key)}">${escapeHtml(a.name)}</button></td><td class="num">${a.changes.toLocaleString()}</td><td class="num">${a.campaigns.toLocaleString()}</td><td class="num">${a.users.toLocaleString()}</td><td class="num">${a.automation.toLocaleString()}</td><td>${escapeHtml(a.first ? fmtTs(a.first) : '—')}</td><td>${escapeHtml(a.last ? fmtTs(a.last) : '—')}</td>${anyFiles ? `<td>${escapeHtml(a.files.join(', ') || '—')}</td>` : ''}</tr>`).join('')
+  }</tbody></table></div>` : '<div class="empty">No data for current filters.</div>';
+  el.querySelectorAll('button[data-acc]').forEach(b=> b.addEventListener('click', ()=>{ toggleOnly('accounts', b.dataset.acc); render(); }));
+  const fe = document.getElementById('inputFiles');
+  fe.innerHTML = files.length ? `<div class="grp-label" style="margin-top:16px;">Input files</div><div class="tbl-wrap" tabindex="0" role="region" aria-label="Input files table"><table><thead><tr><th>File</th><th class="num">Rows</th><th>Accounts</th><th>Source</th><th>First date</th><th>Last date</th></tr></thead><tbody>${
+    files.map(f=>`<tr><td>${escapeHtml(f.file)}</td><td class="num">${numOrNull(f.rows)!=null ? f.rows.toLocaleString() : '—'}</td><td>${escapeHtml(Array.isArray(f.accounts) ? f.accounts.join(', ') : (f.accounts ?? '—'))}</td><td>${escapeHtml(f.source_label || '—')}</td><td>${escapeHtml(f.date_min ? fmtWall(f.date_min, false) : '—')}</td><td>${escapeHtml(f.date_max ? fmtWall(f.date_max, false) : '—')}</td></tr>`).join('')
+  }</tbody></table></div>` : '';
+}
+function renderCoverage(){
+  const notes = coverageNotes(), mtxt = metricsNoteText();
+  document.getElementById('coverageSection').hidden = !notes.length && !mtxt;
+  document.getElementById('coverageList').innerHTML = notes.map(n=>`<li${n.id ? ` data-id="${escapeHtml(n.id)}"` : ''}>${escapeHtml(n.text)}</li>`).join('');
+  document.getElementById('metricsNote').textContent = mtxt;
+}
 function render(){
   clearTimeout(searchTimer);
   const memo = focusMemo();
-  const filtered = getFiltered();
+  const allDays = getFiltered({ignoreDay:true});
+  const filtered = state.day ? allDays.filter(c=>dayKey(c)===state.day) : allDays;
   syncControls();
   renderFilterContext();
-  renderSummary(filtered); renderTimeline(filtered); renderUsers(filtered);
-  renderAccounts(filtered); renderCategories(filtered); renderRuleMatches(filtered);
+  renderSummary(filtered); renderTimeline(allDays); renderUsers(filtered);
+  renderAccounts(filtered); renderRollup(filtered); renderCategories(filtered); renderRuleMatches(filtered);
   renderUntouched(filtered); renderExplorer(filtered);
   focusRestore(memo);
 }
@@ -4055,7 +4334,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const winStart = first ? fmtWall(first.timestamp_iso || first.timestamp_utc, false) : '—';
   const winEnd = last ? fmtWall(last.timestamp_iso || last.timestamp_utc, false) : '—';
   document.getElementById('metaLine').textContent =
-    `${Number(m.row_count||0).toLocaleString()} changes · ${winStart} – ${winEnd} · Sources: ${(m.sources||[]).join(', ')} · Other: ${m.other_pct}%${m.masked_users ? ' · Users masked' : ''} · Generated ${fmtWall(m.generated_at, true)}`;
+    `${Number(m.row_count||0).toLocaleString()} changes · ${winStart} – ${winEnd} · Sources: ${sourceLabels(m).join(', ')}${sourceFilesMeta(m).length > 1 ? ` (${sourceFilesMeta(m).length} input files)` : ''} · Other: ${m.other_pct}%${m.masked_users ? ' · Users masked' : ''} · Generated ${fmtWall(m.generated_at, true)}`;
   // source_event_id is only ever populated by the API's own event-identity field.
   const caveats = [];
   if(DASH_DATA.changes.some(c=>c.source_event_id)){
@@ -4076,6 +4355,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(dq.rows_added_by_statement_split>0) split.push(`${n(dq.rows_added_by_statement_split)} added by splitting multi-statement cells`);
     if(dq.rows_added_by_field_split>0) split.push(`${n(dq.rows_added_by_field_split)} added by splitting multi-field rows`);
     const left = [`${n(lo.unreadable_date)} unreadable date`, `${n(lo.duplicate)} duplicate`];
+    if(lo.duplicate_across_files!==undefined) left.push(`${n(lo.duplicate_across_files)} duplicate across files`);
+    const bq = dq.before_after;
+    if(bq) flags.push(`${n(bq.rows_with_window)} with a before/after metrics window, ${n(bq.rows_without_metrics)} without matching metrics` + (bq.entities_unmatched ? `, ${n(bq.entities_unmatched)} campaign(s) not in the metrics files` : ''));
     const dup = dq.possible_duplicate_rows_kept ?? dq.possible_duplicates;
     if(dup>0) flags.push(`${n(dup)} identical rows kept (possible duplicates)`);
     if(dq.campaign_inferred_from_summary>0) flags.push(`${n(dq.campaign_inferred_from_summary)} campaign read from summary text`);
@@ -4098,8 +4380,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if(caveats.length){
     document.getElementById('apiCaveat').innerHTML = caveats.map(c=>`<div class="warn-box">${escapeHtml(c)}</div>`).join('');
   }
+  renderCoverage();
   initFilters();
   initRuleMatchesConfig();
+  document.getElementById('detailBA').addEventListener('click', e=>{ const b = e.target.closest('[data-open]'); if(b) openDetail(b.dataset.open); });
+  window.addEventListener('resize', ()=>{ if(lastMetricLine) drawMetricLine(lastMetricLine); });
   document.getElementById('threshBtns').addEventListener('click', e=>{
     const b = e.target.closest('button'); if(!b) return;
     state.minDays = parseInt(b.dataset.min) || 0; syncControls(); renderUntouched(getFiltered());
@@ -4117,7 +4402,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.addEventListener('keydown', e=>{
     if(!document.getElementById('detailOverlay').classList.contains('open')) return;
     if(e.key==='Escape'){ e.preventDefault(); closeDetail(); }
-    else if(e.key==='Tab'){ e.preventDefault(); document.getElementById('detailClose').focus(); }
+    else if(e.key==='Tab'){
+      e.preventDefault();
+      const f = [...document.getElementById('detailCard').querySelectorAll('button, [href], input, select, [tabindex="0"]')].filter(x=>!x.disabled && x.getClientRects().length);
+      const i = f.indexOf(document.activeElement);
+      const next = e.shiftKey ? (i<=0 ? f.length-1 : i-1) : (i<0 || i===f.length-1 ? 0 : i+1);
+      if(f[next]) f[next].focus();
+    }
   });
   render();
 });
@@ -5373,6 +5664,112 @@ def _run_r9_dashboard_cases(td):
         proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=15)
         assert proc.returncode == 0, f"r9 dashboard JS suite failed:\n{proc.stdout}\n{proc.stderr}"
         print(f"[PASS] r9 dashboard JS suite (Node): {proc.stdout.strip()}")
+
+
+# Round 10 dashboard checks (2026-11-14): day filter, before/after, coverage notes, files, rollup.
+_JS_R10_DASHBOARD_SUITE = r"""
+const assert = require('assert');
+let passed = 0, failures = 0;
+function check(desc, fn){ try { fn(); passed++; } catch(e){ failures++; console.error('FAIL: ' + desc + '\n  ' + e.message); } }
+function row(over){ return Object.assign({ subcategory:null, resource_type:null, operation:null, old_value_num:null, new_value_num:null, old_value:null, new_value:null, raw_summary:'' }, over); }
+function ids(){ return getFiltered().map(c=>c.change_id); }
+const BASE = [
+  row({change_id:'a', account_name:'A', campaign_name:'C1', actor_type:'human', user_name:'U1', source_file:'f1.csv', timestamp_utc:'2026-08-01T21:30:00+00:00', timestamp_iso:'2026-08-02T00:30:00'}),
+  row({change_id:'b', account_name:'A', campaign_name:'C2', actor_type:'automation', client_type:'GOOGLE_ADS_SCRIPTS', source_file:'f2.csv', timestamp_utc:'2026-08-02T08:00:00+00:00', timestamp_iso:'2026-08-02T11:00:00'}),
+  row({change_id:'c', account_name:'B', campaign_name:'C1', actor_type:'human', user_name:'U2', source_file:'f2.csv', timestamp_utc:'2026-08-05T08:00:00+00:00', timestamp_iso:'2026-08-05T11:00:00'}),
+  row({change_id:'d', account_name:'B', campaign_name:'C3', actor_type:'unknown', timestamp_iso:'2026-08-05T11:00:00'}),
+];
+function load(extra){ DASH_DATA = Object.assign({ changes: BASE.map(r=>Object.assign({}, r)), meta:{} }, extra||{}); resetAll(); }
+check('day key is the local day (or the UTC day when the run had no zone); no zone means no day', ()=>{
+  load(); assert.strictEqual(dayKey(DASH_DATA.changes[0]), '2026-08-02'); assert.strictEqual(dayKey(DASH_DATA.changes[3]), null);
+  DASH_DATA.meta.timeline_reference_tz = 'UTC'; assert.strictEqual(dayKey(DASH_DATA.changes[0]), '2026-08-01');
+});
+check('state.day filters to that day; ignoreDay keeps the timeline whole; Clear filters drops it', ()=>{
+  load(); state.day = '2026-08-02';
+  assert.deepStrictEqual(ids(), ['a','b']); assert.strictEqual(getFiltered({ignoreDay:true}).length, 4);
+  resetAll(); assert.strictEqual(state.day, ''); assert.strictEqual(ids().length, 4);
+});
+check('source-file filter, rows with no file are their own group', ()=>{
+  load(); state.sourceFiles = new Set(['f2.csv']); assert.deepStrictEqual(ids(), ['b','c']);
+  state.sourceFiles = new Set([NONE]); assert.deepStrictEqual(ids(), ['d']); resetAll();
+});
+check('before/after: plain difference and %, null stays "—", 0 before gives no %, maturing marked', ()=>{
+  const ba = {before:{clicks:50, cost:0, conversions:null}, after:{clicks:60, cost:10, conversions:4, maturing_days:2}};
+  assert.deepStrictEqual(baMetricRow(ba,'clicks'), {key:'clicks', before:50, after:60, diff:10, pct:20});
+  assert.strictEqual(baMetricRow(ba,'cost').pct, null);
+  assert.strictEqual(baMetricRow(ba,'conversions').diff, null);
+  assert.strictEqual(baCellText(ba,'clicks'), '50 | 60* | +10 | +20%');
+  assert.strictEqual(baCellText({before:{clicks:60}, after:{clicks:45}},'clicks'), '60 | 45 | -15 | -25%');
+  assert.strictEqual(baCellText(null,'clicks'), '—');
+});
+check('detail strip: entity, table, overlapping changes as links, missing ids as text; nothing without metrics', ()=>{
+  load({ before_after:{ a:{level:'campaign', entity:'C1', window_days:7, before:{days_with_data:7, clicks:5}, after:{days_with_data:3, clicks:8, maturing_days:1}, overlapping:{count:3, change_ids:['b','zzz']}} },
+         metrics_meta:{metrics:['clicks','cost'], window_days:7} });
+  const h = baDetailHtml(DASH_DATA.changes[0]);
+  assert.ok(h.includes('Campaign: C1') && h.includes('the next 6 days') && h.includes('1 of them still maturing'), h);
+  assert.ok(h.includes('data-open="b"') && h.includes('zzz (not in this report)') && h.includes('(first 2 listed)'), h);
+  assert.strictEqual((h.match(/<tr><th scope="row">/g)||[]).length, 2);
+  assert.ok(baDetailHtml(DASH_DATA.changes[1]).includes('No metrics rows matched'));
+  load(); assert.strictEqual(baDetailHtml(DASH_DATA.changes[0]), ''); assert.strictEqual(baData(), null); assert.strictEqual(metricsNoteText(), '');
+});
+check('meta.sources as objects or labels; source_labels preferred; coverage notes tolerate junk', ()=>{
+  assert.deepStrictEqual(sourceLabels({sources:['ui_export']}), ['ui_export']);
+  assert.deepStrictEqual(sourceLabels({sources:[{file:'f1.csv', source_label:'x'}], source_labels:['y']}), ['y']);
+  assert.strictEqual(sourceFilesMeta({sources:['ui_export']}).length, 0);
+  DASH_DATA = {changes:[], meta:{coverage_notes:[{id:'a', text:'One.'}, null, {id:'b'}, 'Two.']}};
+  assert.deepStrictEqual(coverageNotes().map(n=>n.text), ['One.', 'Two.']);
+  DASH_DATA.meta = {}; assert.deepStrictEqual(coverageNotes(), []);
+});
+check('per-account rollup counts', ()=>{
+  load(); const r = accountRollup(DASH_DATA.changes);
+  assert.deepStrictEqual(r.map(a=>[a.name, a.changes, a.campaigns, a.users, a.automation, a.files.join(',')]), [['A',2,2,1,1,'f1.csv,f2.csv'], ['B',2,2,1,0,'f2.csv']]);
+  assert.strictEqual(r[0].first.change_id, 'a'); assert.strictEqual(r[0].last.change_id, 'b');
+});
+check('timeline axis: change days only, or every day in range with a metrics series (capped)', ()=>{
+  assert.deepStrictEqual(timelineAxis({'2026-08-05':1, '2026-08-02':2}, null), ['2026-08-02','2026-08-05']);
+  assert.deepStrictEqual(timelineAxis({'2026-08-03':1}, {'2026-08-01':{}, '2026-08-04':{}}), ['2026-08-01','2026-08-02','2026-08-03','2026-08-04']);
+  assert.ok(timelineAxis({'2026-08-03':1}, {'2020-01-01':{}}).length <= 400);
+  DASH_DATA = {changes:[], meta:{}, metrics_meta:{daily:[{date:'2026-08-01', clicks:3}]}};
+  assert.deepStrictEqual(lineMetrics(metricsDaily()).map(x=>x[0]), ['clicks']);
+  DASH_DATA = {changes:[], meta:{}}; assert.strictEqual(metricsDaily(), null);
+});
+if (failures > 0) { console.error(failures + ' of ' + (passed + failures) + ' round-10 dashboard JS assertions failed'); process.exit(1); }
+console.log(passed + ' round-10 dashboard JS assertions passed');
+"""
+
+
+def _run_r10_dashboard_cases(td):
+    """Round 10 (2026-11-14) dashboard: day filter, before/after, coverage notes, source files, rollup."""
+    import shutil
+    import subprocess
+    with _test_case('r10 dashboard: neutral wording, labelled new controls, optional sections hidden by default'):
+        t = DASHBOARD_TEMPLATE
+        js = t.split("// ---- round 10 (2026-11-14)")[1].split("// RULE MATCHES")[0]
+        for word in (r"\bbetter", r"\bworse", r"\bimprov", r"\bdeclin", r"\bgood\b", r"\bbad\b", r"\bpositive", r"\bnegative", r"\bverdict", r"--lab-good", r"--lab-warn"):
+            assert not re.search(word, js, re.I), f"round-10 helpers must stay neutral: {word!r}"
+        for el in ('id="coverageSection" aria-labelledby="hCoverage" hidden', 'id="rollupSection" aria-labelledby="hRollup" hidden',
+                   'id="fldSourceFile" hidden', 'id="baCtl" hidden', 'id="tlMetricCtl" hidden', 'id="baTh" class="num" hidden'):
+            assert el in t, el
+        assert 'class="tl-bar' in t and '<button type="button" class="tl-bar' in t and 'aria-pressed="${state.day===d}"' in t
+        print("[PASS] r10 dashboard: neutral wording, labelled new controls, optional sections hidden by default")
+    with _test_case('r10 dashboard: a run without round-10 fields still embeds and renders the same shape'):
+        f = td / "r10_plain.csv"
+        f.write_text('Date & time,User,Campaign,Ad group,Changes\n"Aug 16, 2026, 10:42:26 PM",user.a@example.test,Campaign A,,Budget changed\n', encoding="utf-8")
+        r = run_pipeline(f, td / "r10_plain_out", account_name="Account A", tz="UTC", generated_at="2026-08-17T00:00:00")
+        assert r["status"] == "ok", r
+        html = (td / "r10_plain_out" / "dashboard.html").read_text(encoding="utf-8")
+        assert "/*__DASH_DATA__*/{" in html and '"before_after"' not in html and '"metrics_meta"' not in html
+        print("[PASS] r10 dashboard: a run without round-10 fields still embeds and renders the same shape")
+    if not shutil.which("node"):
+        print("[SKIP] r10 dashboard JS suite (Node not found on PATH)")
+        return
+    with _test_case('r10 dashboard JS suite (Node)'):
+        body = re.search(r"<script>(.*?)</script>", DASHBOARD_TEMPLATE, re.S).group(1)
+        body = body.replace("const DASH_DATA = /*__DASH_DATA__*/null;", "let DASH_DATA = null;", 1)
+        harness = "global.document = { addEventListener: function(){} };\n" + body + "\n" + _JS_R10_DASHBOARD_SUITE
+        proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=15)
+        assert proc.returncode == 0, f"r10 dashboard JS suite failed:\n{proc.stdout}\n{proc.stderr}"
+        print(f"[PASS] r10 dashboard JS suite (Node): {proc.stdout.strip()}")
 
 
 def _run_js_rule_matches_regression():
@@ -7468,6 +7865,7 @@ def _run_pipeline_cases(td):
     _run_r9_dashboard_cases(td)
     _run_r10_pipeline_cases(td)
     _run_r10_docs_cases(td)
+    _run_r10_dashboard_cases(td)
 
 
 # =====================================================================
