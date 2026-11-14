@@ -10,7 +10,8 @@
   "category_accuracy": 1.0,
   "operation_accuracy": 1.0,
   "value_match_rate": 1.0,
-  "actor_accuracy": 1.0
+  "actor_accuracy": 1.0,
+  "subcategory_accuracy": 1.0
  },
  "events": [
   {

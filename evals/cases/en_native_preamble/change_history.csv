@@ -50,3 +50,6 @@ Campaign created
   Status changed from Paused to Enabled"
 "Aug 5, 2026, 2:22:22 PM",sam.lee@example.test,Generic - Search,,"Campaign changed
   Target CPA decreased from $30.00 to $25.00"
+"Aug 4, 2026, 8:00:00 AM",sam.lee@example.test,New - Search,,"Campaign created
+  Budget amount: $50.00
+  Target CPA: $5.00"

@@ -3,7 +3,7 @@
  "description": "Turkish Google Ads UI change-history export: 2-line preamble, multi-statement cells, spelled-out month dates, TL amounts.",
  "expected": {
   "status": "ok",
-  "rows_in_report": 32,
+  "rows_in_report": 33,
   "dropped": 0,
   "data_quality": {
    "possible_duplicate_rows_kept": 0
@@ -12,7 +12,8 @@
  "thresholds": {
   "category_accuracy": 1.0,
   "operation_accuracy": 1.0,
-  "value_match_rate": 1.0
+  "value_match_rate": 1.0,
+  "subcategory_accuracy": 1.0
  },
  "events": [
   {
@@ -306,6 +307,20 @@
      "subcategory": "Target CPA",
      "old": 139.0,
      "new": null
+    }
+   ]
+  },
+  {
+   "ts": "1 Haz 2026 08:00:00",
+   "note": "2026-11-15 R-1: a created campaign's value is its budget, not the target line",
+   "statements": [
+    {
+     "head": "Kampanya oluşturuldu",
+     "category": "Campaign",
+     "operation": "CREATE",
+     "subcategory": "Campaign created",
+     "old": null,
+     "new": 500.0
     }
    ]
   }

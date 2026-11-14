@@ -1,6 +1,6 @@
 {
  "case": "unsupported_language",
- "description": "Spanish UI export: no category rules exist for it, so the expected result is Other plus a data_quality warning, never a guess.",
+ "description": "Spanish UI export: no category rules exist for it, so every statement must come out as Other (plus a data_quality warning), never a guess.",
  "expected": {
   "status": "ok",
   "rows_in_report": 4,
@@ -10,7 +10,8 @@
   ]
  },
  "thresholds": {
-  "category_accuracy": 0.0,
+  "category_accuracy": 1.0,
+  "subcategory_accuracy": 1.0,
   "operation_accuracy": 1.0,
   "value_match_rate": 1.0
  },
@@ -20,9 +21,9 @@
    "statements": [
     {
      "head": "1 importe de presupuesto aumentado",
-     "category": "Budget",
+     "category": "Other",
      "operation": "UPDATE",
-     "subcategory": "Budget changed"
+     "subcategory": "Other"
     }
    ]
   },
@@ -31,9 +32,9 @@
    "statements": [
     {
      "head": "3 palabras clave de concordancia de frase añadidas",
-     "category": "Keyword",
+     "category": "Other",
      "operation": "CREATE",
-     "subcategory": "Keyword added"
+     "subcategory": "Other"
     }
    ]
   },
@@ -42,9 +43,9 @@
    "statements": [
     {
      "head": "1 campaña en pausa",
-     "category": "Status",
+     "category": "Other",
      "operation": "UPDATE",
-     "subcategory": "Paused"
+     "subcategory": "Other"
     }
    ]
   },
@@ -53,9 +54,9 @@
    "statements": [
     {
      "head": "Campaña modificada",
-     "category": "Bidding",
+     "category": "Other",
      "operation": "UPDATE",
-     "subcategory": "Target CPA"
+     "subcategory": "Other"
     }
    ]
   }

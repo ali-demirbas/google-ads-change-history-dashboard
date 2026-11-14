@@ -10,7 +10,9 @@ python3 evals/run_evals.py --case tr_native_preamble --verbose
 python3 evals/run_evals.py --skill path/to/ads_change_history.py   # evaluate another copy
 ```
 
-Exit 0 when every case that ran met its thresholds, 1 otherwise.
+Exit 0 when every case ran and met its thresholds, 1 otherwise. A SKIPPED case fails the run
+unless `--allow-skip` is passed. Each case runs with its own empty `XDG_DATA_HOME`, so saved
+profiles on the machine cannot change the result.
 
 ## What is scored
 
@@ -21,7 +23,7 @@ these repeat), then by `statement_index`. The runner reports:
 | Measure | Meaning |
 |---|---|
 | category accuracy | share of statements with the labelled category |
-| subcategory | same for the subcategory, where the label gives one (reported, not gated) |
+| subcategory accuracy | same for the subcategory, where the label gives one |
 | operation accuracy | CREATE / UPDATE / REMOVE as labelled |
 | value match rate | `old_value_num` / `new_value_num` equal the labelled numbers (`null` must stay `null`) |
 | actor accuracy | `actor_type`, where an event is labelled with one |
@@ -47,7 +49,7 @@ cases/<name>/
 `data_quality`, `warnings_contain`, `meta` and `before_after`.
 
 A case whose `requires` names a feature the installed skill rejects is reported as
-SKIPPED, with the reason. Skipped cases do not count as passed.
+SKIPPED, with the reason. Skipped cases do not count as passed and fail the run unless `--allow-skip`.
 
 ## Synthetic cases
 
@@ -55,13 +57,13 @@ All names are invented.
 
 | Case | Covers |
 |---|---|
-| tr_native_preamble | Turkish UI export: preamble, multi-statement cells, Turkish month names, TL amounts, bid adjustments, asset status, Hedef EBM |
-| en_native_preamble | English UI export: AM/PM dates, budgets, target CPA, assets, keywords |
+| tr_native_preamble | Turkish UI export: preamble, multi-statement cells, Turkish month names, TL amounts, bid adjustments, asset status, Hedef EBM, a created campaign with budget and Hedef EBM lines |
+| en_native_preamble | English UI export: AM/PM dates, budgets, target CPA, assets, keywords, a created campaign with budget and Target CPA lines |
 | bulk_same_second | one bulk edit across ad groups in one second, plus one exact duplicate row that must be kept |
 | automation_users | auto-applied recommendations, rules, scripts, an API service account, two people |
 | multi_file_mcc | three files, two accounts, two rows exported twice |
 | metrics_before_after | daily campaign metrics, before/after sums worked out by hand |
-| unsupported_language | Spanish export: expects Other plus a data_quality warning |
+| unsupported_language | Spanish export: every statement must be Other (gated at 1.0) plus a data_quality warning |
 
 ## Private cases
 

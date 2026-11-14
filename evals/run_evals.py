@@ -10,7 +10,7 @@ dashboard.html and digest.md, and that no row was lost.
   python3 evals/run_evals.py                 # synthetic + private (if any)
   python3 evals/run_evals.py --synthetic-only
   python3 evals/run_evals.py --case tr_native_preamble --verbose
-Exit 0 = every non-skipped case passed, 1 = a case failed.
+Exit 0 = every case passed, 1 = a case failed or was skipped (--allow-skip tolerates skips).
 """
 import argparse
 import collections
@@ -25,7 +25,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SKILL = HERE.parent / "skills" / "google-ads-change-history-dashboard" / "ads_change_history.py"
 CASES = HERE / "cases"
-DEFAULT_THRESHOLDS = {"category_accuracy": 1.0, "operation_accuracy": 1.0, "value_match_rate": 1.0, "actor_accuracy": 1.0}
+# 2026-11-15: subcategory_accuracy is gated too (only where the truth labels subcategories).
+DEFAULT_THRESHOLDS = {"category_accuracy": 1.0, "subcategory_accuracy": 1.0, "operation_accuracy": 1.0, "value_match_rate": 1.0, "actor_accuracy": 1.0}
+GATED = ("category_accuracy", "subcategory_accuracy", "operation_accuracy", "value_match_rate", "actor_accuracy")
 
 # Judgement words (EN + TR). A hit outside the allowed disclaimer phrases fails the check.
 JUDGE_WORDS = (
@@ -96,7 +98,9 @@ def run_case(case_dir, verbose=False, skill=SKILL):
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "out"
         cmd = [sys.executable, str(skill), "run"] + list(args["inputs"]) + ["--out-dir", str(out)] + list(args.get("args", []))
-        p = subprocess.run(cmd, cwd=str(case_dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding="utf-8")
+        # 2026-11-15: a fresh XDG_DATA_HOME per case, so saved user profiles never leak in.
+        env = dict(os.environ, XDG_DATA_HOME=str(Path(td) / "xdg"))
+        p = subprocess.run(cmd, cwd=str(case_dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding="utf-8", env=env)
         if p.returncode != 0 and args.get("requires") and ("unrecognized arguments" in p.stderr or "error: argument" in p.stderr):
             res["status"] = "SKIPPED"
             res["problems"].append("installed skill does not support %s yet: %s" % (
@@ -159,7 +163,7 @@ def run_case(case_dir, verbose=False, skill=SKILL):
         if hits:
             res["problems"].append("judgement words: %s" % json.dumps(hits, ensure_ascii=False))
     th = dict(DEFAULT_THRESHOLDS, **truth.get("thresholds", {}))
-    for k in ("category_accuracy", "operation_accuracy", "value_match_rate", "actor_accuracy"):
+    for k in GATED:
         if res.get(k) is not None and k in th and res[k] + 1e-9 < th[k]:
             res["problems"].append("%s %.3f < threshold %.3f" % (k, res[k], th[k]))
     if res["problems"]:
@@ -290,6 +294,7 @@ def main():
     ap.add_argument("--case", action="append", help="run only this case name (repeatable)")
     ap.add_argument("--verbose", action="store_true", help="list every mismatch")
     ap.add_argument("--json", help="also write the full results to this file")
+    ap.add_argument("--allow-skip", action="store_true", help="a SKIPPED case does not fail the run (default: it does)")
     ap.add_argument("--skill", default=str(SKILL), help="ads_change_history.py to evaluate (default: this repo's)")
     a = ap.parse_args()
     dirs = [("synthetic", d) for d in sorted(CASES.iterdir()) if (d / "truth.json").exists()]
@@ -332,7 +337,8 @@ def main():
         print("note: digest.md not produced by this skill version; its never-judge check was skipped")
     if a.json:
         Path(a.json).write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")
-    return 1 if counts["FAIL"] else 0
+    # 2026-11-15: a skipped case is a failure unless --allow-skip.
+    return 1 if counts["FAIL"] or (counts["SKIPPED"] and not a.allow_skip) else 0
 
 
 if __name__ == "__main__":

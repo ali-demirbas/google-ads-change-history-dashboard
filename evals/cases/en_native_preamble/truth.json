@@ -3,13 +3,14 @@
  "description": "English Google Ads UI change-history export with preamble, AM/PM dates and multi-statement cells.",
  "expected": {
   "status": "ok",
-  "rows_in_report": 19,
+  "rows_in_report": 20,
   "dropped": 0
  },
  "thresholds": {
   "category_accuracy": 1.0,
   "operation_accuracy": 1.0,
-  "value_match_rate": 1.0
+  "value_match_rate": 1.0,
+  "subcategory_accuracy": 1.0
  },
  "events": [
   {
@@ -192,6 +193,20 @@
      "subcategory": "Target CPA",
      "old": 30.0,
      "new": 25.0
+    }
+   ]
+  },
+  {
+   "ts": "Aug 4, 2026, 8:00:00 AM",
+   "note": "2026-11-15 R-1: a created campaign's value is its budget, not the target line",
+   "statements": [
+    {
+     "head": "Campaign created",
+     "category": "Campaign",
+     "operation": "CREATE",
+     "subcategory": "Campaign created",
+     "old": null,
+     "new": 50.0
     }
    ]
   }
