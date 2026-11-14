@@ -4276,7 +4276,7 @@ def query_changes(rows, user=None, account=None, campaign=None, category=None, o
 # ORCHESTRATION
 # =====================================================================
 RUN_OUTPUT_FILES = ("dashboard.html", "change_history.json", "changes.jsonl", "coverage.txt",
-                    "resolved_mapping.json", "unknown-fields.json", "run_status.json")
+                    "resolved_mapping.json", "unknown-fields.json", "run_status.json", "digest.md")
 
 
 def _prepare_out_dir(out_dir):
@@ -4310,6 +4310,184 @@ def _open_dashboard(path):
         return bool(webbrowser.open(Path(path).resolve().as_uri()))
     except Exception:
         return False
+
+
+# 2026-11-14 (round 10): digest.md, a short factual Markdown summary to paste
+# into Slack/e-mail. Counts and neutral words only; set from --digest-lang.
+DIGEST_LANG = "auto"
+_DIGEST_TR_RE = re.compile(r"(değiştirildi|oluşturuldu|eklendi|kaldırıldı|duraklatıldı|ayarlandı|güncellendi|olarak|reklam grubu|bütçe|teklif)", re.IGNORECASE)
+_DIGEST_EN_RE = re.compile(r"\b(changed|created|added|removed|paused|enabled|updated|set to|ad group|budget|bid)\b", re.IGNORECASE)
+_DIGEST_TEXT = {
+    "en": {
+        "title": "Google Ads change digest", "period": "Period", "sources": "Source files", "source_types": "Source type", "rows": "rows",
+        "totals": "Totals", "metric": "Measure", "value": "Value", "changes": "Changes", "events": "Change events",
+        "accounts": "Accounts", "humans": "People", "automation": "Automation actors", "campaigns": "Campaigns changed",
+        "ad_groups": "Ad groups changed", "by_category": "Changes per category", "category": "Category", "count": "Changes",
+        "share": "Share", "by_user": "Changes per user", "user": "User", "type": "Type", "human": "person",
+        "auto": "automation", "masked": "User names are masked (--mask-users).", "by_account": "Changes per account",
+        "account": "Account", "by_week": "Changes per ISO week", "week": "Week", "days": "Days",
+        "top": "Most-changed campaigns (top 10 by count)", "campaign": "Campaign", "last": "Last change",
+        "quiet": "Campaigns with no change in the last 14 / 30 days of the data",
+        "quiet_counts": "Last change 30 or more days before the newest row: {n30} campaign(s). 14-29 days before it: {n14} campaign(s).",
+        "quiet_scope": "Only campaigns with at least one change in this export are listed; a campaign not in the export may have had no change in its date range, or may not exist.",
+        "days_before": "Days before newest row", "more": "{n} more not shown (see dashboard.html).",
+        "coverage": "Coverage notes", "dq": "Data quality",
+        "dq_line": "{inp} input row(s), {added} added by splitting bundled or multi-field changes, {left} left out ({why}), {rep} in the report. In the report with a limit: {other} categorized Other, {tz} without a time zone.",
+        "unreadable_date": "unreadable date", "duplicate": "duplicate", "duplicate_across_files": "duplicate across files",
+        "none": "none", "empty": "No change rows in this input.",
+        "footer": "Counts from the given export only. Generated {at}.",
+    },
+    "tr": {
+        "title": "Google Ads değişiklik özeti", "period": "Dönem", "sources": "Kaynak dosyalar", "source_types": "Kaynak türü", "rows": "satır",
+        "totals": "Toplamlar", "metric": "Ölçü", "value": "Değer", "changes": "Değişiklik", "events": "Değişiklik olayı",
+        "accounts": "Hesap", "humans": "Kişi", "automation": "Otomasyon", "campaigns": "Değişen kampanya",
+        "ad_groups": "Değişen reklam grubu", "by_category": "Kategoriye göre değişiklikler", "category": "Kategori", "count": "Değişiklik",
+        "share": "Pay", "by_user": "Kullanıcıya göre değişiklikler", "user": "Kullanıcı", "type": "Tür", "human": "kişi",
+        "auto": "otomasyon", "masked": "Kullanıcı adları maskeli (--mask-users).", "by_account": "Hesaba göre değişiklikler",
+        "account": "Hesap", "by_week": "ISO haftasına göre değişiklikler", "week": "Hafta", "days": "Günler",
+        "top": "En çok değişiklik olan kampanyalar (sayıya göre ilk 10)", "campaign": "Kampanya", "last": "Son değişiklik",
+        "quiet": "Verinin son 14 / 30 gününde değişikliği olmayan kampanyalar",
+        "quiet_counts": "Son değişikliği en yeni satırdan 30 gün veya daha önce olan: {n30} kampanya. 14-29 gün önce olan: {n14} kampanya.",
+        "quiet_scope": "Yalnız bu dışa aktarımda en az bir değişikliği olan kampanyalar listelenir. Dışa aktarımda olmayan bir kampanyada o tarih aralığında değişiklik olmamış olabilir ya da kampanya hiç olmayabilir.",
+        "days_before": "En yeni satırdan önceki gün", "more": "{n} kampanya daha var, burada gösterilmedi (dashboard.html).",
+        "coverage": "Kapsam notları", "dq": "Veri kalitesi",
+        "dq_line": "{inp} girdi satırı, birden çok değişiklik içeren hücreler bölünerek {added} satır eklendi, {left} satır dışarıda ({why}), raporda {rep} satır. Raporda olup sınırlı olan: {other} satır Diğer kategorisinde, {tz} satırın saat dilimi yok.",
+        "unreadable_date": "okunamayan tarih", "duplicate": "yinelenen", "duplicate_across_files": "dosyalar arası yinelenen",
+        "none": "yok", "empty": "Bu girdide değişiklik satırı yok.",
+        "footer": "Yalnız verilen dışa aktarımdan sayımlar. Oluşturulma: {at}.",
+    },
+}
+# Turkish wording for the pipeline's coverage note ids; an unknown id keeps its English text.
+_COVERAGE_NOTES_TR = {
+    "editor_changes_absent": "API verisi Google Ads Editor ile yapılan değişikliklerin hepsini içermeyebilir.",
+    "api_30_day_window": "API değişiklik geçmişi yalnız son 30 günü kapsar.",
+    "auto_applied_may_be_missing": "Otomatik uygulanan öneriler bu veride eksik olabilir.",
+    "ui_export_may_differ_from_api": "Arayüz dışa aktarımı ile API verisi aynı değişikliği farklı satırlarla gösterebilir.",
+    "metrics_conversion_lag": "Dönüşümler gecikmeli raporlanır, değişiklik sonrasındaki son günlerin sayıları henüz tamamlanmamış olabilir.",
+}
+
+
+def _digest_lang(rows, meta, lang):
+    if lang in ("tr", "en"):
+        return lang
+    labels = {r.get("source") for r in rows} | {s if isinstance(s, str) else (s or {}).get("source_label") for s in (meta.get("sources") or [])}
+    if "legacy_summary_tr" in labels:
+        return "tr"
+    tr = en = 0
+    for r in rows[:5000]:
+        s = r.get("raw_summary") or ""
+        tr += bool(_DIGEST_TR_RE.search(s))
+        en += bool(_DIGEST_EN_RE.search(s))
+    return "tr" if tr > en else "en"
+
+
+def write_digest(out_dir, rows, aggregation, meta, lang):
+    """Write digest.md: factual counts as Markdown tables (2026-11-14). lang is auto|tr|en;
+    rows arrive already masked when --mask-users is on."""
+    lang = _digest_lang(rows, meta, lang)
+    t = _DIGEST_TEXT[lang]
+
+    def num(n):
+        return f"{n:,}".replace(",", "." if lang == "tr" else ",")
+
+    def day(d):
+        return f"{d[8:10]}.{d[5:7]}.{d[:4]}" if (d and lang == "tr") else (d or "-")
+
+    def cell(v):
+        s = "-" if v in (None, "") else str(v)
+        return s.replace("\\", "\\\\").replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip() or "-"
+
+    def table(head, body):
+        out = ["| " + " | ".join(cell(h) for h in head) + " |", "|" + "|".join("---" for _ in head) + "|"]
+        out += ["| " + " | ".join(cell(c) for c in r) + " |" for r in body]
+        return out + [""]
+
+    total = len(rows)
+    def pct(n):
+        v = str(round(100 * n / total, 1)) if total else "-"
+        return ("%" + v.replace(".", ",")) if lang == "tr" else v + "%"
+    local_day = lambda r: (r.get("timestamp_iso") or r.get("timestamp_utc") or "")[:10]
+    days = sorted(d for d in (local_day(r) for r in rows) if d)
+    L = [f"# {t['title']}", ""]
+    if days:
+        L += [f"**{t['period']}:** {day(days[0])} - {day(days[-1])}", ""]
+    srcs = meta.get("sources") or []
+    if srcs and all(isinstance(s, dict) for s in srcs):
+        files = [(s.get("file"), s.get("rows")) for s in srcs]
+    else:
+        fc = Counter(r.get("source_file") for r in rows if r.get("source_file"))
+        files = list(fc.items())
+    if not files and srcs:
+        L += [f"**{t['source_types']}:** " + ", ".join(cell(x) for x in srcs), ""]
+    if files:
+        L += [f"**{t['sources']}:** " + ", ".join(f"{cell(f)} ({num(n)} {t['rows']})" if n is not None else cell(f) for f, n in files), ""]
+    if not rows:
+        L += [t["empty"], ""]
+    s = aggregation.get("summary", {})
+    users = aggregation.get("users", {})
+    L += [f"## {t['totals']}", ""] + table([t["metric"], t["value"]], [
+        [t["changes"], num(total)], [t["events"], num(meta.get("event_count", 0))], [t["accounts"], num(s.get("active_accounts", 0))],
+        [t["humans"], num(s.get("active_users", 0))], [t["automation"], num(len(users.get("automation", [])))],
+        [t["campaigns"], num(s.get("changed_campaigns", 0))], [t["ad_groups"], num(s.get("changed_ad_groups", 0))]])
+    if aggregation.get("categories"):
+        L += [f"## {t['by_category']}", ""] + table([t["category"], t["count"], t["share"]],
+                                                    [[c["category"], num(c["count"]), pct(c["count"])] for c in aggregation["categories"]])
+    people = [[u["name"], t["human"], u["count"]] for u in users.get("human", [])] + [[u["name"], t["auto"], u["count"]] for u in users.get("automation", [])]
+    if people:
+        people.sort(key=lambda p: -p[2])
+        L += [f"## {t['by_user']}", ""] + ([t["masked"], ""] if meta.get("masked_users") else [])
+        L += table([t["user"], t["type"], t["count"]], [[n, ty, num(c)] for n, ty, c in people])
+    if aggregation.get("accounts"):
+        L += [f"## {t['by_account']}", ""] + table([t["account"], t["count"], t["campaigns"]],
+                                                   [[a["account_name"], num(a["count"]), num(sum(1 for c in a["campaigns"] if c["campaign_name"] != "(no campaign)"))] for a in aggregation["accounts"]])
+    weeks = Counter()
+    week_days = defaultdict(set)
+    for d in days:
+        y, w, _ = date.fromisoformat(d).isocalendar()
+        weeks[(y, w)] += 1
+        week_days[(y, w)].add(d)
+    if weeks:
+        L += [f"## {t['by_week']}", ""] + table([t["week"], t["days"], t["count"]],
+                                                [[f"{y}-W{w:02d}", f"{day(min(week_days[(y, w)]))} - {day(max(week_days[(y, w)]))}", num(weeks[(y, w)])] for y, w in sorted(weeks)])
+    camp, camp_name, camp_acc, camp_last = Counter(), {}, {}, {}
+    for r in rows:
+        if r.get("campaign_name") or r.get("campaign_id"):
+            k = (account_identity(r), campaign_identity(r))
+            camp[k] += 1
+            camp_name[k] = r.get("campaign_name") or f"Campaign {r.get('campaign_id')}"
+            camp_acc[k] = r.get("account_name")
+            camp_last[k] = max(camp_last.get(k, ""), local_day(r))
+    if camp:
+        top = sorted(camp.items(), key=lambda kv: (-kv[1], str(camp_name[kv[0]])))[:10]
+        L += [f"## {t['top']}", ""] + table([t["campaign"], t["account"], t["count"], t["last"]],
+                                            [[camp_name[k], camp_acc[k], num(n), day(camp_last[k])] for k, n in top])
+    quiet = [u for u in aggregation.get("untouched", []) if u.get("days_since_last_change_at_generation", 0) >= 14]
+    if aggregation.get("untouched"):
+        n30 = sum(1 for u in quiet if u["days_since_last_change_at_generation"] >= 30)
+        L += [f"## {t['quiet']}", "", t["quiet_counts"].format(n30=num(n30), n14=num(len(quiet) - n30)), "", t["quiet_scope"], ""]
+        if quiet:
+            L += table([t["campaign"], t["account"], t["last"], t["days_before"]],
+                       [[u["campaign_name"], u.get("account_name"), day((u.get("last_change_ts") or "")[:10]), num(u["days_since_last_change_at_generation"])] for u in quiet[:25]])
+            if len(quiet) > 25:
+                L += [t["more"].format(n=num(len(quiet) - 25)), ""]
+    notes = meta.get("coverage_notes") or []
+    if notes:
+        L += [f"## {t['coverage']}", ""] + [f"- {(_COVERAGE_NOTES_TR.get(n.get('id')) if lang == 'tr' else None) or n.get('text', '')}" for n in notes] + [""]
+    dq = meta.get("data_quality") or {}
+    if dq:
+        left = dq.get("left_out", {})
+        lim = dq.get("in_report_with_limits", {})
+        why = ", ".join(f"{t.get(k, k.replace('_', ' '))}: {num(v)}" for k, v in left.items() if v) or t["none"]
+        L += [f"## {t['dq']}", "", t["dq_line"].format(inp=num(dq.get("input_rows", total)), rep=num(dq.get("rows_in_report", total)),
+                                                      left=num(sum(left.values())), why=why, added=num(dq.get("rows_added_by_field_split", 0) + dq.get("rows_added_by_statement_split", 0)), other=num(lim.get("category_other", 0)),
+                                                      tz=num(lim.get("timezone_unknown", 0))), ""]
+        L += [f"- {w}" for w in dq.get("warnings", [])] + ([""] if dq.get("warnings") else [])
+    L += [f"_{t['footer'].format(at=str(meta.get('generated_at', ''))[:16].replace('T', ' '))}_", ""]
+    text = "\n".join(L)
+    if meta.get("masked_users"):
+        text = EMAIL_RE.sub("[e-mail]", text)
+    Path(out_dir, "digest.md").write_text(text, encoding="utf-8")
+    return lang
 
 
 def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decimal_style=None,
@@ -4465,6 +4643,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     data = build_dashboard(c["rows"], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at,
                             json_out=out_dir / "change_history.json", rows_skipped_unparseable_date=n["rows_skipped_unparseable_date"],
                             data_quality=data_quality)
+    write_digest(out_dir, c["rows"], data, data["meta"], DIGEST_LANG)
 
     result = {
         "status": "ok", "out": str(out_dir / "dashboard.html"), "row_count": len(c["rows"]),
@@ -5834,6 +6013,80 @@ def _run_r9_tools_cases(td):
         print("[PASS] needs_mapping: e-mail addresses in sample_values are redacted")
 
 
+_DIGEST_JUDGEMENT_RE = re.compile(r"\b(good|bad|better|worse|improved|worsened|risky|healthy|poor|iyi|kötü|daha iyi|iyileşti|kötüleşti|riskli|başarılı|başarısız|sağlıklı)\b", re.IGNORECASE)
+
+
+def _run_r10_docs_cases(td):
+    """2026-11-14 round 10 (DOCS): digest.md and the fetch tool's v26 pin. Synthetic data only."""
+    global DIGEST_LANG
+    tr_csv = ('Değişiklik geçmişi raporu\n1 Ağustos 2026 - 19 Ağustos 2026\n'
+              'Tarih ve saat,Kullanıcı,Kampanya,Reklam grubu,Değişiklik\n'
+              '11 Ağu 2026 02:33:50,user.a@example.test,Kampanya A,,"Kampanya değiştirildi\n  Durum: Etkin -> Duraklatıldı"\n'
+              '4 Ağu 2026 16:16:32,user.b@example.test,Kampanya | B,Grup 1,"Anahtar kelime eklendi\n  örnek kelime"\n'
+              '4 Ağu 2026 16:10:00,user.a@example.test,Kampanya | B,Grup 1,"Anahtar kelime eklendi\n  başka kelime"\n')
+    f = td / "r10_docs_tr.csv"
+    f.write_text(tr_csv, encoding="utf-8")
+    with _test_case("r10 docs: digest.md is written on ok, auto picks tr for a Turkish export, tables escape |"):
+        r = run_pipeline(f, td / "r10_dg_tr", account_name="Account A", tz="Europe/Istanbul", generated_at="2026-08-20T00:00:00")
+        assert r["status"] == "ok", r
+        md = (td / "r10_dg_tr" / "digest.md").read_text(encoding="utf-8")
+        assert md.startswith("# Google Ads değişiklik özeti"), md[:80]
+        for want in ("04.08.2026 - 11.08.2026", "| 2026-W32 |", "| 2026-W33 |", "Kampanya \\| B", "| Account A | 3 |", "user.a@example.test"):
+            assert want in md, (want, md)
+        assert not _DIGEST_JUDGEMENT_RE.search(md), _DIGEST_JUDGEMENT_RE.search(md)
+        print("[PASS] r10 docs: digest.md is written on ok, auto picks tr for a Turkish export, tables escape |")
+    with _test_case("r10 docs: digest respects --mask-users and --digest-lang en"):
+        DIGEST_LANG = "en"
+        try:
+            r = run_pipeline(f, td / "r10_dg_mask", account_name="Account A", tz="Europe/Istanbul", mask_users=True, generated_at="2026-08-20T00:00:00")
+        finally:
+            DIGEST_LANG = "auto"
+        md = (td / "r10_dg_mask" / "digest.md").read_text(encoding="utf-8")
+        assert r["status"] == "ok" and md.startswith("# Google Ads change digest"), md[:80]
+        assert "@" not in md and re.search(r"\| User [A-Z]+ \| person \| 2 \|", md) and "masked" in md, md
+        assert not _DIGEST_JUDGEMENT_RE.search(md), _DIGEST_JUDGEMENT_RE.search(md)
+        print("[PASS] r10 docs: digest respects --mask-users and --digest-lang en")
+    with _test_case("r10 docs: auto picks en for an English export; a stopped run removes the old digest"):
+        e = _r9_csv(td, "r10_docs_en.csv", [["Aug 4, 2026, 4:16:32 PM", "user.c@example.test", "Campaign C", "", "Campaign paused"]])
+        r = run_pipeline(e, td / "r10_dg_en", account_name="Account C", tz="UTC", generated_at="2026-08-20T00:00:00")
+        assert r["status"] == "ok", r
+        assert (td / "r10_dg_en" / "digest.md").read_text(encoding="utf-8").startswith("# Google Ads change digest")
+        bad = td / "r10_docs_bad.csv"
+        bad.write_text("Foo,Bar\n1,2\n", encoding="utf-8")
+        r2 = run_pipeline(bad, td / "r10_dg_en")
+        assert r2["status"] != "ok" and not (td / "r10_dg_en" / "digest.md").exists(), r2
+        print("[PASS] r10 docs: auto picks en for an English export; a stopped run removes the old digest")
+    with _test_case("r10 docs: digest reads meta.sources files, coverage notes (tr wording by id) and cross-file duplicates"):
+        rows = [{"timestamp_iso": "2026-08-04T10:00:00", "category": "Budget", "campaign_name": "Kampanya A", "account_name": "Account A", "source_file": "a.csv"}]
+        agg = {"summary": {"active_accounts": 1}, "users": {}, "categories": [{"category": "Budget", "count": 1}], "accounts": [], "untouched": []}
+        meta = {"sources": [{"file": "a.csv", "rows": 1}, {"file": "b.csv", "rows": 0}], "generated_at": "2026-08-20T00:00:00",
+                "coverage_notes": [{"id": "api_30_day_window", "text": "API change history covers 30 days."}, {"id": "new_note", "text": "A new note."}],
+                "data_quality": {"input_rows": 2, "rows_in_report": 1, "left_out": {"unreadable_date": 0, "duplicate": 0, "duplicate_across_files": 1}, "in_report_with_limits": {}}}
+        out = td / "r10_dg_direct"
+        out.mkdir()
+        assert write_digest(out, rows, agg, meta, "tr") == "tr"
+        md = (out / "digest.md").read_text(encoding="utf-8")
+        for want in ("a.csv (1 satır), b.csv (0 satır)", _COVERAGE_NOTES_TR["api_30_day_window"], "- A new note.", "dosyalar arası yinelenen: 1"):
+            assert want in md, (want, md)
+        assert write_digest(out, [], {"summary": {}, "users": {}}, {}, "auto") == "en"
+        print("[PASS] r10 docs: digest reads meta.sources files, coverage notes (tr wording by id) and cross-file duplicates")
+    with _test_case("r10 docs: --digest-lang is a run flag with auto|tr|en"):
+        import subprocess
+        p = subprocess.run([sys.executable, str(Path(__file__).resolve()), "run", str(f), "--out-dir", str(td / "r10_dg_cli"), "--account-name", "Account A",
+                            "--timezone", "Europe/Istanbul", "--digest-lang", "en"], capture_output=True, text=True, env=dict(os.environ, XDG_DATA_HOME=str(td / "r10_xdg")))
+        assert p.returncode == 0, p.stdout + p.stderr
+        assert (td / "r10_dg_cli" / "digest.md").read_text(encoding="utf-8").startswith("# Google Ads change digest")
+        print("[PASS] r10 docs: --digest-lang is a run flag with auto|tr|en")
+    tool_path = SCRIPT_DIR.parent.parent / "tools" / "fetch_live_data.py"
+    if tool_path.exists():
+        with _test_case("r10 docs: fetch tool asks for v26 (sunset Nov 2027) and requirements need google-ads >= 34.0.0"):
+            src = tool_path.read_text(encoding="utf-8")
+            assert re.search(r'^API_VERSION = "v26"$', src, re.M) and "API_VERSION_SUNSET = date(2027, 11, 1)" in src
+            req = (tool_path.parent / "requirements.txt").read_text(encoding="utf-8")
+            assert re.search(r"^google-ads>=34\.0\.0$", req, re.M), req
+            print("[PASS] r10 docs: fetch tool asks for v26 (sunset Nov 2027) and requirements need google-ads >= 34.0.0")
+
+
 def _run_pipeline_cases(td):
     global PROFILES_DIR
     # Isolate mapping-profiles/ for the duration of the test — otherwise
@@ -6767,6 +7020,7 @@ def _run_pipeline_cases(td):
     _run_r9_tools_cases(td)
     _run_r9_semantics_cases(td)
     _run_r9_dashboard_cases(td)
+    _run_r10_docs_cases(td)
 
 
 # =====================================================================
@@ -6838,6 +7092,7 @@ def _main():
     p_run.add_argument("--account-name", help="Constant account name/id for every row, for a source with no account column at all (e.g. the Google Ads UI's own single-account Change history CSV export).")
     p_run.add_argument("--currency", help="3-letter ISO code (e.g. TRY) of the account's currency. Shown as the unit on budget/bid/target-CPA amounts. Never guessed: without it, amounts stay unit-less. One code for the whole file — don't pass it for a multi-currency MCC export.")
     p_run.add_argument("--open", action="store_true")
+    p_run.add_argument("--digest-lang", choices=["auto", "tr", "en"], default="auto", help="Language of digest.md: auto (default) is tr for a Turkish export, else en.")
     p_run.add_argument("--encoding", help="Input text encoding (e.g. cp1254, cp1251, utf-16) when auto-detection rejects the file as garbled.")
 
     p_query = sub.add_parser("query", help="Deterministic filter over a changes.jsonl.")
@@ -6863,6 +7118,8 @@ def _main():
     if args.cmd == "run":
         global INPUT_ENCODING
         INPUT_ENCODING = args.encoding or None
+        global DIGEST_LANG
+        DIGEST_LANG = args.digest_lang
         extra_rules = None
         if args.extra_rules:
             # Fixed 2026-08-18 (4th audit round, confirmed): same structured-

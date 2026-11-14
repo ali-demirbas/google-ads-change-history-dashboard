@@ -33,11 +33,11 @@ repo — environment variables only, set in your own shell/secret store.
 
 **Enum values.** proto-plus serializes enums as integers by default; this script asks for names (`PAUSED`, not `3`) and the self-test checks it with a proto-plus-shaped fake.
 
-**API version.** Requests go to Google Ads API **v25** (`API_VERSION` in the
+**API version.** Requests go to Google Ads API **v26** (`API_VERSION` in the
 script; `--api-version` overrides it for one run). Google retires each
 version roughly a year after release and requests to a retired one fail;
-v25 is scheduled to sunset in August 2027. `requirements.txt` sets the lowest
-`google-ads` release that serves v25 (31.2.0) as a floor, not a pin. Once the
+v26 is scheduled to sunset in November 2027. `requirements.txt` sets the lowest
+`google-ads` release that serves v26 (34.0.0) as a floor, not a pin. Once the
 recorded sunset date has passed, the skill's self-test prints a `[WARN]`
 line (it does not fail the build of the offline skill).
 

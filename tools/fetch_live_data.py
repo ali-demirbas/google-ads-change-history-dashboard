@@ -64,14 +64,15 @@ from datetime import date, timedelta
 # The Google Ads API version every request here is made against. Google
 # retires each version about a year after release, and a request to a
 # retired version fails outright — this script shipped pinned to v21 and
-# stopped working when v21 was sunset. Checked 2026-10-10 against
-# https://developers.google.com/google-ads/api/docs/sunset-dates : v25
-# (released 2026-07-22) sunsets August 2027 and needs google-ads >= 31.2.0
-# for Python — the lower bound in requirements.txt. Change all three
-# together; the skill's self-test fails once API_VERSION_SUNSET has passed.
+# stopped working when v21 was sunset. Checked 2026-11-14 against Google's
+# API sunset-dates page: v26 (released 2026-10-14) sunsets November 2027 and
+# needs google-ads >= 34.0.0 for Python (its changelog: "34.0.0 - v26
+# release") — the lower bound in requirements.txt. ChangeEvent fields and
+# enums used here are unchanged v20-v26. Change all three together; the
+# skill's self-test warns once API_VERSION_SUNSET has passed.
 # --api-version overrides it for one run without editing this file.
-API_VERSION = "v25"
-API_VERSION_SUNSET = date(2027, 8, 1)
+API_VERSION = "v26"
+API_VERSION_SUNSET = date(2027, 11, 1)
 
 
 def _to_dict(proto_plus_message):
