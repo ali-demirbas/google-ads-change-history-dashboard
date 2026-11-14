@@ -457,7 +457,8 @@ CATEGORY_RULES = {
     # matches when its headline pattern matches line 1 AND its detail pattern
     # matches one of the indented lines below it.
     "summary_detail_rules": [
-        {"headline": r"^Kampanya öğesi değiştirildi", "detail": r"olan Durum, Kaldırıldı olarak", "category": "Asset", "subcategory": "Asset removed"},
+        # 2026-11-14: EN mirror of the TR asset rule above.
+        {"headline": r"^(Kampanya öğesi değiştirildi|Campaign asset changed)", "detail": r"(olan Durum, Kaldırıldı olarak|^Status changed from \S+ to Removed)", "category": "Asset", "subcategory": "Asset removed"},
         {"headline": r"(değiştirildi|changed)$", "detail": r"(olan Durum, Duraklatıldı olarak|^Status changed from \S+ to Paused)", "category": "Status", "subcategory": "Paused"},
         {"headline": r"(değiştirildi|changed)$", "detail": r"(olan Durum, Etkin olarak|^Status changed from \S+ to (Enabled|Active))", "category": "Status", "subcategory": "Enabled"},
         {"headline": r"(değiştirildi|changed)$", "detail": r"(olan Durum, Kaldırıldı olarak|^Status changed from \S+ to Removed)", "category": "Status", "subcategory": "Removed"},
@@ -602,8 +603,10 @@ CATEGORY_RULES = {
 }
 
 # L-8 fixed 2026-11-10: whole words only ("Abbott", "Kapil", "Capital One" are people).
+# 2026-11-14: a Google staff edit made with the owner's permission is neither the owner nor automation.
+GOOGLE_STAFF_USER_RE = re.compile(r"^\s*Google Ads Team\b", re.IGNORECASE)
 AUTOMATION_USER_PATTERNS = re.compile(
-    r"(^ads-|\b(system|automated|automation|rules?|scripts?|bot|api|otomatik|otomasyon|kural|automático|automática|automatique|automatisch|automatico|Skript|скрипт|автоматическ\w*)\b)",
+    r"(^ads-|\b(system|automated|automation|rules?|scripts?|bot|api|recommendations?|auto-?appl(?:y|ied)|otomatik|otomasyon|kural|automático|automática|automatique|automatisch|automatico|Skript|скрипт|автоматическ\w*)\b)",
     re.IGNORECASE,
 )
 # Fixed 2026-08-18 (audit F-08/F-09): "SA360" never occurs in either real
@@ -648,6 +651,8 @@ SUMMARY_TR_OLAN_TEXT_RE = re.compile(r'^\s*(?:[^:\n]{1,200}:\s*)?("[^"\n]{0,500}
 # old-only "X değeri ₺N idi" and new-only percent "X %+10 olarak ayarlandı" (A-4/D-8).
 SUMMARY_TR_OLD_ONLY_RE = re.compile(r"değeri\s+(" + _TR_AMOUNT + r")\s+idi\b")
 SUMMARY_PERCENT_SET_RE = re.compile(r"(?:%\s?([+-]?\d[\d.,]{0,10})|([+-]?\d[\d.,]{0,10})\s?%)\s+(?:olarak ayarlandı|set)", re.IGNORECASE)
+# 2026-11-14: new-only target set, "Hedef EBM: ₺180,00" / "Hedef ROAS: %300" / "Teklif sınırı: ₺15,00".
+SUMMARY_TARGET_SET_RE = re.compile(r"^\s*(?:Hedef EBM|Hedef ROAS|Teklif sınırı|Target CPA|Target ROAS|Bid limit)\s*:\s*(?:%\s?(\d[\d.,]{0,10})|(\d[\d.,]{0,10})\s?%|(" + _TR_AMOUNT + r"))\s*$", re.IGNORECASE)
 SUMMARY_NEW_AMOUNT_RE = re.compile(r"(?:Bütçe tutarı(?: değeri)?|Budget amount|Amount)\s*:\s*(" + _TR_AMOUNT + r")", re.IGNORECASE)
 CURRENCY_SYMBOLS = (("₺", "TRY"), ("TL", "TRY"), ("TRY", "TRY"), ("€", "EUR"), ("EUR", "EUR"), ("£", "GBP"), ("GBP", "GBP"), ("$", "USD"), ("USD", "USD"))
 # A-5: "<Campaign>: ₺N olan Bütçe tutarı, ..." / "<Campaign>: Bütçe tutarı değeri: ₺N".
@@ -1702,6 +1707,11 @@ def parse_statement_values(text, operation=None):
         m = SUMMARY_PERCENT_SET_RE.search(line)
         if m:
             return None, (m.group(1) or m.group(2)), "%"
+        m = SUMMARY_TARGET_SET_RE.search(line)
+        if m:
+            if m.group(3):
+                return None, m.group(3).strip(), _currency_of(m.group(3))
+            return None, (m.group(1) or m.group(2)), "%"
     if operation == "CREATE":
         for line in lines:
             m = SUMMARY_NEW_AMOUNT_RE.search(line)
@@ -1720,6 +1730,8 @@ def derive_actor_type(user_name, client_type):
             return "automation"
         if HUMAN_CLIENT_TYPE.search(client_type):
             return "human"
+    if user_name and GOOGLE_STAFF_USER_RE.search(user_name):
+        return "unknown"
     if user_name and AUTOMATION_USER_PATTERNS.search(user_name):
         return "automation"
     if user_name:
@@ -4588,6 +4600,36 @@ def compute_before_after(rows, metrics_files, window_days=7, conversion_lag_days
     return out, dq
 
 
+def compute_metrics_daily(metrics_files):
+    """2026-11-14: per-day sums over all metric files, null when no row had the metric.
+    A campaign-day in a campaign-level file wins over ad-group rows of that campaign-day."""
+    per = {"campaign": {}, "ad_group": {}}  # (acct, campaign[, ad_group], day) -> values; one file per key
+    for mf in metrics_files:
+        level = "ad_group" if mf["has_ad_group"] else "campaign"
+        for m in mf["rows"]:
+            if level == "ad_group" and not m["ad_group"]:
+                continue
+            acct = _entity_key(m["account"]) if m["account"] else None
+            key = (acct, _entity_key(m["campaign"])) + ((_entity_key(m["ad_group"]),) if level == "ad_group" else ()) + (m["day"],)
+            prev = per[level].setdefault(key, (mf["file"], []))
+            if prev[0] == mf["file"]:
+                prev[1].append(m["values"])
+    camp_days = {(k[0], k[1], k[-1]) for k in per["campaign"]}
+    camp_any_acct = {(k[1], k[-1]) for k in per["campaign"]}
+    days = defaultdict(lambda: {f: None for f in METRIC_FIELDS})
+    for level, table in per.items():
+        for key, (_, vals_list) in table.items():
+            acct, ck, day = key[0], key[1], key[-1]
+            if level == "ad_group" and ((acct, ck, day) in camp_days or (None, ck, day) in camp_days or (acct is None and (ck, day) in camp_any_acct)):
+                continue
+            slot = days[day]
+            for vals in vals_list:
+                for f, v in vals.items():
+                    if v is not None:
+                        slot[f] = (slot[f] or 0.0) + v
+    return [{"date": d.isoformat(), **{f: (round(v, 6) if v is not None else None) for f, v in days[d].items()}} for d in sorted(days)]
+
+
 def build_metrics_meta(metrics_files, window_days, conversion_lag_days):
     days = [m["day"] for mf in metrics_files for m in mf["rows"]]
     levels = sorted({"ad_group" if mf["has_ad_group"] else "campaign" for mf in metrics_files}, key=["campaign", "ad_group"].index)
@@ -5006,7 +5048,8 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     data = build_dashboard(c["rows"], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at,
                             json_out=out_dir / "change_history.json", rows_skipped_unparseable_date=n["rows_skipped_unparseable_date"],
                             data_quality=data_quality, meta_extra={"sources": sources_meta, "coverage_notes": build_coverage_notes(file_infos, bool(metrics_files))},
-                            extra=({"metrics_meta": metrics_meta, "before_after": before_after} if metrics_files else None))
+                            extra=({"metrics_meta": metrics_meta, "before_after": before_after,
+                                    "metrics_daily": compute_metrics_daily(metrics_files)} if metrics_files else None))
     write_digest(out_dir, c["rows"], data, data["meta"], DIGEST_LANG)
 
     result = {
@@ -5701,6 +5744,54 @@ def _run_r10_pipeline_cases(td):
         r_s = run_pipeline(fa, td / "out_r10_single", account_name="Acc One", tz="Europe/Istanbul")
         assert r_s["status"] == "ok" and r_s["data_quality"]["left_out"] == {"unreadable_date": 0, "duplicate": 0} and "before_after" not in r_s["data_quality"], r_s["data_quality"]
         print("[PASS] r10 multi-input: needs_mapping names the file; single-file left_out unchanged")
+
+
+def _run_r10_fix3_cases(td):
+    """2026-11-14: eval-set fixes (TR target set value, EN asset removed, system actors) + metrics_daily."""
+    with _test_case("fix3: new-only target set lines give new value + unit, old stays None"):
+        got = [parse_statement_values(t) for t in ("Kampanya değiştirildi\n  Hedef EBM: ₺180,00", "Kampanya değiştirildi\n  Hedef ROAS: %300",
+                                                    "Kampanya oluşturuldu\n  Teklif sınırı: ₺15,00", "Campaign changed\n  Target CPA: $20.00")]
+        assert got == [(None, "₺180,00", "TRY"), (None, "300", "%"), (None, "₺15,00", "TRY"), (None, "$20.00", "USD")], got
+        assert normalize_number("₺180,00".lstrip("₺"), "TR") == 180.0
+        print("[PASS] fix3: Hedef EBM / Hedef ROAS / Teklif sınırı / Target CPA set lines parse as new-only values")
+
+    with _test_case("fix3: EN 'Campaign asset changed' status lines mirror the TR asset rule"):
+        cases = [("Campaign asset changed\n  Status changed from Enabled to Removed", ("Asset", "Asset removed")),
+                 ("Campaign asset changed\n  Status changed from Enabled to Paused", ("Status", "Paused")),
+                 ("Campaign asset changed\n  Status changed from Removed to Enabled", ("Status", "Enabled")),
+                 ("1 ad changed\n  Status changed from Enabled to Removed", ("Status", "Removed"))]
+        bad = [(t, match_summary({"raw_summary": t}), want) for t, want in cases if match_summary({"raw_summary": t}) != want]
+        assert not bad, bad
+        print("[PASS] fix3: EN asset removed / paused / enabled match the TR rows; other removals stay Status/Removed")
+
+    with _test_case("fix3: Google system users are automation, Google Ads Team is unknown, look-alike names stay human"):
+        bots = ["Recommendations Auto-Apply", "Google Ads system", "Automated rules", "Google Ads scripts", "Google Ads API", "ads-dartsearch-budget"]
+        people = ["Kapil Rao", "Ann Abbott", "Jan Botha", "Sam Napier", "Capital One", "Rec Ommend", "apiary@example.test"]
+        assert [derive_actor_type(n, None) for n in bots] == ["automation"] * len(bots), [(n, derive_actor_type(n, None)) for n in bots]
+        assert [derive_actor_type(n, None) for n in people] == ["human"] * len(people), [(n, derive_actor_type(n, None)) for n in people]
+        assert derive_actor_type("Google Ads Team [with user permission]", None) == "unknown"
+        assert derive_actor_type("Google Ads Team [with user permission]", "WEB_CLIENT") == "human", "client_type still decides first"
+        print("[PASS] fix3: system user strings -> automation, Google Ads Team -> unknown, look-alike names -> human")
+
+    with _test_case("fix3: metrics_daily sums per day, null for missing, campaign rows win over ad-group rows of the same campaign-day"):
+        fc = td / "fix3_camp.csv"
+        fc.write_text("Day,Campaign,Impr.,Clicks,Cost\n2026-10-01,Camp A,100,5,2.50\n2026-10-01,Camp B,50,1,1.00\n2026-10-02,Camp A,10,--,0.50\n", encoding="utf-8")
+        fg = td / "fix3_adgroup.csv"
+        fg.write_text("Day,Campaign,Ad group,Impr.,Clicks,Conversions\n2026-10-01,Camp A,G1,60,3,1\n2026-10-01,Camp A,G2,40,2,1\n"
+                      "2026-10-03,Camp A,G1,7,1,2\n2026-10-03,Camp A,G2,8,1,--\n", encoding="utf-8")
+        mfs = [load_metrics_file(fc), load_metrics_file(fg)]
+        assert all(m["status"] == "ok" for m in mfs), mfs
+        got = compute_metrics_daily(mfs)
+        # 10-01: Camp A from the campaign file only (100+50 impr); 10-03: no campaign row, ad-group rows summed.
+        assert got == [{"date": "2026-10-01", "impressions": 150.0, "clicks": 6.0, "cost": 3.5, "conversions": None, "conversion_value": None},
+                       {"date": "2026-10-02", "impressions": 10.0, "clicks": None, "cost": 0.5, "conversions": None, "conversion_value": None},
+                       {"date": "2026-10-03", "impressions": 15.0, "clicks": 2.0, "cost": None, "conversions": 2.0, "conversion_value": None}], got
+        multi = json.loads((td / "out_r10_multi" / "change_history.json").read_text(encoding="utf-8"))["metrics_daily"]
+        d10 = next(x for x in multi if x["date"] == "2026-10-10")
+        assert d10 == {"date": "2026-10-10", "impressions": 2200.0, "clicks": 12.0, "cost": 15.75, "conversions": 1.0, "conversion_value": 10.0}, d10
+        assert next(x for x in multi if x["date"] == "2026-10-08")["conversions"] is None and len(multi) == 10, multi
+        assert "metrics_daily" not in json.loads((td / "out_r10_single" / "change_history.json").read_text(encoding="utf-8")), "only with --metrics"
+        print("[PASS] fix3: metrics_daily hand-checked sums, missing metric -> null, no campaign/ad-group double count")
 
 
 def _run_round6_regressions(td):
@@ -7468,6 +7559,7 @@ def _run_pipeline_cases(td):
     _run_r9_dashboard_cases(td)
     _run_r10_pipeline_cases(td)
     _run_r10_docs_cases(td)
+    _run_r10_fix3_cases(td)
 
 
 # =====================================================================
