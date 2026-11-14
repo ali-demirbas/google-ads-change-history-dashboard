@@ -2,7 +2,7 @@
 
 ## The skill is one file
 
-`skills/google-ads-change-history-dashboard/ads_change_history.py` is the entire skill — canonical schema, header-alias table, category rules, the pipeline (validate → normalize → categorize → aggregate), the dashboard HTML/CSS/JS template, built-in synthetic sample fixtures, and the self-test suite, all in one file, by design. `SKILL.md` in the same folder is the short trigger/usage doc; the module docstring at the top of `ads_change_history.py` is the actual spec.
+`skills/google-ads-change-history-dashboard/ads_change_history.py` is the entire skill — canonical schema, header-alias table, category rules, the pipeline (validate → normalize → categorize → aggregate), the dashboard HTML/CSS/JS template, built-in synthetic sample fixtures, and the self-test suite, all in one file, by design. `SKILL.md` in the same folder is the short workflow Claude follows, with details in `references/*.md` (keep them in step with the code); the module docstring at the top of `ads_change_history.py` is the actual spec. Behaviour changes that affect categories or values should also pass `python3 evals/run_evals.py`.
 
 Don't split it into multiple files or add a build step — that's a deliberate constraint, not an oversight.
 
