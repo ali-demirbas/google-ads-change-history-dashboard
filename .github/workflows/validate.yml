@@ -38,3 +38,5 @@ jobs:
           python3 ads_change_history.py self-test | tee self-test.log
           if grep -q "^\[SKIP\] Rule Matches JS" self-test.log; then echo "Node suite was skipped in CI"; exit 1; fi
           if grep -q "^\[WARN\]" self-test.log; then echo "::warning::$(grep '^\[WARN\]' self-test.log | head -1)"; fi
+      - name: Evaluation set (synthetic cases only)
+        run: python3 evals/run_evals.py --synthetic-only

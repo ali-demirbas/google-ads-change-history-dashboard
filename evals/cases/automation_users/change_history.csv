@@ -1,0 +1,16 @@
+Change history report
+August 1, 2026 - September 3, 2026
+Date & time,User,Campaign,Ad group,Changes
+"Sep 3, 2026, 2:00:00 AM",Recommendations Auto-Apply,Generic - Search,Quotes,"2 broad match keywords added
+  car insurance
+  vehicle insurance"
+"Sep 2, 2026, 6:00:00 AM",Automated rules,Display - Remarketing,,"1 campaign paused
+  Status changed from Enabled to Paused"
+"Sep 1, 2026, 3:00:00 AM",Google Ads scripts,Brand - Search,,"1 budget amount increased
+  Brand - Search: Budget amount increased from $100.00 to $110.00"
+"Aug 31, 2026, 4:30:00 AM",reporting-api@demo-project.iam.gserviceaccount.com,Generic - Search,,"Campaign changed
+  Target CPA increased from $20.00 to $22.00"
+"Aug 30, 2026, 10:00:00 AM",bob.botha@example.test,Brand - Search,,"1 campaign active
+  Status changed from Paused to Enabled"
+"Aug 29, 2026, 11:15:00 AM",jane.doe@example.test,Generic - Search,Quotes,"1 negative exact match keyword added
+  -[insurance jobs]"

@@ -1,0 +1,100 @@
+{
+ "case": "metrics_before_after",
+ "description": "Change history plus a daily campaign metrics export (TR UI, preamble, Toplam row); before/after sums written by hand.",
+ "expected": {
+  "status": "ok",
+  "rows_in_report": 3,
+  "dropped": 0,
+  "before_after": {
+   "0.0": {
+    "level": "campaign",
+    "window_days": 3,
+    "before": {
+     "days_with_data": 3,
+     "impressions": 3270,
+     "clicks": 147,
+     "cost": 271.5,
+     "conversions": 5,
+     "conversion_value": null
+    },
+    "after": {
+     "days_with_data": 3,
+     "impressions": 3360,
+     "clicks": 156,
+     "cost": 361.5,
+     "conversions": 4,
+     "conversion_value": null
+    },
+    "overlapping_count": 1
+   },
+   "1.0": {
+    "level": "campaign",
+    "window_days": 3,
+    "before": {
+     "days_with_data": 3,
+     "impressions": 3240,
+     "clicks": 144,
+     "cost": 241.5,
+     "conversions": 4,
+     "conversion_value": null
+    },
+    "after": {
+     "days_with_data": 3,
+     "impressions": 3330,
+     "clicks": 153,
+     "cost": 331.5,
+     "conversions": 5,
+     "conversion_value": null
+    },
+    "overlapping_count": 1
+   },
+   "2.0": null
+  }
+ },
+ "thresholds": {
+  "category_accuracy": 1.0,
+  "operation_accuracy": 1.0,
+  "value_match_rate": 1.0
+ },
+ "events": [
+  {
+   "ts": "11 Ağu 2026 09:00:00",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "operation": "UPDATE",
+     "subcategory": "Target CPA",
+     "old": 100.0,
+     "new": 120.0
+    }
+   ]
+  },
+  {
+   "ts": "10 Ağu 2026 14:00:00",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 500.0,
+     "new": 600.0
+    }
+   ]
+  },
+  {
+   "ts": "10 Ağu 2026 10:00:00",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı azaltıldı",
+     "category": "Budget",
+     "operation": "UPDATE",
+     "subcategory": "Budget changed",
+     "old": 700.0,
+     "new": 650.0
+    }
+   ]
+  }
+ ]
+}

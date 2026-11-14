@@ -1,0 +1,52 @@
+Change history report
+June 1, 2026 - September 14, 2026
+Date & time,User,Campaign,Ad group,Changes
+"Sep 2, 2026, 4:05:12 PM",jane.doe@example.test,Brand - Search,,"Campaign changed
+  Target CPA increased from $25.00 to $28.50"
+"Sep 1, 2026, 9:30:00 AM",jane.doe@example.test,Brand - Search,,"1 budget amount increased
+  Brand - Search: Budget amount increased from $120.00 to $145.00"
+"Aug 31, 2026, 9:31:40 AM",sam.lee@example.test,Generic - Search,,"1 budget amount decreased
+  Generic - Search: Budget amount decreased from $1,200.00 to $950.00"
+"Aug 27, 2026, 3:15:45 PM",jane.doe@example.test,Brand - Search,,"Campaign asset changed
+  Status changed from Enabled to Removed
+  Asset type: Sitelink
+  Asset ID: 100000000011
+Campaign asset created
+  Status: Enabled
+  Asset type: Sitelink
+  Asset ID: 100000000012"
+"Aug 25, 2026, 10:00:00 AM",sam.lee@example.test,Generic - Search,Quotes,"3 phrase match keywords added
+  ""car insurance quote""
+  ""car insurance price""
+  ""insurance quote online""
+2 negative phrase match keywords added
+  -""free""
+  -""jobs""
+1 broad match keyword removed
+  insurance online"
+"Aug 20, 2026, 8:45:00 AM",sam.lee@example.test,Display - Remarketing,,"1 campaign paused
+  Status changed from Enabled to Paused"
+"Aug 18, 2026, 1:00:00 PM",jane.doe@example.test,Generic - Search,,"Campaign changed
+  Bid strategy type changed from Maximize clicks to Maximize conversions"
+"Aug 15, 2026, 12:30:00 PM",sam.lee@example.test,Home - Search,,"Budget created
+  Delivery method: Standard
+  Budget amount: $50.00
+Campaign created
+  Bid strategy type: Maximize clicks
+  Networks: Google Search
+1 language added
+  English
+1 country added
+  United States"
+"Aug 15, 2026, 12:41:03 PM",sam.lee@example.test,Home - Search,Home General,"Ad group created
+  Max. CPC: $1.50
+  Status: Enabled
+1 responsive search ad created
+  Headline: ""Home Insurance Quote""
+  Description: ""Get your home insurance quote in minutes."""
+"Aug 12, 2026, 6:00:00 PM",jane.doe@example.test,Generic - Search,Quotes,"1 responsive search ad changed
+  Status changed from Enabled to Paused"
+"Aug 10, 2026, 11:20:00 AM",jane.doe@example.test,Brand - Search,,"1 campaign active
+  Status changed from Paused to Enabled"
+"Aug 5, 2026, 2:22:22 PM",sam.lee@example.test,Generic - Search,,"Campaign changed
+  Target CPA decreased from $30.00 to $25.00"

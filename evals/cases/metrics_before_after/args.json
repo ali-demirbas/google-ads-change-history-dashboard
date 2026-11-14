@@ -1,0 +1,18 @@
+{
+ "inputs": [
+  "degisiklik_gecmisi.csv"
+ ],
+ "args": [
+  "--account-name",
+  "Demo Sigorta",
+  "--timezone",
+  "Europe/Istanbul",
+  "--metrics",
+  "kampanya_gunluk.csv",
+  "--window-days",
+  "3"
+ ],
+ "requires": [
+  "metrics"
+ ]
+}

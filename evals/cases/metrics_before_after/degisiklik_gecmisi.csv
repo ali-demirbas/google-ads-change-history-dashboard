@@ -1,0 +1,9 @@
+Değişiklik geçmişi raporu
+1 Ağustos 2026 - 20 Ağustos 2026
+Tarih ve saat,Kullanıcı,Kampanya,Reklam grubu,Değişiklik
+11 Ağu 2026 09:00:00,ayse.yilmaz@ornek.test,Demo - Marka - Arama,,"Kampanya değiştirildi
+  ₺100,00 olan Hedef EBM değeri, ₺120,00 değerine artırıldı"
+10 Ağu 2026 14:00:00,ayse.yilmaz@ornek.test,Demo - Marka - Arama,,"1 bütçenin tutarı artırıldı
+  Demo - Marka - Arama: ₺500,00 olan Bütçe tutarı, ₺600,00 olarak değiştirildi"
+10 Ağu 2026 10:00:00,mehmet.kaya@ornek.test,Demo - Jenerik - Kasko,,"1 bütçenin tutarı azaltıldı
+  Demo - Jenerik - Kasko: ₺700,00 olan Bütçe tutarı, ₺650,00 olarak değiştirildi"

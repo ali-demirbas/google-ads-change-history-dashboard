@@ -1,0 +1,13 @@
+Informe del historial de cambios
+1 de septiembre de 2026 - 14 de septiembre de 2026
+Fecha y hora,Usuario,Campaña,Grupo de anuncios,Cambios
+"14 sept 2026, 10:15:02",ana.garcia@ejemplo.test,Marca - Búsqueda,,"1 importe de presupuesto aumentado
+  Marca - Búsqueda: El importe del presupuesto ha cambiado de 120,00 € a 145,00 €"
+"12 sept 2026, 9:00:00",ana.garcia@ejemplo.test,Genérica - Búsqueda,Precios,"3 palabras clave de concordancia de frase añadidas
+  ""seguro coche""
+  ""seguro coche precio""
+  ""seguro hogar"""
+"10 sept 2026, 18:30:00",luis.martin@ejemplo.test,Display - Remarketing,,"1 campaña en pausa
+  Estado: de Habilitada a En pausa"
+"2 sept 2026, 11:00:00",luis.martin@ejemplo.test,Genérica - Búsqueda,,"Campaña modificada
+  CPA objetivo: de 25,00 € a 28,00 €"

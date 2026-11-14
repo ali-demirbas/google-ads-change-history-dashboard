@@ -1,0 +1,14 @@
+{
+ "inputs": [
+  "degisiklik_gecmisi.csv"
+ ],
+ "args": [
+  "--account-name",
+  "Demo Sigorta",
+  "--timezone",
+  "Europe/Istanbul",
+  "--currency",
+  "TRY"
+ ],
+ "requires": []
+}

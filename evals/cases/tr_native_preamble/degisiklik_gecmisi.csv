@@ -1,0 +1,95 @@
+Değişiklik geçmişi raporu
+1 Haziran 2026 - 14 Eylül 2026
+Tarih ve saat,Kullanıcı,Kampanya,Reklam grubu,Değişiklik
+14 Eyl 2026 10:15:02,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,,"Kampanya değiştirildi
+  ₺250,00 olan Hedef EBM değeri, ₺280,50 değerine artırıldı"
+13 Eyl 2026 17:40:11,ayse.yilmaz@ornek.test,Demo - Marka - Arama,,"1 bütçenin tutarı artırıldı
+  Demo - Marka - Arama: ₺1.200,00 olan Bütçe tutarı, ₺1.450,00 olarak değiştirildi"
+13 Eyl 2026 17:38:45,mehmet.kaya@ornek.test,Demo - Jenerik - Kasko,,"1 bütçenin tutarı azaltıldı
+  Demo - Jenerik - Kasko: ₺800,00 olan Bütçe tutarı, ₺650,00 olarak değiştirildi"
+2 Eyl 2026 09:05:30,mehmet.kaya@ornek.test,Demo - Jenerik - Kasko,,"1 teklif ayarlama değişikliği
+  Mobil telefonlar: Platform teklif ayarlaması %+20 olarak ayarlandı
+1 teklif ayarlama değişikliği
+  Tabletler: Platform teklif ayarlaması %-100 olarak ayarlandı
+1 teklif ayarlama değişikliği
+  Cuma 08:00 ÖÖ - 12:00 ÖS: Reklam zaman planlaması teklif ayarlaması %+10 olarak ayarlandı"
+28 Ağu 2026 16:20:00,ayse.yilmaz@ornek.test,Demo - Marka - Arama,,"Kampanya öğesi değiştirildi
+  Etkin olan Durum, Kaldırıldı olarak değiştirildi
+  Uzantı türü: Site bağlantısı
+  Öğe kimliği: 100000000001
+Kampanya öğesi oluşturuldu
+  Durum: Etkin
+  Uzantı türü: Site bağlantısı
+  Öğe kimliği: 100000000002
+Kampanya öğesi değiştirildi
+  Etkin olan Durum, Duraklatıldı olarak değiştirildi
+  Uzantı türü: Açıklama
+  Öğe kimliği: 100000000003"
+20 Ağu 2026 11:11:11,mehmet.kaya@ornek.test,Demo - Jenerik - Kasko,Genel,"3 sıralı eşlemeli anahtar kelimeler eklendi
+  ""kasko teklifi""
+  ""kasko fiyat""
+  ""araç kasko""
+2 negatif sıralı eşlemeli anahtar kelimeler eklendi
+  -""ücretsiz""
+  -""ikinci el""
+1 geniş eşlemeli anahtar kelime kaldırıldı
+  kasko hesaplama"
+9 Ağu 2026 08:00:00,ayse.yilmaz@ornek.test,Demo - Display - Yeniden Pazarlama,,"1 kampanya duraklatıldı
+  etkin olan Durum, duraklatıldı olarak değiştirildi"
+8 Ağu 2026 14:30:12,mehmet.kaya@ornek.test,,,"Öğe oluşturuldu
+  Nihai URL: ""https://ornek.test/kasko""
+  Açıklama 1: ""Kasko teklifini""
+  Açıklama 2: ""dakikalar içinde alın.""
+  Bağlantı metni: ""Teklif Al""
+  Durum: ""Etkin"""
+27 Tem 2026 13:00:00,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,,"Kampanya değiştirildi
+  ""Tıklama sayısını en üst düzeye çıkarma"" olan Kampanyateklif stratejisi türü değeri, ""Dönüşüm sayısını en üst düzeye çıkarma"" olarak değiştirildi
+  Teklif sınırı değeri ₺10,00 idi"
+16 Tem 2026 10:00:00,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,,"Kampanya değiştirildi
+  ₺300,00 olan Hedef EBM, ₺250,00 değerine düşürüldü"
+3 Tem 2026 09:30:00,mehmet.kaya@ornek.test,Demo - Jenerik - Konut,,"Bütçe oluşturuldu
+  Bütçe yayınlanma yöntemi ""standart: reklamlar zaman içinde eşit sıklıkta gösterilir"" olarak ayarlandı
+  Bitiş tarihi: ""Bitiş tarihi yok""
+  Bütçe durumu: etkin
+  Birim türü: Para Birimi
+  Demo - Jenerik - Konut: Bütçe tutarı değeri: ₺500,00
+  ""Demo - Jenerik - Konut"" adlı bütçe oluşturuldu
+Bütçe ""Demo - Jenerik - Konut"" olarak ayarlandı
+Kampanya oluşturuldu
+  Teklif stratejisi türü: ""Tıklama sayısını en üst düzeye çıkarma""
+  Teklif sınırı: ₺15,00
+  Otomatik olarak oluşturulmuş öğeler: kapalı
+1 dil eklendi
+  Türkçe
+1 ülke eklendi
+  Türkiye
+4 platformlar eklendi
+  Masaüstü
+  Üst Seviye Mobil Cihaz
+  Tabletler
+  Bağlı TV"
+3 Tem 2026 09:41:20,mehmet.kaya@ornek.test,Demo - Jenerik - Konut,Konut Genel,"Reklam grubu oluşturuldu
+  Maks. TBM: ₺2,50
+  Durum: etkin
+  Ad: ""Konut Genel""
+1 duyarlı arama ağı reklamı oluşturuldu
+  Başlık: ""Konut Sigortası Teklifi""
+  Başlık: ""Evinizi Güvenceye Alın""
+  Açıklama: ""Konut teklifinizi dakikalar içinde alın.""
+2 tam eşlemeli anahtar kelimeler eklendi
+  [konut sigortası]
+  [ev sigortası]"
+18 Haz 2026 12:00:00,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Genel,"1 duyarlı arama ağı reklamı değiştirildi
+  etkin olan Durum, duraklatıldı olarak değiştirildi"
+17 Haz 2026 15:20:00,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Genel,"1 duyarlı arama ağı reklamı değiştirildi
+  ""https://ornek.test/kasko"" olan Nihai URL değeri, ""https://ornek.test/kasko-teklif"" olarak değiştirildi
+  Yol 1: ""Kasko"""
+10 Haz 2026 10:10:10,ayse.yilmaz@ornek.test,Demo - Marka - Arama,,"""Rakip Terimler - Demo"" negatif anahtar kelime listesi uygulandı
+1 kampanya etkin
+  duraklatıldı olan Durum, etkin olarak değiştirildi"
+5 Haz 2026 11:30:00,mehmet.kaya@ornek.test,Demo - Jenerik - Kasko,,"1 bütçenin tutarı artırıldı
+  Demo - Jenerik - Kasko: ₺600,00 olan Bütçe tutarı, ₺800,00 olarak değiştirildi
+Kampanya değiştirildi
+  Hedef EBM: ₺180,00"
+2 Haz 2026 09:00:00,mehmet.kaya@ornek.test,Demo - Marka - Arama,,"Kampanya değiştirildi
+  Hedef EBM değeri ₺139,00 idi"

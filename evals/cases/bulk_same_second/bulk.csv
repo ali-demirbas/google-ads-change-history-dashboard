@@ -1,0 +1,32 @@
+Değişiklik geçmişi raporu
+1 Ağustos 2026 - 31 Ağustos 2026
+Tarih ve saat,Kullanıcı,Kampanya,Reklam grubu,Değişiklik
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Genel,"1 duyarlı arama ağı reklamı oluşturuldu
+  Başlık: ""Online Kasko Teklifi""
+  Başlık: ""Dakikalar İçinde Teklif""
+  Açıklama: ""Kasko teklifinizi online alın."""
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Fiyat,"1 duyarlı arama ağı reklamı oluşturuldu
+  Başlık: ""Online Kasko Teklifi""
+  Başlık: ""Dakikalar İçinde Teklif""
+  Açıklama: ""Kasko teklifinizi online alın."""
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Hesaplama,"1 duyarlı arama ağı reklamı oluşturuldu
+  Başlık: ""Online Kasko Teklifi""
+  Başlık: ""Dakikalar İçinde Teklif""
+  Açıklama: ""Kasko teklifinizi online alın."""
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Genel,"1 sıralı eşlemeli anahtar kelime eklendi
+  ""kasko teklifi al"""
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Fiyat,"1 sıralı eşlemeli anahtar kelime eklendi
+  ""kasko teklifi al"""
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Fiyat,"1 sıralı eşlemeli anahtar kelime eklendi
+  ""kasko teklifi al"""
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Konut,Genel,"2 tam eşlemeli anahtar kelimeler eklendi
+  [konut sigortası]
+  [dask teklifi]
+1 teklif ayarlama değişikliği
+  Tabletler: Platform teklif ayarlaması %-50 olarak ayarlandı"
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Konut,,"1 bütçenin tutarı artırıldı
+  Demo - Jenerik - Konut: ₺400,00 olan Bütçe tutarı, ₺450,00 olarak değiştirildi"
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Genel,"1 sıralı eşlemeli anahtar kelime duraklatıldı
+  ""kasko fiyatları"": etkin olan durum duraklatıldı olarak değiştirildi"
+20 Ağu 2026 15:02:07,ayse.yilmaz@ornek.test,Demo - Jenerik - Kasko,Hesaplama,"1 sıralı eşlemeli anahtar kelime etkin
+  ""kasko hesapla"": duraklatıldı olan durum etkin olarak değiştirildi"
