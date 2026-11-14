@@ -30,8 +30,13 @@ python3 ads_change_history.py run <input> [<input> ...] --out-dir ./out [--open]
 - A change that appears in more than one file is kept once and counted in
   `data_quality.left_out.duplicate_across_files`. Inside one file identical
   rows are never dropped.
-- `meta.sources` lists each file with its rows, accounts, source type and
-  first/last date.
+- `meta.sources` is a list of objects `{file, rows, accounts, source_label,
+  date_min, date_max}`, one per file. The plain list of source types is
+  `meta.source_labels`.
+- In a multi-file run `--map` and `--mapping-file` apply only to the files
+  that contain the named headers. Two different unknown formats are mapped
+  one at a time: run each file alone, answer its `needs_mapping`, and the
+  saved profile is reused in the combined run.
 
 ## `run`: facts only the user knows
 
@@ -60,7 +65,7 @@ python3 ads_change_history.py run <input> [<input> ...] --out-dir ./out [--open]
 |---|---|---|
 | `--metrics PATH` (repeatable) | none | Daily performance CSV(s) for before/after numbers. See `metrics.md`. |
 | `--window-days N` | 7 | Days compared before and after each change. |
-| `--conversion-lag-days N` | 7 | Days after the newest metrics day still counted as maturing. |
+| `--conversion-lag-days N` | 7 | After-window days within the last N days of the metrics' last day are counted as maturing. |
 | `--digest-lang auto\|tr\|en` | auto | Language of `digest.md`: Turkish for a Turkish export, else English. |
 
 `digest.md` holds the period and source files, totals, changes per category,
