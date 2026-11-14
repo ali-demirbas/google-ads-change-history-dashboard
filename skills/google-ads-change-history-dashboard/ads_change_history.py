@@ -1760,6 +1760,9 @@ def assign_change_ids(rows, masked=False):
         n = max(1, int(rows[i].get("statement_count") or 1))
         cell = rows[i:i + n]
         first = cell[0]
+        # 2026-11-14: a cell cut short by a cross-file duplicate ends where its event_id does.
+        n = next((j for j, r in enumerate(cell) if r.get("event_id") != first.get("event_id")), len(cell))
+        cell = cell[:n]
         user_ref = first.get("user_name") if masked else (first.get("user_email") or first.get("user_name"))
         common = (first.get("account_id") or first.get("account_name"), first.get("timestamp_utc") or first.get("timestamp_iso"), user_ref,
                   first.get("campaign_id") or first.get("campaign_name"), first.get("ad_group_id") or first.get("ad_group_name"))
@@ -4153,7 +4156,8 @@ def pack_changes(rows):
     return {"n": len(rows), "keys": keys, "cols": cols}
 
 
-def build_dashboard(rows, out_path, mask_users=False, generated_at=None, json_out=None, rows_skipped_unparseable_date=0, data_quality=None):
+def build_dashboard(rows, out_path, mask_users=False, generated_at=None, json_out=None, rows_skipped_unparseable_date=0, data_quality=None,
+                    meta_extra=None, extra=None):
     sources = {r.get("source", "unknown") for r in rows}
     other_pct = round(100 * sum(1 for r in rows if r["category"] == "Other") / len(rows), 1) if rows else 0.0
     generated_at = generated_at or datetime.now().isoformat()
@@ -4162,6 +4166,11 @@ def build_dashboard(rows, out_path, mask_users=False, generated_at=None, json_ou
     data = build_aggregation(rows, sources, other_pct, mask_users, generated_at, date_parse_stats={"rows_skipped_unparseable_date": rows_skipped_unparseable_date})
     if data_quality is not None:
         data["meta"]["data_quality"] = data_quality
+    # 2026-11-14: meta.sources becomes per-file objects; the old label list moves to meta.source_labels.
+    if meta_extra:
+        data["meta"]["source_labels"] = data["meta"]["sources"]
+        data["meta"].update(meta_extra)
+    data.update(extra or {})
     marker = "/*__DASH_DATA__*/null"
     # Fixed 2026-08-19 (2nd audit, script-context XSS): escapeHtml() only ever
     # protected the JS side's innerHTML rendering — it did nothing for THIS
@@ -4312,20 +4321,329 @@ def _open_dashboard(path):
         return False
 
 
+# =====================================================================
+# MULTI-INPUT, COVERAGE NOTES, BEFORE/AFTER METRICS (2026-11-14)
+# =====================================================================
+def parse_input_accounts(entries, inputs):
+    """--input-account FILE=NAME -> {input path: name}. FILE is matched against
+    the given path or its basename; a FILE that names no input is an error (2026-11-14)."""
+    out = {}
+    for e in entries or []:
+        hit = None
+        for p in inputs:
+            for ref in (str(p), Path(p).name):
+                if e.startswith(ref + "=") and e[len(ref) + 1:].strip():
+                    hit = (str(p), e[len(ref) + 1:].strip())
+                    break
+            if hit:
+                break
+        if not hit:
+            raise ValueError(f"--input-account {e!r}: expected FILE=NAME where FILE is one of the inputs: {[Path(p).name for p in inputs]}")
+        out[hit[0]] = hit[1]
+    return out
+
+
+def _source_file_names(inputs):
+    """Basename per input; the given path when two inputs share a basename."""
+    names = Counter(Path(p).name for p in inputs)
+    return {str(p): (Path(p).name if names[Path(p).name] == 1 else str(p)) for p in inputs}
+
+
+def _is_api_source(source_label, path):
+    return str(source_label or "").startswith("google_ads_api") or Path(path).suffix.lower() == ".json"
+
+
+def dedupe_across_files(rows):
+    """A change_id seen in an earlier file is an overlap duplicate: kept once,
+    counted. Within one file nothing changes (rows arrive per-file deduped)."""
+    first_file, out, dropped = {}, [], 0
+    for r in rows:
+        f = first_file.setdefault(r["change_id"], r.get("source_file"))
+        if f != r.get("source_file"):
+            dropped += 1
+            continue
+        out.append(r)
+    return out, dropped
+
+
+def build_sources_meta(rows, file_infos):
+    """meta.sources: one entry per input file, in input order."""
+    per = defaultdict(list)
+    for r in rows:
+        per[r.get("source_file")].append(r)
+    out = []
+    for fi in file_infos:
+        rs = per.get(fi["file"], [])
+        days = sorted(str(r.get("timestamp_iso") or "")[:10] for r in rs if r.get("timestamp_iso"))
+        out.append({"file": fi["file"], "rows": len(rs),
+                    "accounts": sorted({str(r.get("account_name") or r.get("account_id")) for r in rs if r.get("account_name") or r.get("account_id")}),
+                    "source_label": fi["source_label"], "date_min": days[0] if days else None, "date_max": days[-1] if days else None})
+    return out
+
+
+COVERAGE_NOTE_TEXT = {
+    "editor_changes_absent": "Changes made in Google Ads Editor may not appear in the API change history data.",
+    "api_30_day_window": "The Google Ads API returns change history for the last 30 days only; older changes are not in the API data.",
+    "auto_applied_may_be_missing": "Recommendations auto-applied by Google and some automated changes may be missing or appear under a system user.",
+    "ui_export_may_differ_from_api": "The Google Ads UI export and the API data can list the same change differently, so their row counts may differ.",
+    "metrics_conversion_lag": "Conversions are counted on the click date and keep arriving for days, so the most recent days of the after window may still grow.",
+}
+
+
+def build_coverage_notes(file_infos, metrics_given):
+    api = any(fi["is_api"] for fi in file_infos)
+    ui = any(not fi["is_api"] for fi in file_infos)
+    ids = (["editor_changes_absent", "api_30_day_window"] if api else []) + ["auto_applied_may_be_missing"]
+    ids += (["ui_export_may_differ_from_api"] if api and ui else []) + (["metrics_conversion_lag"] if metrics_given else [])
+    return [{"id": i, "text": COVERAGE_NOTE_TEXT[i]} for i in ids]
+
+
+METRIC_FIELDS = ("impressions", "clicks", "cost", "conversions", "conversion_value")
+METRICS_HEADER_ALIASES = {
+    "day": ["day", "gün", "date", "tarih", "segments.date"],
+    "campaign": ["campaign", "kampanya", "campaign.name", "campaign name", "kampanya adı"],
+    "ad_group": ["ad group", "reklam grubu", "ad_group.name", "ad group name", "reklam grubu adı"],
+    "account": ["account", "hesap", "account name", "hesap adı", "customer.descriptive_name"],
+    "impressions": ["impr.", "impressions", "gösterim", "gösterimler", "gösterim sayısı", "metrics.impressions"],
+    "clicks": ["clicks", "tıklama", "tıklamalar", "tıklama sayısı", "metrics.clicks"],
+    "cost": ["cost", "maliyet", "metrics.cost", "metrics.cost_micros"],
+    "conversions": ["conversions", "dönüşüm", "dönüşümler", "conv.", "metrics.conversions"],
+    "conversion_value": ["conv. value", "conversion value", "dönüşüm değeri", "dönş. değeri", "metrics.conversions_value"],
+}
+_METRICS_TOTAL_RE = re.compile(r"^\s*(total|toplam|genel toplam)\s*(:|$)", re.IGNORECASE)
+
+
+def _entity_key(text):
+    """Case/whitespace-insensitive, TR-folded name key (2026-11-14)."""
+    return " ".join(_fold(text).split())
+
+
+def _acct_keys(text):
+    k = _entity_key(text)
+    digits = re.sub(r"\D", "", k)
+    return {k} | ({digits} if len(digits) >= 6 and digits == re.sub(r"[\s-]", "", k) else set())
+
+
+def load_metrics_file(path, account=None, date_format=None, decimal_style=None):
+    """One daily performance CSV -> {"status": "ok", "rows": [...]} or a status
+    dict naming the file. Reuses read_rows / detect_date_format / normalize_number."""
+    name = Path(path).name
+    try:
+        headers, raw_rows = read_rows(path, encoding=INPUT_ENCODING)
+    except ValueError as e:
+        return {"status": "error", "file": name, "message": f"--metrics: {e}"}
+    col, ignored = {}, []
+    for h in headers:
+        key = normalize_header(str(h or "")).replace("﻿", "")
+        field = next((f for f, al in METRICS_HEADER_ALIASES.items() if key in al), None)
+        if field and field not in col:
+            col[field] = h
+        elif h:
+            ignored.append(h)
+    if "day" not in col or "campaign" not in col:
+        return {"status": "needs_metrics_mapping", "file": name, "headers": headers,
+                "message": f"--metrics {name}: needs a day column (Day/Gün/Date/Tarih) and a campaign column (Campaign/Kampanya). Headers found: {headers}"}
+    rows = [r for r in raw_rows if not any(_METRICS_TOTAL_RE.match(str(r.get(col[f]) or "")) for f in ("day", "campaign", "ad_group", "account") if f in col)]
+    rows = [r for r in rows if str(r.get(col["day"]) or "").strip() and str(r.get(col["campaign"]) or "").strip()]
+    fmt = date_format or detect_date_format([r.get(col["day"]) for r in rows])
+    if fmt is None:
+        q = date_format_question([r.get(col["day"]) for r in rows])
+        q["file"] = name
+        return q
+    tr_headers = any(normalize_header(str(col[f])) in ("gün", "tarih", "kampanya", "gösterim", "maliyet", "tıklama", "tıklamalar", "gösterimler") for f in col)
+    style = decimal_style or ("TR" if tr_headers else "US")
+    micros = normalize_header(str(col.get("cost", ""))) == "metrics.cost_micros"
+    out, bad_dates = [], 0
+    for r in rows:
+        try:
+            day = parse_timestamp(r.get(col["day"]), fmt).date()
+        except (ValueError, TypeError, OverflowError):
+            bad_dates += 1
+            continue
+        vals = {}
+        for f in METRIC_FIELDS:
+            if f not in col:
+                continue
+            raw = str(r.get(col[f]) or "").strip()
+            try:
+                v = normalize_number(raw, style) if raw not in ("", "--", "-", "—") else None
+            except ValueError:
+                v = None
+            if v is not None and f == "cost" and micros:
+                v = v / 1_000_000
+            vals[f] = v
+        out.append({"day": day, "campaign": str(r.get(col["campaign"])).strip(),
+                    "ad_group": (str(r.get(col["ad_group"]) or "").strip() or None) if "ad_group" in col else None,
+                    "account": (str(r.get(col["account"]) or "").strip() or None) if "account" in col else account, "values": vals})
+    return {"status": "ok", "file": name, "rows": out, "metrics": [f for f in METRIC_FIELDS if f in col], "ignored_columns": ignored,
+            "has_ad_group": "ad_group" in col, "date_format_used": fmt, "decimal_style_used": style, "rows_skipped_unparseable_date": bad_dates}
+
+
+def compute_before_after(rows, metrics_files, window_days=7, conversion_lag_days=7):
+    """before = N full days before the change's local date; after = that date
+    + N-1 days. Sums per metric, null when no value exists (never 0). Entity
+    match: account (when both sides name one) + campaign, + ad group when
+    both sides have it; names case/space-insensitive and TR-folded (2026-11-14)."""
+    N = window_days
+    series = {"campaign": defaultdict(dict), "ad_group": defaultdict(dict)}  # key -> day -> values
+    owner = {}  # (level, key, day) -> file: an entity-day from two files is counted once
+    accounts_by_campaign = defaultdict(set)
+    days_all = []
+    for mf in metrics_files:
+        level = "ad_group" if mf["has_ad_group"] else "campaign"
+        for m in mf["rows"]:
+            if level == "ad_group" and not m["ad_group"]:
+                continue
+            ck = _entity_key(m["campaign"])
+            key = (_entity_key(m["account"]) if m["account"] else None, ck) + ((_entity_key(m["ad_group"]),) if level == "ad_group" else ())
+            if owner.setdefault((level, key, m["day"]), mf["file"]) != mf["file"]:
+                continue
+            accounts_by_campaign[ck].add(key[0])
+            slot = series[level][key].setdefault(m["day"], {})
+            for f, v in m["values"].items():
+                if v is not None:
+                    slot[f] = slot.get(f, 0.0) + v
+                else:
+                    slot.setdefault(f, None)
+            days_all.append(m["day"])
+    date_max = max(days_all) if days_all else None
+    maturing_from = date_max - timedelta(days=conversion_lag_days - 1) if date_max and conversion_lag_days > 0 else None
+
+    def find(level, r):
+        ck = _entity_key(r.get("campaign_name"))
+        tail = ((_entity_key(r.get("ad_group_name")),) if level == "ad_group" else ())
+        row_accts = set()
+        for a in (r.get("account_name"), r.get("account_id")):
+            if a:
+                row_accts |= _acct_keys(a)
+        for acct in accounts_by_campaign.get(ck, ()):
+            if acct is None or acct in row_accts or not row_accts:
+                k = (acct, ck) + tail
+                if k in series[level]:
+                    return k
+        return None
+
+    def window(sk, start, end):
+        days_data, sums = 0, {f: None for f in METRIC_FIELDS}
+        d = start
+        while d <= end:
+            slot = sk.get(d)
+            if slot is not None:
+                days_data += 1
+                for f, v in slot.items():
+                    if v is not None:
+                        sums[f] = (sums[f] or 0.0) + v
+            d += timedelta(days=1)
+        return {"days_with_data": days_data, **{f: (round(v, 6) if v is not None else None) for f, v in sums.items()}}
+
+    # rows per campaign, by local date, for the overlap list
+    by_campaign = defaultdict(list)
+    for r in rows:
+        if r.get("campaign_name") and r.get("timestamp_iso"):
+            by_campaign[(account_identity(r), _entity_key(r.get("campaign_name")))].append((str(r["timestamp_iso"])[:10], r))
+    for v in by_campaign.values():
+        v.sort(key=lambda t: t[0])
+    keys_sorted = {k: [t[0] for t in v] for k, v in by_campaign.items()}
+
+    import bisect
+    out, unmatched, cache = {}, set(), {}
+    for r in rows:
+        if not r.get("campaign_name") or not r.get("timestamp_iso"):
+            continue
+        level, key = None, None
+        if r.get("ad_group_name"):
+            key = find("ad_group", r)
+            level = "ad_group" if key else None
+        if not key:
+            key = find("campaign", r)
+            level = "campaign" if key else None
+        if not key:
+            unmatched.add((account_identity(r), _entity_key(r.get("campaign_name"))))
+            continue
+        d = date.fromisoformat(str(r["timestamp_iso"])[:10])
+        ck = (level, key, d)
+        if ck not in cache:
+            sk = series[level][key]
+            before = window(sk, d - timedelta(days=N), d - timedelta(days=1))
+            after = window(sk, d, d + timedelta(days=N - 1))
+            after["maturing_days"] = sum(1 for i in range(N) if maturing_from and maturing_from <= d + timedelta(days=i) <= date_max and (d + timedelta(days=i)) in sk)
+            cache[ck] = (before, after)
+        before, after = cache[ck]
+        camp = (account_identity(r), _entity_key(r.get("campaign_name")))
+        lst, ks = by_campaign[camp], keys_sorted[camp]
+        lo = bisect.bisect_left(ks, (d - timedelta(days=N)).isoformat())
+        hi = bisect.bisect_right(ks, (d + timedelta(days=N - 1)).isoformat())
+        ag = _entity_key(r.get("ad_group_name")) if level == "ad_group" else None
+        ids, count = [], 0
+        for _, o in lst[lo:hi]:
+            if o is r or (ag is not None and o.get("ad_group_name") and _entity_key(o.get("ad_group_name")) != ag):
+                continue
+            count += 1
+            if len(ids) < 20:
+                ids.append(o["change_id"])
+        entity = r.get("campaign_name") + (f" / {r.get('ad_group_name')}" if level == "ad_group" else "")
+        out[r["change_id"]] = {"level": level, "entity": entity, "window_days": N, "before": dict(before), "after": dict(after),
+                               "overlapping": {"count": count, "change_ids": ids}}
+    dq = {"rows_with_window": len(out), "rows_without_metrics": len(rows) - len(out), "entities_unmatched": len(unmatched)}
+    return out, dq
+
+
+def build_metrics_meta(metrics_files, window_days, conversion_lag_days):
+    days = [m["day"] for mf in metrics_files for m in mf["rows"]]
+    levels = sorted({"ad_group" if mf["has_ad_group"] else "campaign" for mf in metrics_files}, key=["campaign", "ad_group"].index)
+    return {"files": [mf["file"] for mf in metrics_files], "levels": levels,
+            "date_min": min(days).isoformat() if days else None, "date_max": max(days).isoformat() if days else None,
+            "metrics": [f for f in METRIC_FIELDS if any(f in mf["metrics"] for mf in metrics_files)],
+            "window_days": window_days, "conversion_lag_days": conversion_lag_days,
+            "ignored_columns": list(dict.fromkeys(c for mf in metrics_files for c in mf["ignored_columns"]))}
+
+
+# (write_digest is added here by another change, 2026-11-14)
+
+
+def _mapping_fits(path, mapping_file=None, column_map=None):
+    """Multi-input only: a --map/--mapping-file applies to a file whose headers it names (2026-11-14)."""
+    try:
+        headers, _ = read_rows(path, encoding=INPUT_ENCODING)
+    except ValueError:
+        return True  # let validate_source report the read error
+    wanted = set((column_map or {}).values())
+    if mapping_file:
+        try:
+            with open(mapping_file, encoding="utf-8") as f:
+                conf = json.load(f)
+            m = conf.get("mapping", conf) if isinstance(conf, dict) else {}
+            wanted |= {v for v in m.values() if isinstance(v, str)} if isinstance(m, dict) else set()
+        except (OSError, ValueError):
+            return True  # validate_source reports it
+    return wanted <= set(headers)
+
+
 def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decimal_style=None,
                   tz="unknown", mask_users=False, allow_unknown_categories=False, force_review=False,
-                  extra_rules=None, open_browser=False, generated_at=None, account_name=None, currency=None, column_map=None):
+                  extra_rules=None, open_browser=False, generated_at=None, account_name=None, currency=None, column_map=None,
+                  input_accounts=None, metrics=None, window_days=7, conversion_lag_days=7):
+    # 2026-11-14: input_path may be a list of files (one run, several exports/accounts).
+    inputs = [str(p) for p in input_path] if isinstance(input_path, (list, tuple)) else [str(input_path)]
+    multi = len(inputs) > 1
+    input_accounts = input_accounts or {}
+    metrics = [str(m) for m in (metrics or [])]
+    names = _source_file_names(inputs)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     blocked = _prepare_out_dir(out_dir)
     if blocked:
         return blocked
-    if _is_empty_event_list(input_path):
-        dq = {"input_rows": 0, "rows_added_by_field_split": 0, "left_out": {"unreadable_date": 0, "duplicate": 0}, "rows_in_report": 0,
+    if window_days < 1 or conversion_lag_days < 0:
+        return {"status": "error", "message": "--window-days must be at least 1 and --conversion-lag-days at least 0."}
+    if all(_is_empty_event_list(p) for p in inputs):
+        dq = {"input_rows": 0, "rows_added_by_field_split": 0, "left_out": {"unreadable_date": 0, "duplicate": 0, **({"duplicate_across_files": 0} if multi else {})}, "rows_in_report": 0,
               "in_report_with_limits": {}, "ignored_headers": []}
         (out_dir / "changes.jsonl").write_text("", encoding="utf-8")
         (out_dir / "coverage.txt").write_text("Input rows: 0\nThe input is an empty event list: no change in the requested range.\n", encoding="utf-8")
-        build_dashboard([], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at, json_out=out_dir / "change_history.json", data_quality=dq)
+        empty_infos = [{"file": names[p], "source_label": "empty_event_list", "is_api": True} for p in inputs]
+        build_dashboard([], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at, json_out=out_dir / "change_history.json", data_quality=dq,
+                        meta_extra={"sources": build_sources_meta([], empty_infos), "coverage_notes": build_coverage_notes(empty_infos, False)})
         res = {"status": "ok", "out": str(out_dir / "dashboard.html"), "row_count": 0, "empty": True,
                "message": "The input holds zero change events (nothing changed in the requested range, or the range is outside the API's 30 days).",
                "data_quality": dq}
@@ -4341,42 +4659,71 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         if err:
             return {"status": "error", "message": err}
 
-    v = validate_source(input_path, mapping_file=mapping_file, force=force_review, default_account_name=account_name, column_map=column_map)
-    if v["status"] != "ok":
-        return v
-    profile = v.pop("_profile", None)  # saved only once the run is ok (2026-11-10, B-8)
-    (out_dir / "resolved_mapping.json").write_text(json.dumps(v, ensure_ascii=False), encoding="utf-8")
+    # Each file is validated on its own; a stop status names the file (2026-11-14).
+    validated, map_used = [], False
+    for p in inputs:
+        if multi and _is_empty_event_list(p):
+            validated.append((p, None))
+            continue
+        fits = (not multi) or not (mapping_file or column_map) or _mapping_fits(p, mapping_file, column_map)
+        map_used = map_used or (fits and bool(mapping_file or column_map))
+        v = validate_source(p, mapping_file=mapping_file if fits else None, force=force_review,
+                            default_account_name=input_accounts.get(p, account_name), column_map=column_map if fits else None)
+        if v["status"] != "ok":
+            v["file"] = names[p]
+            return v
+        validated.append((p, v))
+    if multi and (mapping_file or column_map) and not map_used:
+        return {"status": "error", "message": "--map/--mapping-file names column headers that none of the input files has."}
+    profiles = [v.pop("_profile", None) for _, v in validated if v]
+    resolved = validated[0][1] if not multi else {"files": [{"file": names[p], **v} for p, v in validated if v]}
+    (out_dir / "resolved_mapping.json").write_text(json.dumps(resolved, ensure_ascii=False), encoding="utf-8")
 
-    n = normalize_changes(input_path, v["mapping"], v["source_label"], date_format=date_format, decimal_style=decimal_style, tz=tz, default_account_name=account_name)
-    if n["status"] != "ok":
-        return n
+    SUM_KEYS = ("input_rows", "rows_added_by_field_split", "rows_added_by_statement_split", "possible_duplicate_rows",
+                "dst_nonexistent_local_time", "dst_ambiguous_local_time", "orphan_names_dropped", "rows_skipped_unparseable_date")
+    n = {k: 0 for k in SUM_KEYS}
+    all_rows, duplicate_count, file_infos, file_results, ignored_headers = [], 0, [], [], []
+    for p, v in validated:
+        if v is None:
+            file_infos.append({"file": names[p], "source_label": "empty_event_list", "is_api": True})
+            continue
+        acct = input_accounts.get(p, account_name)
+        nf = normalize_changes(p, v["mapping"], v["source_label"], date_format=date_format, decimal_style=decimal_style, tz=tz, default_account_name=acct)
+        if nf["status"] != "ok":
+            nf["file"] = names[p]
+            return nf
+        input_total = len(nf["rows"]) + nf["rows_skipped_unparseable_date"]
+        date_skip_pct = round(100 * nf["rows_skipped_unparseable_date"] / input_total, 1) if input_total else 0.0
+        if date_skip_pct > 20 and not force_review:
+            return {
+                "status": "needs_date_review", "file": names[p],
+                "message": f"{nf['rows_skipped_unparseable_date']} of {input_total} rows ({date_skip_pct}%) could not be parsed as dates under the resolved format ({nf['date_format_used']}). This is high enough that the date column or --date-format is probably wrong, not just a few bad rows.",
+                "rows_skipped_unparseable_date": nf["rows_skipped_unparseable_date"],
+                "rows_skipped_unparseable_date_pct": date_skip_pct,
+                "date_format_used": nf["date_format_used"],
+                "instructions": "Confirm with the user whether this rate is genuinely expected (a source with a lot of malformed dates) or the wrong --date-format was resolved/passed. If it's real, re-run with --force-review.",
+            }
+        rows_f, dup_f = dedupe_rows(nf["rows"])
+        for r in rows_f:
+            r["source_file"] = names[p]
+        all_rows.extend(rows_f)
+        duplicate_count += dup_f
+        for k in SUM_KEYS:
+            n[k] += nf.get(k, 0)
+        n.setdefault("date_format_used", nf["date_format_used"])
+        n.setdefault("decimal_style_used", nf["decimal_style_used"])
+        ignored_headers.extend(h for h in v["ignored_headers"] if h not in ignored_headers)
+        file_infos.append({"file": names[p], "source_label": v["source_label"], "is_api": _is_api_source(v["source_label"], p)})
+        file_results.append({"file": names[p], "source_label": v["source_label"], "date_format_used": nf["date_format_used"], "decimal_style_used": nf["decimal_style_used"]})
+    n["rows"], duplicate_across_files = dedupe_across_files(all_rows)
 
-    # Fixed 2026-08-18 (4th audit round, confirmed): any unparseable-date
-    # rate, even 90%+, previously still returned status "ok" — just a
-    # WARNING line buried in coverage.txt that nothing forces a reader to
-    # see. Past a threshold this high, the date column itself is probably
-    # mismatched (wrong --date-format, or genuinely the wrong column), not a
-    # handful of bad rows — the same "stop and confirm" gate every other
-    # genuine ambiguity in this pipeline already gets, not silent output
-    # built from a fraction of the real dataset presented as the whole
-    # thing. 20% is a judgment call, not a measured constant; --force-review
-    # (the same flag the >30%-empty-required-field gate already uses)
-    # bypasses it once a human has actually looked and confirmed the rate is
-    # real.
-    input_total = len(n["rows"]) + n["rows_skipped_unparseable_date"]
-    date_skip_pct = round(100 * n["rows_skipped_unparseable_date"] / input_total, 1) if input_total else 0.0
-    if date_skip_pct > 20 and not force_review:
-        return {
-            "status": "needs_date_review",
-            "message": f"{n['rows_skipped_unparseable_date']} of {input_total} rows ({date_skip_pct}%) could not be parsed as dates under the resolved format ({n['date_format_used']}). This is high enough that the date column or --date-format is probably wrong, not just a few bad rows.",
-            "rows_skipped_unparseable_date": n["rows_skipped_unparseable_date"],
-            "rows_skipped_unparseable_date_pct": date_skip_pct,
-            "date_format_used": n["date_format_used"],
-            "instructions": "Confirm with the user whether this rate is genuinely expected (a source with a lot of malformed dates) or the wrong --date-format was resolved/passed. If it's real, re-run with --force-review.",
-        }
+    metrics_files = []
+    for mp in metrics:
+        mf = load_metrics_file(mp, account=input_accounts.get(mp, account_name), date_format=date_format, decimal_style=decimal_style)
+        if mf["status"] != "ok":
+            return mf
+        metrics_files.append(mf)
 
-    deduped_rows, duplicate_count = dedupe_rows(n["rows"])
-    n["rows"] = deduped_rows
 
     c = categorize_changes(n["rows"], allow_unknown=allow_unknown_categories, extra_rules=extra_rules)
     if c["status"] != "ok":
@@ -4397,6 +4744,12 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     # were missing from it while this function's own summary said nothing.
     tz_unknown = sum(1 for row in c["rows"] if not row.get("timestamp_utc"))
 
+    sources_meta = build_sources_meta(c["rows"], file_infos)
+    before_after = metrics_meta = ba_dq = None
+    if metrics_files:
+        before_after, ba_dq = compute_before_after(c["rows"], metrics_files, window_days, conversion_lag_days)
+        metrics_meta = build_metrics_meta(metrics_files, window_days, conversion_lag_days)
+
     with open(out_dir / "changes.jsonl", "w", encoding="utf-8") as f:
         for row in c["rows"]:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -4413,7 +4766,7 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     data_quality = {
         "input_rows": n["input_rows"],
         "rows_added_by_field_split": n["rows_added_by_field_split"],
-        "left_out": {"unreadable_date": n["rows_skipped_unparseable_date"], "duplicate": duplicate_count},
+        "left_out": {"unreadable_date": n["rows_skipped_unparseable_date"], "duplicate": duplicate_count, **({"duplicate_across_files": duplicate_across_files} if multi else {})},
         "rows_in_report": len(c["rows"]),
         "in_report_with_limits": {
             "category_other": sum(1 for row in c["rows"] if row.get("category") == "Other"),
@@ -4423,9 +4776,11 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
             "multi_field_unsplit": sum(1 for row in c["rows"] if row.get("multi_field")),
             "name_without_reference_dropped": n["orphan_names_dropped"],
         },
-        "ignored_headers": v["ignored_headers"],
+        "ignored_headers": ignored_headers,
     }
     data_quality.update(semantic_data_quality(n, c["rows"], c["other_pct"]))
+    if ba_dq is not None:
+        data_quality["before_after"] = ba_dq
     with open(out_dir / "coverage.txt", "w", encoding="utf-8") as f:
         dq_left = data_quality["left_out"]
         f.write(f"Input rows: {data_quality['input_rows']}\n")
@@ -4437,7 +4792,14 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
             f.write(f"Identical rows kept (possible duplicates, nothing tells them apart): {data_quality['possible_duplicate_rows_kept']}\n")
         for w in data_quality["warnings"]:
             f.write(f"WARNING: {w}\n")
-        f.write(f"Left out: {sum(dq_left.values())} (unreadable date: {dq_left['unreadable_date']}, duplicate: {dq_left['duplicate']})\n")
+        f.write(f"Left out: {sum(dq_left.values())} (unreadable date: {dq_left['unreadable_date']}, duplicate: {dq_left['duplicate']}"
+                + (f", duplicate across files: {dq_left['duplicate_across_files']})\n" if multi else ")\n"))
+        if multi:
+            for s_ in sources_meta:
+                f.write(f"Source file {s_['file']}: {s_['rows']} rows in the report ({s_['source_label']}, {s_['date_min']} to {s_['date_max']})\n")
+        if "before_after" in data_quality:
+            ba = data_quality["before_after"]
+            f.write(f"Before/after windows: {ba['rows_with_window']} rows with a window, {ba['rows_without_metrics']} without metrics, {ba['entities_unmatched']} campaign(s) not in the metrics files\n")
         f.write(f"In the report: {data_quality['rows_in_report']}\n")
         f.write("In the report, with a limit: " + ", ".join(f"{k.replace('_', ' ')}: {val}" for k, val in data_quality["in_report_with_limits"].items()) + "\n")
         f.write(f"Source columns not used: {', '.join(data_quality['ignored_headers']) or 'none'}\n\n")
@@ -4461,10 +4823,11 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         for cat, cnt in Counter({k: v2 for k, v2 in c["category_breakdown"].items()}).most_common():
             f.write(f"  {cat}: {cnt}\n")
 
-    source_warnings = v.get("warnings", []) + save_mapping_profile(profile)
+    source_warnings = [w for _, v in validated if v for w in v.get("warnings", [])] + [w for pr in profiles for w in save_mapping_profile(pr)]
     data = build_dashboard(c["rows"], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at,
                             json_out=out_dir / "change_history.json", rows_skipped_unparseable_date=n["rows_skipped_unparseable_date"],
-                            data_quality=data_quality)
+                            data_quality=data_quality, meta_extra={"sources": sources_meta, "coverage_notes": build_coverage_notes(file_infos, bool(metrics_files))},
+                            extra=({"metrics_meta": metrics_meta, "before_after": before_after} if metrics_files else None))
 
     result = {
         "status": "ok", "out": str(out_dir / "dashboard.html"), "row_count": len(c["rows"]),
@@ -4475,9 +4838,17 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         "orphan_names_dropped": n["orphan_names_dropped"],
         "duplicates_removed": duplicate_count,
         "date_format_used": n["date_format_used"], "decimal_style_used": n["decimal_style_used"],
-        "ignored_headers": v["ignored_headers"],
+        "ignored_headers": ignored_headers,
         "data_quality": data_quality,
     }
+    if multi:
+        result["files"] = file_results
+        result["duplicate_across_files"] = duplicate_across_files
+        if len({fr["date_format_used"] for fr in file_results}) > 1:
+            result["date_format_used"] = "mixed"
+    if metrics_files:
+        result["metrics"] = {"files": [{k: mf[k] for k in ("file", "metrics", "date_format_used", "decimal_style_used", "rows_skipped_unparseable_date")} for mf in metrics_files],
+                             **data_quality["before_after"]}
     result["source_warnings"] = source_warnings
     if open_browser:
         result["opened"] = _open_dashboard(out_dir / "dashboard.html")
@@ -5076,6 +5447,80 @@ def _run_r9_ingest_cases(td):
         finally:
             PROFILES_DIR = saved_dir
         print("[PASS] r9 ingest: profiles use a user data dir, carry a schema version, are saved only after ok, never crash")
+
+
+def _run_r10_pipeline_cases(td):
+    """2026-11-14: multiple inputs, coverage notes, before/after metrics (synthetic names only)."""
+    a1 = ["2026-10-10 10:00:00", "u1@example.test", "Camp Alpha", "", "1 dil eklendi\n  Dil A"]
+    a2 = ["2026-10-12 09:00:00", "u1@example.test", "Camp Beta", "Grup Bir", "1 ülke eklendi\n  Ülke A"]
+    b1 = ["2026-10-20 08:00:00", "u2@example.test", "Camp Gamma", "", "1 dil eklendi\n  Dil B"]
+    fa = _r9_csv(td, "r10_a.csv", [a1, a1, a2])
+    fb = _r9_csv(td, "r10_b.csv", [a1, b1])
+    tr_lines = ["Kampanya performansı", "5 Eki 2026 - 14 Eki 2026", "Gün;Kampanya;Gösterim;Tıklama;Maliyet;Dönüşümler;Kampanya durumu"]
+    for d in range(5, 15):
+        tr_lines.append(f"{d} Eki 2026;Camp Alpha;1.000;{d};12,50;{'--' if d == 8 else '1'};Etkin")
+    tr_lines.append("Toplam: Hesap;--;10.000;95;125,00;9;--")
+    fm_tr = td / "r10_metrics_tr.csv"
+    fm_tr.write_text("\n".join(tr_lines) + "\n", encoding="utf-8")
+    en_lines = ["Ad group report", "October 9, 2026 - October 14, 2026", "Campaign,Ad group,Account,Day,Impr.,Clicks,Cost,Conv. value,Labels"]
+    for d in range(9, 14):
+        en_lines.append(f'CAMP  BETA,GRUP BİR,ACC ONE,2026-10-{d:02d},"1,200",2,3.25,10.00,x')
+    en_lines.append('Total: Ad groups,--,--,--,"6,000",10,16.25,50.00,--')
+    fm_en = td / "r10_metrics_en.csv"
+    fm_en.write_text("\n".join(en_lines) + "\n", encoding="utf-8")
+    accts = {str(fa): "Acc One", str(fb): "Acc One"}
+
+    with _test_case("r10 multi-input: rows from two files merge, an overlap is kept once and counted, each row names its file"):
+        out = td / "out_r10_multi"
+        r = run_pipeline([fa, fb], out, input_accounts=accts, tz="Europe/Istanbul", generated_at="2026-11-14T00:00:00",
+                         metrics=[fm_tr, fm_en], window_days=3, conversion_lag_days=3)
+        assert r["status"] == "ok", f"multi run failed: {r}"
+        dq = r["data_quality"]
+        assert r["row_count"] == 4 and dq["left_out"] == {"unreadable_date": 0, "duplicate": 0, "duplicate_across_files": 1}, f"dq: {dq}"
+        assert dq["input_rows"] + dq["rows_added_by_field_split"] + dq["rows_added_by_statement_split"] - sum(dq["left_out"].values()) == dq["rows_in_report"], "counts must add up"
+        rows = _r9_rows(out)
+        assert [x["source_file"] for x in rows] == ["r10_a.csv"] * 3 + ["r10_b.csv"], [x["source_file"] for x in rows]
+        assert len({x["change_id"] for x in rows}) == 4, "change_id stays unique"
+        data = json.loads((out / "change_history.json").read_text(encoding="utf-8"))
+        src = data["meta"]["sources"]
+        assert [(s["file"], s["rows"], s["accounts"], s["date_min"], s["date_max"]) for s in src] == [
+            ("r10_a.csv", 3, ["Acc One"], "2026-10-10", "2026-10-12"), ("r10_b.csv", 1, ["Acc One"], "2026-10-20", "2026-10-20")], src
+        assert [n["id"] for n in data["meta"]["coverage_notes"]] == ["auto_applied_may_be_missing", "metrics_conversion_lag"], data["meta"]["coverage_notes"]
+        print("[PASS] r10 multi-input: two files merge, overlap kept once and counted, source_file + meta.sources per file")
+
+    with _test_case("r10 before/after: TR and EN metrics files (preamble, total row) give hand-checked window sums, missing metrics stay null"):
+        ba = data["before_after"]
+        alpha = ba[rows[0]["change_id"]]
+        assert alpha["level"] == "campaign" and alpha["window_days"] == 3, alpha
+        assert alpha["before"] == {"days_with_data": 3, "impressions": 3000.0, "clicks": 24.0, "cost": 37.5, "conversions": 2.0, "conversion_value": None}, alpha["before"]
+        assert alpha["after"] == {"days_with_data": 3, "impressions": 3000.0, "clicks": 33.0, "cost": 37.5, "conversions": 3.0, "conversion_value": None, "maturing_days": 1}, alpha["after"]
+        assert alpha["overlapping"] == {"count": 1, "change_ids": [rows[1]["change_id"]]}, alpha["overlapping"]
+        beta = ba[rows[2]["change_id"]]
+        assert beta["level"] == "ad_group" and beta["entity"] == "Camp Beta / Grup Bir", beta
+        assert beta["before"] == {"days_with_data": 3, "impressions": 3600.0, "clicks": 6.0, "cost": 9.75, "conversions": None, "conversion_value": 30.0}, beta["before"]
+        assert beta["after"] == {"days_with_data": 2, "impressions": 2400.0, "clicks": 4.0, "cost": 6.5, "conversions": None, "conversion_value": 20.0, "maturing_days": 2}, beta["after"]
+        assert rows[3]["change_id"] not in ba and data["meta"]["data_quality"]["before_after"] == {"rows_with_window": 3, "rows_without_metrics": 1, "entities_unmatched": 1}
+        mm = data["metrics_meta"]
+        assert mm["levels"] == ["campaign", "ad_group"] and (mm["date_min"], mm["date_max"]) == ("2026-10-05", "2026-10-14"), mm
+        assert mm["metrics"] == list(METRIC_FIELDS) and mm["ignored_columns"] == ["Kampanya durumu", "Labels"], mm
+        html = (out / "dashboard.html").read_text(encoding="utf-8")
+        payload = json.JSONDecoder().raw_decode(html.split("/*__DASH_DATA__*/", 1)[1])[0]
+        assert payload["before_after"] == ba and payload["meta"]["sources"] == src and payload["metrics_meta"] == mm, "DASH_DATA carries the new fields"
+        print("[PASS] r10 before/after: TR + EN metrics, preamble and total rows skipped, sums match hand count, missing = null")
+
+    with _test_case("r10 multi-input: a stop status names the file; single-file output keeps its old left_out shape"):
+        fc = _r9_csv(td, "r10_c.csv", [["x", "y"]], header="Foo,Bar")
+        r_c = run_pipeline([fa, fc], td / "out_r10_c", input_accounts={str(fa): "Acc One"}, tz="Europe/Istanbul")
+        assert r_c["status"] == "needs_mapping" and r_c["file"] == "r10_c.csv", r_c
+        try:
+            parse_input_accounts(["nope.csv=X"], [str(fa)])
+            raise AssertionError("an --input-account naming no input must be an error")
+        except ValueError:
+            pass
+        assert parse_input_accounts(["r10_a.csv=Acc=One"], [str(fa)]) == {str(fa): "Acc=One"}
+        r_s = run_pipeline(fa, td / "out_r10_single", account_name="Acc One", tz="Europe/Istanbul")
+        assert r_s["status"] == "ok" and r_s["data_quality"]["left_out"] == {"unreadable_date": 0, "duplicate": 0} and "before_after" not in r_s["data_quality"], r_s["data_quality"]
+        print("[PASS] r10 multi-input: needs_mapping names the file; single-file left_out unchanged")
 
 
 def _run_round6_regressions(td):
@@ -6767,6 +7212,7 @@ def _run_pipeline_cases(td):
     _run_r9_tools_cases(td)
     _run_r9_semantics_cases(td)
     _run_r9_dashboard_cases(td)
+    _run_r10_pipeline_cases(td)
 
 
 # =====================================================================
@@ -6824,7 +7270,7 @@ def _main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p_run = sub.add_parser("run", help="Full pipeline: validate -> normalize -> categorize -> build dashboard.")
-    p_run.add_argument("input")
+    p_run.add_argument("inputs", nargs="+", metavar="input", help="One or more change-history files (CSV/TSV/JSON). Several files are merged; a change found in more than one file is kept once.")
     p_run.add_argument("--out-dir", default="./out")
     p_run.add_argument("--mapping-file")
     p_run.add_argument("--map", action="append", metavar="FIELD=HEADER", help="Answer a needs_mapping question on the command line: canonical_field=Column header, repeatable (--map timestamp=\"Modified On\" --map old_value=Was). Same effect as --mapping-file, without writing a JSON file.")
@@ -6837,6 +7283,10 @@ def _main():
     p_run.add_argument("--extra-rules", help="JSON file: list of extra structured_rules entries to apply on top of CATEGORY_RULES.")
     p_run.add_argument("--account-name", help="Constant account name/id for every row, for a source with no account column at all (e.g. the Google Ads UI's own single-account Change history CSV export).")
     p_run.add_argument("--currency", help="3-letter ISO code (e.g. TRY) of the account's currency. Shown as the unit on budget/bid/target-CPA amounts. Never guessed: without it, amounts stay unit-less. One code for the whole file — don't pass it for a multi-currency MCC export.")
+    p_run.add_argument("--input-account", action="append", metavar="FILE=NAME", help="Account name for one input (or --metrics) file with no account column, repeatable. --account-name still covers the other files.")
+    p_run.add_argument("--metrics", action="append", metavar="PATH", help="Daily performance CSV (Day, Campaign, optional Ad group/Account, Impressions/Clicks/Cost/Conversions/Conv. value; TR or EN headers), repeatable. Adds before/after windows per change.")
+    p_run.add_argument("--window-days", type=int, default=7, help="Days in each before/after window (default 7).")
+    p_run.add_argument("--conversion-lag-days", type=int, default=7, help="Most recent days of metrics whose conversions may still grow (default 7).")
     p_run.add_argument("--open", action="store_true")
     p_run.add_argument("--encoding", help="Input text encoding (e.g. cp1254, cp1251, utf-16) when auto-detection rejects the file as garbled.")
 
@@ -6881,14 +7331,16 @@ def _main():
                 sys.exit(2)
         try:
             column_map = parse_column_map(args.map)
+            input_accounts = parse_input_accounts(args.input_account, args.inputs + (args.metrics or []))
         except ValueError as e:
             print(json.dumps({"status": "error", "message": str(e)}, indent=2, ensure_ascii=False))
             sys.exit(2)
         result = run_pipeline(
-            args.input, args.out_dir, mapping_file=args.mapping_file, column_map=column_map or None, date_format=args.date_format,
+            args.inputs if len(args.inputs) > 1 else args.inputs[0], args.out_dir, mapping_file=args.mapping_file, column_map=column_map or None, date_format=args.date_format,
             decimal_style=args.decimal_style, tz=args.timezone, mask_users=args.mask_users,
             allow_unknown_categories=args.allow_unknown_categories, force_review=args.force_review,
             extra_rules=extra_rules, open_browser=args.open, account_name=args.account_name, currency=args.currency,
+            input_accounts=input_accounts, metrics=args.metrics, window_days=args.window_days, conversion_lag_days=args.conversion_lag_days,
         )
         _write_run_status(args.out_dir, result)
         print(json.dumps(result, indent=2, ensure_ascii=False))
