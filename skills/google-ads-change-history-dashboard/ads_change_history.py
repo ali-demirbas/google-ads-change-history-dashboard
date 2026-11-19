@@ -2804,6 +2804,12 @@ h2.h2 { font: 300 32px/1.1 var(--serif); letter-spacing: -.02em; color: var(--in
 .flag .ex { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .flag .ex a { font-size: 12.5px; color: var(--text); display: flex; gap: 10px; text-decoration: none; min-width: 0; }
 .flag .ex a:hover span { text-decoration: underline; }
+.flag .ex li.more a { color: var(--link); font-weight: 500; }
+.flag-info { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 14px 18px; border-radius: 16px; background: var(--quiet-bg); color: var(--quiet-fg); font-size: 13px; }
+.flag-info .fi-h { font-weight: 600; color: var(--ink); margin-right: 2px; }
+.flag-info a { color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.flag-info a:hover { text-decoration: underline; }
+.budget .v .sgn { font-family: var(--sans); font-weight: 300; margin-right: .06em; } /* 2026-11-19: the light serif's plus is too small */
 .flag .ex time, .flist time { font-family: var(--mono); font-size: 11.5px; color: var(--muted); min-width: 92px; flex: none; padding-top: 1px; }
 .flag .ex span { min-width: 0; overflow-wrap: anywhere; }
 .count { font: 600 13px var(--sans); padding: 4px 11px; border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -3447,6 +3453,7 @@ en: {
   flags_h:'Worth a look', flags_adjust:'Thresholds are adjustable', flags_sr:'flags',
   flags_nodata:'This report has no rule results; it may have been built with an older version. You can still try your own thresholds on',
   flags_nodata2:'This report has no rule results.', flags_zero:'No rule crossed its threshold in this period.',
+  more_n_one:'+{n} more', more_n:'+{n} more', info_h:'For information',
   who_h:'Who made the changes', who_sub:'Where the changes came from', who_seg:'{label} {p}%',
   other_people_one:'{n} other person', other_people:'{n} other people', auto_google:'Automation and Google',
   budget_h:'Budget movement', budget_sub:'Total change in daily budgets', n_increases_one:'{n} increase', n_increases:'{n} increases',
@@ -3553,7 +3560,7 @@ en: {
   'cov.metrics_conversion_lag':'Conversions are counted on the click date and keep arriving for days, so the most recent days of the after window may still grow.',
   'rs.budget_jump':'Budget, one step', 'rs.budget_cumulative':'Budget, within hours', 'rs.reverted':'Reverted', 'rs.repeat_edit':'Edited again',
   'rs.burst_session':'Many edits at once', 'rs.bid_target_relearn':'Bid target again', 'rs.automation_source':'Automation', 'rs.unknown_user':'Not on the user list',
-  'rs.stale_entity':'Untouched', 'rs.stale_budget':'Budget unchanged', 'rs.off_hours':'Off hours', 'rs.bulk_edit':'Bulk edit',
+  'rs.stale_entity':'Untouched', 'rs.stale_ad_group':'Ad group not touched', 'rs.stale_budget':'Budget unchanged', 'rs.off_hours':'Off hours', 'rs.bulk_edit':'Bulk edit',
   'pk.pct':'{v}%', 'pk.hours':'{v} h', 'pk.minutes':'{v} min', 'pk.days':'{v} days', 'pk.min_count':'{v}+ edits', 'pk.min_events':'{v}+ events',
   'pk.min_changes':'{v}+ changes', 'pk.min_campaigns':'{v}+ campaigns', 'pk.add_remove_minutes':'Added and removed within {v} min',
   'pk.value_days':'Value back within {v} days', 'pk.status_hours':'Status back within {v} h', 'pk.hours_range':'Outside {a}–{b}', 'pk.weekends':'Weekends',
@@ -3587,6 +3594,7 @@ tr: {
   flags_h:'Göz atılacaklar', flags_adjust:'Eşikler ayarlanabilir', flags_sr:'Durum',
   flags_nodata:'Bu raporda kural sonuçları yok; daha eski bir sürümle oluşturulmuş olabilir. Kendi eşiğinle denemek için:',
   flags_nodata2:'Bu raporda kural sonuçları yok.', flags_zero:'Bu dönemde hiçbir kural eşiğini aşmadı.',
+  more_n_one:'+{n} daha', more_n:'+{n} daha', info_h:'Bilgi amaçlı',
   who_h:'Kim değiştirdi', who_sub:'Değişikliklerin kaynağı', who_seg:'{label} yüzde {p}',
   other_people_one:'{n} kişi daha', other_people:'{n} kişi daha', auto_google:'Otomasyon ve Google',
   budget_h:'Bütçe hareketi', budget_sub:'Günlük bütçelerdeki toplam değişim', n_increases_one:'{n} artış', n_increases:'{n} artış',
@@ -3693,7 +3701,7 @@ tr: {
   'cov.metrics_conversion_lag':'Dönüşümler gecikmeli raporlanır, değişiklik sonrasındaki son günlerin sayıları henüz tamamlanmamış olabilir.',
   'rs.budget_jump':'Bütçe tek seferde', 'rs.budget_cumulative':'Bütçe birkaç saatte', 'rs.reverted':'Geri alındı', 'rs.repeat_edit':'Tekrar değişti',
   'rs.burst_session':'Kısa sürede çok işlem', 'rs.bid_target_relearn':'Teklif hedefi yeniden', 'rs.automation_source':'Otomasyon', 'rs.unknown_user':'Listede olmayan kişi',
-  'rs.stale_entity':'Dokunulmamış', 'rs.stale_budget':'Bütçe uzun süredir aynı', 'rs.off_hours':'Mesai dışı', 'rs.bulk_edit':'Toplu düzenleme',
+  'rs.stale_entity':'Dokunulmamış', 'rs.stale_ad_group':'Reklam grubu dokunulmamış', 'rs.stale_budget':'Bütçe uzun süredir aynı', 'rs.off_hours':'Mesai dışı', 'rs.bulk_edit':'Toplu düzenleme',
   'pk.pct':'%{v}', 'pk.hours':'{v} saat', 'pk.minutes':'{v} dk', 'pk.days':'{v} gün', 'pk.min_count':'{v}+ kez', 'pk.min_events':'{v}+ olay',
   'pk.min_changes':'{v}+ değişiklik', 'pk.min_campaigns':'{v}+ kampanya', 'pk.add_remove_minutes':'Ekleme ve kaldırma {v} dk içinde',
   'pk.value_days':'Değer {v} gün içinde geri döndü', 'pk.status_hours':'Durum {v} saat içinde geri döndü', 'pk.hours_range':'{a}–{b} dışı', 'pk.weekends':'Hafta sonu dahil',
@@ -4141,6 +4149,8 @@ function flagById(id){ return flagList().find(f=>String(f.id)===String(id)) || n
 function flagText(f){ return loc(f && f.text); }
 function ruleCfg(rule){ return rulesConfig().find(r=>r.rule===rule) || null; }
 function ruleTitle(rule){ const c = ruleCfg(rule); return (c && loc(c.title)) || (T.en['rs.'+rule]!==undefined ? t('rs.'+rule) : String(rule)); }
+// 2026-11-19: a campaign row's stale tag must say whether the campaign itself or only an ad group in it is untouched.
+function staleCampaignItself(r){ return flagList().some(f=>f.rule==='stale_entity' && f.campaign===r.campaign && (!f.account || !r.account || f.account===r.account) && !(f.fact && f.fact.level==='ad_group')); }
 function ruleShort(rule){ return T.en['rs.'+rule]!==undefined ? t('rs.'+rule) : ruleTitle(rule); }
 function ruleTierOf(rule){ const c = ruleCfg(rule); if(c && c.tier) return c.tier; const f = flagList().find(x=>x.rule===rule); return (f && f.tier) || 'attention'; }
 // Rules with at least one flag, attention tier first, then info; config order inside each tier.
@@ -5005,11 +5015,17 @@ function renderFlagCards(){
   if(!hasFlagData()){ el.innerHTML = `<div class="flag-empty">${escapeHtml(t('flags_nodata'))} <a href="${escapeHtml(buildHash('p3'))}">${escapeHtml(t('tab3'))}</a></div>`; return; }
   const groups = ruleGroups();
   if(!groups.length){ el.innerHTML = `<div class="flag-empty">${escapeHtml(t('flags_zero'))} <a href="${escapeHtml(buildHash('p2', 's2'))}">${escapeHtml(t('thr_h'))}</a></div>`; return; }
-  el.innerHTML = groups.map((g,i)=>{
-    const ex = g.flags.slice(0, 2).map(f=>{ const w = flagWhere(f), x = flagText(f);
-      return `<li><a href="${escapeHtml(flagHref(f))}"><time>${escapeHtml(fmtShort(f.ts_first))}</time><span>${escapeHtml([w, x].filter(Boolean).join(' · '))}</span></a></li>`; }).join('');
-    return `<article class="flag"><span class="no" aria-hidden="true">${String(i+1).padStart(2, '0')}</span><div><h3><a href="${escapeHtml(hrefAll({rule: g.rule}))}">${escapeHtml(g.title)}</a></h3>${g.description ? `<p>${escapeHtml(g.description)}</p>` : ''}${ex ? `<ul class="ex">${ex}</ul>` : ''}</div>${countHtml(g)}</article>`;
+  // 2026-11-19: page 1 is a short executive summary. Attention rules: title,
+  // one example and "+N more"; info rules: one compact line. Full lists on page 2.
+  const attn = groups.filter(g=>g.tier!=='info'), info = groups.filter(g=>g.tier==='info');
+  let html = attn.map((g,i)=>{
+    const f = g.flags[0], more = Math.max(0, (numOrNull(g.hits) ?? g.flags.length) - 1);
+    const ex = f ? `<li><a href="${escapeHtml(flagHref(f))}"><time>${escapeHtml(fmtShort(f.ts_first))}</time><span>${escapeHtml([flagWhere(f), flagText(f)].filter(Boolean).join(' · '))}</span></a></li>` : '';
+    const moreLink = more ? `<li class="more"><a href="${escapeHtml(hrefAll({rule: g.rule}))}">${escapeHtml(tn('more_n', more))}</a></li>` : '';
+    return `<article class="flag"><span class="no" aria-hidden="true">${String(i+1).padStart(2, '0')}</span><div><h3><a href="${escapeHtml(hrefAll({rule: g.rule}))}" title="${escapeHtml(g.description || '')}">${escapeHtml(g.title)}</a></h3>${ex || moreLink ? `<ul class="ex">${ex}${moreLink}</ul>` : ''}</div>${countHtml(g)}</article>`;
   }).join('');
+  if(info.length) html += `<div class="flag-info"><span class="fi-h">${escapeHtml(t('info_h'))}</span>${info.map(g=>`<a href="${escapeHtml(hrefAll({rule: g.rule}))}">${escapeHtml(g.title)} <span class="count info">${escapeHtml(fmtInt(g.hits))}</span></a>`).join('')}</div>`;
+  el.innerHTML = html;
 }
 function renderWho(){
   const es = execSummary();
@@ -5031,8 +5047,8 @@ function renderBudget(){
   const ni = numOrNull(b.increase_count) || 0, nd = numOrNull(b.decrease_count) || 0;
   const el = document.getElementById('budgetBody');
   if(!ni && !nd){ el.innerHTML = `<p class="sub" style="margin:0">${escapeHtml(t('budget_none'))}</p>`; return; }
-  el.innerHTML = `<div class="budget"><div class="b"><div class="v">+${escapeHtml(fmtMoney(inc, b.currency))}</div><div class="l">${escapeHtml(tn('n_increases', ni))}</div></div>`
-    + `<div class="b alt"><div class="v">−${escapeHtml(fmtMoney(dec, b.currency))}</div><div class="l">${escapeHtml(tn('n_decreases', nd))}</div></div></div>`
+  el.innerHTML = `<div class="budget"><div class="b"><div class="v"><span class="sgn">+</span>${escapeHtml(fmtMoney(inc, b.currency))}</div><div class="l">${escapeHtml(tn('n_increases', ni))}</div></div>`
+    + `<div class="b alt"><div class="v"><span class="sgn">−</span>${escapeHtml(fmtMoney(dec, b.currency))}</div><div class="l">${escapeHtml(tn('n_decreases', nd))}</div></div></div>`
     + `<a class="more" href="${escapeHtml(hrefAll({category: 'Budget'}))}">${escapeHtml(t('budget_more'))}</a>`;
 }
 function renderStale(){
@@ -5064,7 +5080,7 @@ function renderCampaignTable(){
   const LIMIT = 25, shown = campShowAll ? rows : rows.slice(0, LIMIT);
   const tags = r=>{ const f = asObj(r.flags_by_rule) || {};
     return Object.keys(f).filter(k=>numOrNull(f[k])>0).sort((a,b)=> (order.indexOf(a)+1||99) - (order.indexOf(b)+1||99))
-      .map(k=>`<span class="tag${ruleTierOf(k)==='info' ? ' info' : ''}">${escapeHtml(ruleShort(k))}${f[k]>1 ? ' ×'+escapeHtml(fmtInt(f[k])) : ''}</span>`).join(''); };
+      .map(k=>`<span class="tag${ruleTierOf(k)==='info' ? ' info' : ''}">${escapeHtml(k==='stale_entity' && !staleCampaignItself(r) ? t('rs.stale_ad_group') : ruleShort(k))}${f[k]>1 ? ' ×'+escapeHtml(fmtInt(f[k])) : ''}</span>`).join(''); };
   const ago = r=>{ const d = numOrNull(r.days_since); return d==null ? '—' : d===0 ? t('days_ago_0') : tn('days_ago', d); };
   const el = document.getElementById('campTableWrap');
   el.innerHTML = rows.length ? `<table><thead><tr>${cols.map(([k,l,cl])=>`<th${cl ? ` class="${cl}"` : ''}${k===key ? ` aria-sort="${dir<0 ? 'descending' : 'ascending'}"` : ''}><button type="button" class="th-btn" data-ck="${k}">${escapeHtml(l)}</button></th>`).join('')}</tr></thead><tbody>${
@@ -7885,10 +7901,11 @@ check('page 1 renders from the new fields: headline, stats with the dark card, r
   assert.ok(html('statCards').includes('stat focus') && html('statCards').includes('Kişi · 1 otomasyon'), html('statCards'));
   const fc = html('flagCards');
   assert.ok(fc.indexOf('budget_jump') < fc.indexOf('stale_entity') && fc.includes('href="#tum?kural=budget_jump"') && fc.includes('href="#tum?durum=F1"'), fc);
-  assert.ok(fc.includes('href="#tum?hesap=Acc%20A&amp;kampanya=Camp%20Beta"'), 'a flag with no change ids links to its campaign');
+  // 2026-11-19: page 1 shows info rules as one compact line; the per-flag campaign link lives in flagHref (used on page 2).
+  assert.ok(flagHref(flagList().find(f=>f.rule==='stale_entity')).includes('kampanya=Camp%20Beta'), 'a flag with no change ids links to its campaign');
   assert.ok(fc.includes('class="count info"') && fc.includes('04.08 14:21'), fc);
   assert.ok(html('whoBody').includes('Otomasyon ve Google') && html('whoBody').includes('role="img"'));
-  assert.ok(html('budgetBody').includes('+₺395') && html('budgetBody').includes('−₺50'), html('budgetBody'));
+  const btxt = html('budgetBody').replace(/<[^>]+>/g, ''); assert.ok(btxt.includes('+₺395') && btxt.includes('−₺50'), btxt);
   assert.ok(html('staleBody').includes('66 gün'));
 });
 check('page 1 and 2 degrade on an old report: no dark card, a plain notice, tables from the rows', ()=>{
@@ -7897,7 +7914,7 @@ check('page 1 and 2 degrade on an old report: no dark card, a plain notice, tabl
   assert.ok(html('headline').includes('<em>4</em> changes in this period.'), html('headline'));
   assert.ok(!html('statCards').includes('focus') && html('statCards').includes('Ad groups changed'));
   assert.ok(html('flagCards').includes('no rule results'));
-  assert.ok(html('budgetBody').includes('+₺395'), html('budgetBody'));
+  assert.ok(html('budgetBody').replace(/<[^>]+>/g, '').includes('+₺395'), html('budgetBody'));
   assert.ok(html('campTableWrap').includes('Camp Alpha') && html('campTableWrap').includes('66 days ago'), html('campTableWrap'));
   assert.ok(html('threshTable').includes('No rule settings'));
 });
