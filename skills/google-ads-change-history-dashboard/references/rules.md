@@ -37,16 +37,16 @@ with the same campaign name never mix. Local time is the export's time in the
 |---|---|---|---|---|
 | 1 | `budget_jump` | attention | `pct` 50 | One "Budget changed" statement with numeric old and new values moves the budget by \|Δ%\| ≥ `pct`. One flag per statement. |
 | 2 | `budget_cumulative` | attention | `pct` 50, `hours` 24 | Two or more budget changes on the same campaign within `hours` move it by \|(last new − first old) / first old\| ≥ `pct`, and no single step was already flagged by `budget_jump`. One flag per window. |
-| 3 | `reverted` | attention | `add_remove_minutes` 60, `value_days` 7, `status_hours` 24 | (a) The same item (keyword text, asset ID, sitelink text, ad ID; same campaign and ad group) is added and then removed within `add_remove_minutes`. (b) A numeric setting (budget, target CPA/ROAS, bid limit) on the same campaign returns to an earlier value within `value_days`. (c) The same entity goes paused → enabled or enabled → paused and back within `status_hours`. |
-| 4 | `repeat_edit` | attention | `minutes` 10, `min_count` 2 | The same person edits the same subcategory on the same campaign (and ad group, when there is one) `min_count` or more times within `minutes`. Setup sessions are left out. |
+| 3 | `reverted` | attention | `add_remove_minutes` 60, `value_days` 7, `status_hours` 24 | (a) The same item (keyword text, asset ID, sitelink text, ad ID; same campaign and ad group) is added and then removed within `add_remove_minutes`; one flag per add/remove pair of saves. (b) A numeric setting (budget, target CPA/ROAS, bid limit) on the same campaign returns to an earlier value within `value_days`. (c) The same entity goes paused → enabled or enabled → paused and back within `status_hours`. |
+| 4 | `repeat_edit` | attention | `minutes` 10, `min_count` 2 | The same person edits the same item `min_count` or more times within `minutes`, on the same campaign (and ad group, when there is one) and subcategory, each edit starting from the value the previous one left when both are known (a chain such as budget ₺695 → ₺750 → ₺800). The item is the campaign's budget or bid target, an API resource ID, an ID line in the cell (an asset ID), or the target named before ": " on a detail line (a schedule slot, a device, a keyword); a statement with no such item never counts. Only edits (UPDATE) count, each save once; additions, removals, two different slots or two different ads are not a repeat. Setup sessions are left out. |
 | 5 | `burst_session` | attention | `minutes` 3, `min_events` 3 | The same person makes `min_events` or more **events** (one cell of the export, or one `event_id`; not statements) on the same campaign within `minutes`. Setup sessions are left out. |
 | 6 | `bid_target_relearn` | attention | `days` 7 | Target CPA, target ROAS or the bid strategy changes on a campaign within `days` of the previous such change. |
 | 7 | `automation_source` | attention | none | A change made by automation (scripts, rules, auto-applied recommendations, API clients), or by a named actor whose type is unknown, such as a Google rep acting "with user permission". One flag per actor, campaign and local day. |
 | 8 | `unknown_user` | attention | needs `--known-users` | A person not on the user's list made changes. One flag per person, with the number of changes and campaigns. Off without the list. |
-| 9 | `stale_entity` | info | `days` 30 | A campaign (and an ad group, when the export has them) whose last change is `days` or more before the data end. With `--metrics`, also see below. |
-| 10 | `stale_budget` | info | `days` 60 | A campaign whose last budget change is `days` or more before the data end, or that has no budget change in the export. With `--metrics`, only campaigns active in the metrics. |
-| 11 | `off_hours` | info | `start` "20:00", `end` "08:00", `weekends` true | An event at local time from `start` until `end`, or on Saturday/Sunday. 08:00 sharp is working time; 20:00 sharp is not. Off when the time zone is unknown. |
-| 12 | `bulk_edit` | info | `minutes` 10, `min_changes` 20, `min_campaigns` 5 | One person makes `min_changes` or more statements across `min_campaigns` or more campaigns within `minutes`. |
+| 9 | `stale_entity` | info | `days` 30 | A campaign (and an ad group, when the export has them) whose last change is `days` or more before the data end. An ad group whose campaign is already listed is not listed again. With `--metrics`, also see below. |
+| 10 | `stale_budget` | info | `days` 60 | A campaign whose last budget change is `days` or more before the data end, or that has no budget change in the export when the export's first and last records are at least `days` apart (a shorter export cannot show it). With `--metrics`, only campaigns active in the metrics. |
+| 11 | `off_hours` | info | `start` "20:00", `end` "08:00", `weekends` true | An event by a person (not automation) at local time from `start` until `end`, or on Saturday/Sunday. 08:00 sharp is working time; 20:00 sharp is not. One flag per event. Off when the time zone is unknown. |
+| 12 | `bulk_edit` | info | `minutes` 10, `min_changes` 20, `min_campaigns` 5 | One person (not automation) makes `min_changes` or more statements across `min_campaigns` or more campaigns within `minutes`. |
 
 The data end is the newest change in the export. Each flag carries
 `change_ids` (the rows involved), `event_ids`, the account, campaign, ad group
@@ -81,7 +81,12 @@ python3 ads_change_history.py run export.csv ... --rules-config rules.json
 ```
 
 A rule left out keeps its defaults; a parameter left out keeps its default.
-`"enabled": false` turns a rule off. The parameters actually used, the number
+`"enabled": false` turns a rule off. Counts (`min_count`, `min_events`,
+`min_changes`, `min_campaigns`) are positive whole numbers, other numbers are
+positive, `start`/`end` are times like `"20:00"` and `weekends` is true or
+false. An unknown rule, an unknown setting, a wrong value or a file that is
+not valid JSON stops the run with `status: "error"` and a message that names
+it. The parameters actually used, the number
 of hits and the reason a rule is off are written to `rules_config` in
 `change_history.json` and shown on the dashboard's details page next to the
 flags, so every number in the report can be traced to its threshold.
@@ -102,7 +107,8 @@ ayse@example.test
 Mert Example
 ```
 
-One e-mail or name per line, matched without regard to case. With the list,
+One e-mail or name per line, matched without regard to case; `#` starts a
+comment and blank lines are skipped. With the list,
 `unknown_user` flags each person who made changes and is not on it;
 automation and Google actors are covered by `automation_source` instead.
 Without the list the rule is off and `rules_config` says why. Ask the user for
@@ -111,8 +117,9 @@ outside any repository (see `privacy.md`).
 
 ## `--work-hours` and time zones
 
-`--work-hours 08-20` is a shortcut for `off_hours` `end` "08:00" and `start`
-"20:00". Weekends are counted unless `{"off_hours": {"weekends": false}}` is
+`--work-hours 08-20` (or `08:30-19:00`) is a shortcut for `off_hours` `end`
+"08:00" and `start` "20:00", and wins over `start`/`end` in
+`--rules-config`. Weekends are counted unless `{"off_hours": {"weekends": false}}` is
 given in `--rules-config`. UI exports carry no time zone: without
 `--timezone` the rule is off, with a reason, because the hour of a change is
 not known.
@@ -150,4 +157,6 @@ not known.
   changes, with the thresholds used; flag tags in the campaigns table.
 - Dashboard page 3 (All changes): a *Worth a look* filter by rule and a flags
   column.
-- `digest.md`: a *Worth a look* section with the same facts.
+- `digest.md`: a *Worth a look* section ("Göz atılacaklar" in Turkish): one
+  heading per rule that fired, with its threshold and count, and one line per
+  flag (date, campaign, fact).

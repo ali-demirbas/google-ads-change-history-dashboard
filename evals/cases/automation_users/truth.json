@@ -65,6 +65,19 @@
     "count": 0
    },
    {
+    "rule": "stale_budget",
+    "count": 0
+   },
+   {
+    "rule": "off_hours",
+    "unit": "events",
+    "count": 2,
+    "events": [
+     4,
+     5
+    ]
+   },
+   {
     "rule": "bulk_edit",
     "count": 0
    }

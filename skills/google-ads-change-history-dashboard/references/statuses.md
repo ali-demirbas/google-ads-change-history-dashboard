@@ -39,7 +39,9 @@ several inputs, `file` says which file the question is about.
   covers, each with an example. A rule from the user goes in a JSON list for
   `--extra-rules`; `--allow-unknown-categories` files them under "Other".
 - `error`: the input or a flag is wrong; the message says what. An encoding
-  error is answered with `--encoding`.
+  error is answered with `--encoding`. An unreadable `--known-users` or
+  `--rules-config` file, an unknown rule or setting in `--rules-config`, or a
+  `--work-hours` value that is not like `08-20` is also an `error`.
 - `internal_error` (exit 3): a bug in the tool. Say so; do not retry with
   other flags.
 

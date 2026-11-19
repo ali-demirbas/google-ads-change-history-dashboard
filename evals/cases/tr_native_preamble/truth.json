@@ -22,6 +22,10 @@
     "count": 0
    },
    {
+    "rule": "repeat_edit",
+    "count": 0
+   },
+   {
     "rule": "burst_session",
     "count": 0
    },

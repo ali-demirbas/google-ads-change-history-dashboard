@@ -47,6 +47,10 @@
     "count": 0
    },
    {
+    "rule": "stale_budget",
+    "count": 0
+   },
+   {
     "rule": "off_hours",
     "unit": "events",
     "count": 0,

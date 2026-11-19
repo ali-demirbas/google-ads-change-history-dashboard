@@ -22,6 +22,10 @@
     "count": 0
    },
    {
+    "rule": "repeat_edit",
+    "count": 0
+   },
+   {
     "rule": "burst_session",
     "count": 1,
     "match": [
@@ -54,6 +58,10 @@
    },
    {
     "rule": "stale_entity",
+    "count": 0
+   },
+   {
+    "rule": "stale_budget",
     "count": 0
    },
    {

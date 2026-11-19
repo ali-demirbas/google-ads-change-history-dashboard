@@ -216,11 +216,11 @@
     "events": 49
    },
    "budget": {
-    "increase_total": 1605,
-    "increase_count": 7,
+    "increase_total": 1710,
+    "increase_count": 9,
     "decrease_total": 1290,
     "decrease_count": 4,
-    "net": 315
+    "net": 420
    }
   }
  },
@@ -628,11 +628,12 @@
    "label": "e23",
    "statements": [
     {
-     "head": "1 teklif ayarlama değişikliği",
-     "category": "Bidding",
-     "subcategory": "Bid modifier changed",
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
      "operation": "UPDATE",
-     "new": 30.0
+     "old": 750.0,
+     "new": 800.0
     }
    ]
   },
@@ -641,11 +642,12 @@
    "label": "e22",
    "statements": [
     {
-     "head": "1 teklif ayarlama değişikliği",
-     "category": "Bidding",
-     "subcategory": "Bid modifier changed",
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
      "operation": "UPDATE",
-     "new": 20.0
+     "old": 695.0,
+     "new": 750.0
     }
    ]
   },

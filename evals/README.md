@@ -68,7 +68,7 @@ match the parameters used and `expected.rules.disabled` rules are off with a rea
 Truth is written by hand from the rule definitions in
 `skills/google-ads-change-history-dashboard/references/rules.md`, never copied from the
 skill's output. Where a definition leaves a case open, the rule is left out of that
-case's truth and the reason is noted next to the case below.
+case's truth until the definition is settled.
 
 ## Case layout
 
@@ -95,14 +95,14 @@ All names are invented.
 
 | Case | Covers | Flags in the truth |
 |---|---|---|
-| anomaly_rules | Turkish UI export (2-line preamble, Europe/Istanbul) built for the 12 rules: each fires a known number of times, near-misses must not (a campaign setup burst, a 49% budget step, an add/remove 65 minutes apart, a budget back to its old value after 8 days, a target change 9 days after the last, a weekday 08:00 change, a 2-event burst); `--known-users` (mixed case, a comment, a blank line) and `--rules-config` (`stale_entity` 45 days, `bulk_edit` 10 changes) | all 12 rules; budget movement totals |
-| tr_native_preamble | Turkish UI export: preamble, multi-statement cells, Turkish month names, TL amounts, bid adjustments, asset status, Hedef EBM, a created campaign with budget and Hedef EBM lines | 11 rules (stale campaigns and an ad group, stale budgets, 4 weekend events); not `repeat_edit`: one cell holds three bid adjustments, and whether that is three edits is open |
-| en_native_preamble | English UI export: AM/PM dates, budgets, target CPA, assets, keywords, a created campaign with budget and Target CPA lines | 11 rules (2 Saturday events); not `stale_budget`: a 29-day export cannot show 60 days |
-| bulk_same_second | one bulk edit across ad groups in one second, plus one exact duplicate row that must be kept | 10 rules (one burst); not `repeat_edit` (the only repeat is the duplicate keyword row) nor `stale_budget` |
-| automation_users | auto-applied recommendations, rules, scripts, an API service account, two people | 10 rules (4 automation flags); not `off_hours` (automation at night: open whether it counts) nor `stale_budget` |
-| multi_file_mcc | three files, two accounts, two rows exported twice | 11 rules, none firing: the same campaign name in two accounts is two campaigns; not `stale_budget` |
+| anomaly_rules | Turkish UI export (2-line preamble, Europe/Istanbul) built for the 12 rules: each fires a known number of times, near-misses must not (a campaign setup burst with repeated keyword adds, a 49% budget step, an add/remove 65 minutes apart, a budget back to its old value after 8 days, a target change 9 days after the last, a weekday 08:00 change, a 2-event burst, a campaign 39 days untouched under a 45-day threshold); `--known-users` (mixed case, a comment, a blank line) and `--rules-config` (`stale_entity` 45 days, `bulk_edit` 10 changes) | all 12 rules; budget movement totals |
+| tr_native_preamble | Turkish UI export: preamble, multi-statement cells, Turkish month names, TL amounts, bid adjustments, asset status, Hedef EBM, a created campaign with budget and Hedef EBM lines | all 12 (3 stale campaigns and the stale ad group inside one of them, 3 stale budgets, 4 weekend events; three bid-adjustment slots in one save are not a repeat) |
+| en_native_preamble | English UI export: AM/PM dates, budgets, target CPA, assets, keywords, a created campaign with budget and Target CPA lines | all 12 (2 Saturday events; no `stale_budget`: a 29-day export cannot show 60 days) |
+| bulk_same_second | one bulk edit across ad groups in one second, plus one exact duplicate row that must be kept | all 12 (one burst; the duplicate keyword row is an addition, not a repeat edit) |
+| automation_users | auto-applied recommendations, rules, scripts, an API service account, two people | all 12 (4 automation flags; `off_hours` counts the two weekend changes by people, not the automation at night) |
+| multi_file_mcc | three files, two accounts, two rows exported twice | all 12, none firing: the same campaign name in two accounts is two campaigns |
 | metrics_before_after | daily campaign metrics, before/after sums worked out by hand | all 12 rules, none firing (metrics basis included) |
-| unsupported_language | Spanish export: every statement must be Other (gated at 1.0) plus a data_quality warning | 11 rules (one Saturday event); not `stale_budget` |
+| unsupported_language | Spanish export: every statement must be Other (gated at 1.0) plus a data_quality warning | all 12 (one Saturday event) |
 
 ## Private cases
 
@@ -113,7 +113,10 @@ counts, not the mismatched text.
 
 The private case built from the real Turkish UI export should carry these flag counts,
 measured on that file with the default thresholds (no `--known-users`, no
-`--rules-config`): `budget_jump` 5, `burst_session` 3 (6 windows without the setup
-exclusion, 3 of them campaign setups), `bid_target_relearn` 1, `off_hours` 4 events,
-`stale_entity` 1 (30 days), `automation_source` 0. Write them as `expected.flags` in that
-case's `truth.json` in the private folder, with `count` only (no names).
+`--rules-config`): `budget_jump` 5, `budget_cumulative` 1, `reverted` 8, `repeat_edit` 1,
+`burst_session` 3 (6 windows without the setup exclusion, 3 of them campaign setups),
+`bid_target_relearn` 1, `automation_source` 0, `stale_entity` 2 (1 campaign, 1 ad group,
+30 days), `stale_budget` 2, `off_hours` 4 events, `bulk_edit` 1, and `unknown_user` off
+(`"rules": {"disabled": ["unknown_user"]}`). Write them as `expected.flags` in that case's
+`truth.json` in the private folder, with `count` (and `unit: "events"` for `off_hours`)
+only, no names.

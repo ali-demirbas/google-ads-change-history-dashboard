@@ -83,7 +83,7 @@ is Markdown tables, ready to paste.
 | `--lang auto\|tr\|en` | auto | Language of the dashboard and `digest.md`. `auto` is Turkish for a Turkish export, else English. Turkish shows dates as dd.mm.yyyy HH:MM, Turkish number formats and Turkish category names; the data keeps the English values. |
 | `--rules-config FILE.json` | none | Thresholds for the flag rules, `{rule: {"enabled": …, param: value}}`; only the keys given change. See `rules.md`. |
 | `--known-users FILE` | none | One e-mail or name per line (case-insensitive, `#` comments). Turns on `unknown_user`. |
-| `--work-hours 08-20` | 08-20 | Working hours for `off_hours`: start-end in local time. Needs `--timezone` for UI exports. |
+| `--work-hours 08-20` | 08-20 | Working hours for `off_hours`, start-end in local time (`08:30-19:00` also works); wins over `off_hours` start/end in `--rules-config`. Needs `--timezone` for UI exports. |
 
 ## `query`
 
