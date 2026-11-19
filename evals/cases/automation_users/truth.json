@@ -4,7 +4,89 @@
  "expected": {
   "status": "ok",
   "rows_in_report": 6,
-  "dropped": 0
+  "dropped": 0,
+  "flags": [
+   {
+    "rule": "budget_jump",
+    "count": 0
+   },
+   {
+    "rule": "budget_cumulative",
+    "count": 0
+   },
+   {
+    "rule": "reverted",
+    "count": 0
+   },
+   {
+    "rule": "repeat_edit",
+    "count": 0
+   },
+   {
+    "rule": "burst_session",
+    "count": 0
+   },
+   {
+    "rule": "bid_target_relearn",
+    "count": 0
+   },
+   {
+    "rule": "automation_source",
+    "count": 4,
+    "match": [
+     {
+      "changes": [
+       "0.0"
+      ]
+     },
+     {
+      "changes": [
+       "1.0"
+      ]
+     },
+     {
+      "changes": [
+       "2.0"
+      ]
+     },
+     {
+      "changes": [
+       "3.0"
+      ]
+     }
+    ]
+   },
+   {
+    "rule": "unknown_user",
+    "count": 0
+   },
+   {
+    "rule": "stale_entity",
+    "count": 0
+   },
+   {
+    "rule": "stale_budget",
+    "count": 0
+   },
+   {
+    "rule": "off_hours",
+    "unit": "events",
+    "count": 2,
+    "events": [
+     4,
+     5
+    ]
+   },
+   {
+    "rule": "bulk_edit",
+    "count": 0
+   }
+  ],
+  "rules": {
+   "disabled": [
+    "unknown_user"
+   ]
+  }
  },
  "thresholds": {
   "category_accuracy": 1.0,

@@ -1,6 +1,6 @@
 ---
 name: google-ads-change-history-dashboard
-description: Turns Google Ads change-history exports into an offline dashboard and a short Markdown digest that state who changed what, when, in which account, campaign and ad group, with old and new values and a category. Reads UI "Change history" CSV/TSV downloads in English or Turkish, the legacy Turkish summary sheet and flattened ChangeEvent JSON, several files or accounts at once, and optional daily performance CSVs for before/after numbers. States facts only and never judges whether a change was good or risky. Use when the user asks "who changed X", "what changed in the last 30 days", "show me the change history", "which campaigns haven't been touched", "değişiklik geçmişi", "kim ne değiştirdi", "son 30 günde ne değişti", "hangi kampanyaya dokunulmadı", "değişiklik öncesi ve sonrası", or hands over such an export and wants a report. Not for XLSX files or Google Sheets URLs (export to CSV first).
+description: Turns Google Ads change-history exports into an offline dashboard and a short Markdown digest that state who changed what, when, in which account, campaign and ad group, with old and new values and a category. Reads UI "Change history" CSV/TSV downloads in English or Turkish, the legacy Turkish summary sheet and flattened ChangeEvent JSON, several files or accounts at once, and optional daily performance CSVs for before/after numbers. Flags changes worth a look (a large budget step, a change undone soon after, edits outside working hours, a person not on the team list, and more) as facts against thresholds the user can set, never as good or bad. Use when the user asks "who changed X", "what changed in the last 30 days", "show me the change history", "which campaigns haven't been touched", "what should I look at", "değişiklik geçmişi", "kim ne değiştirdi", "son 30 günde ne değişti", "hangi kampanyaya dokunulmadı", "göz atılacak değişiklikler", "mesai dışında kim değiştirdi", "değişiklik öncesi ve sonrası", or hands over such an export and wants a report. Not for XLSX files or Google Sheets URLs (export to CSV first).
 ---
 
 # Google Ads change history
@@ -13,12 +13,15 @@ the one a step points to).
 
 ## Hard rules
 
-- **Never judge.** Say what changed, by whom, when, and the numbers. No
-  good/bad, improved/worsened, risky, healthy, scores, verdicts or colour
-  meaning, in chat or in any file. A campaign missing from the export is
-  "not in this export", never "untouched" or "neglected".
+- **Facts, never verdicts.** Say what changed, by whom, when, and the
+  numbers. A flag is a fact that crossed a threshold the user can set: give
+  the fact and the rule that fired, and call it "worth a look" ("göz
+  atılacak"). Never good/bad, improved/worsened, error, wrong, risky,
+  anomaly, healthy, scores or colour meaning, in chat or in any file. A
+  campaign missing from the export is "not in this export", never
+  "untouched" or "neglected".
 - **Never guess past a stop.** A `needs_*` status is a question for the user.
-  Flags like `--force-review` or `--allow-unknown-categories` encode an answer
+  Options like `--force-review` or `--allow-unknown-categories` encode an answer
   the user gave, never a way around the question.
 - **Privacy.** The export is the customer's data: never copy its names,
   e-mails, IDs or campaign names into a repo, a test or a public file.
@@ -34,7 +37,9 @@ the one a step points to).
    knows and has not given: the account name per file (`--account-name` for
    all, `--input-account FILE=NAME` per file), the time zone of the times
    (`--timezone Europe/Istanbul`), and the currency if they want units
-   (`--currency TRY`). Do not invent any of them.
+   (`--currency TRY`). Do not invent any of them. If they want people outside
+   their team flagged, ask for the list (`--known-users team.txt`, one e-mail
+   or name per line); never build it from the export.
 3. **Run:**
    ```bash
    python3 "${CLAUDE_SKILL_DIR}/ads_change_history.py" run export1.csv export2.csv \
@@ -42,8 +47,10 @@ the one a step points to).
      --timezone Europe/Istanbul --out-dir ./out --open
    ```
    With performance data add `--metrics daily.csv` (repeatable),
-   `--window-days 7` and `--conversion-lag-days 7`. All flags:
-   `references/cli.md`.
+   `--window-days 7` and `--conversion-lag-days 7`. Other thresholds:
+   `--rules-config rules.json`, `--work-hours 08-20`; language: `--lang
+   tr|en` (default: the export's). All options: `references/cli.md`; the
+   rules: `references/rules.md`.
 4. **Read the JSON `status`.** Exit 0 is `ok`; exit 2 is a question or an
    input error; exit 3 is a bug in the tool (say so, do not retry with other
    flags). For any `needs_*` status: **MUST stop, ask the user the one
@@ -53,10 +60,12 @@ the one a step points to).
 5. **On `ok`, read `data_quality` before reporting.** State every non-zero
    count with its number in one or two sentences ("3 of 1,200 rows had a date
    that could not be read and are not in the report"). Do not call it a
-   problem or a pass. Also read `meta.coverage_notes` and repeat them.
+   problem or a pass. Also read `meta.coverage_notes` and repeat them, and
+   name each rule in `rules_config` that was off, with its reason.
 6. **Report.** Point to `dashboard.html` (or the `out` path if `opened` is
    false) and paste `digest.md` when the user wants a summary for Slack or
-   e-mail. Answer follow-up questions with `query`, not by eyeballing rows:
+   e-mail. Give the flags as facts with their rule ("Budget ₺300 → ₺695,
+   +132%; rule: one-step change of 50% or more"), attention tier first. Answer follow-up questions with `query`, not by eyeballing rows:
    ```bash
    python3 "${CLAUDE_SKILL_DIR}/ads_change_history.py" query ./out/changes.jsonl --user "User A" --since 7d
    ```
@@ -90,9 +99,11 @@ Italian and Dutch exports have headers and dates read, most rows land in
 
 ## Outputs (in `--out-dir`)
 
-`dashboard.html` (offline, one file), `digest.md` (Markdown tables, Turkish
-for a Turkish export unless `--digest-lang en`), `changes.jsonl`,
-`change_history.json`, `coverage.txt`, `run_status.json`, and
+`dashboard.html` (offline, one file, three pages: Summary with the
+*Worth a look* list, Details, All changes), `digest.md` (Markdown tables
+with a *Worth a look* section, Turkish for a Turkish export unless `--lang
+en`), `changes.jsonl`, `change_history.json` (with `flags`, `rules_config`,
+`exec_summary`, `campaign_table`), `coverage.txt`, `run_status.json`, and
 `unknown-fields.json` when it applies. A run that stops clears the previous
 outputs first. Every output carries the same limits: only what is in the
 given files, ChangeEvent can miss entries the UI shows and lag by about three

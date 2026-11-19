@@ -7,6 +7,9 @@ label on every later run) and scrubs e-mail-shaped text and the known
 identities from every string field of every output file, `digest.md`, summary
 text and old/new values included.
 
+The same labels replace people in `flags[].user` and in the summary's
+people list, so a masked report shows `User A` in a flag, never an e-mail.
+
 It does **not** mask account, campaign or ad group names, IDs or resource
 paths. If the user wants to share a report without revealing whose account
 it is, say plainly that this flag does not do that.
@@ -19,6 +22,13 @@ a per-user data folder, `$XDG_DATA_HOME` or
 They hold real identities: never share or commit them. Private evaluation
 cases live under `evals-private/` in the same folder.
 
+## `--known-users`
+
+The team list for the `unknown_user` rule names real people. Keep it outside
+any repository and pass its path; the tool reads it and never copies it into
+the outputs. Only the people it flags (people *not* on the list) appear in
+`flags`, masked when `--mask-users` is on.
+
 ## Rules for working with real exports
 
 - Real exports are a customer's data. Never copy their names, e-mails, URLs,
@@ -27,6 +37,7 @@ cases live under `evals-private/` in the same folder.
 - Only synthetic data with invented names goes into this public repo.
 - `needs_mapping` sample values shown in chat have e-mail addresses
   redacted; the rest of the sample is real data, so keep it in the chat.
-- The skill never calls the network. Only the optional
+- The skill never calls the network, and the dashboard makes no network
+  requests: its fonts and scripts are embedded. Only the optional
   `tools/fetch_live_data.py` talks to the Google Ads API, with credentials
   from environment variables only, and writes its file with mode 0600.

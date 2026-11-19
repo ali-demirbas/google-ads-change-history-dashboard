@@ -7,6 +7,106 @@
   "dropped": 0,
   "data_quality": {
    "possible_duplicate_rows_kept": 0
+  },
+  "flags": [
+   {
+    "rule": "budget_jump",
+    "count": 0
+   },
+   {
+    "rule": "budget_cumulative",
+    "count": 0
+   },
+   {
+    "rule": "reverted",
+    "count": 0
+   },
+   {
+    "rule": "repeat_edit",
+    "count": 0
+   },
+   {
+    "rule": "burst_session",
+    "count": 0
+   },
+   {
+    "rule": "bid_target_relearn",
+    "count": 0
+   },
+   {
+    "rule": "automation_source",
+    "count": 0
+   },
+   {
+    "rule": "unknown_user",
+    "count": 0
+   },
+   {
+    "rule": "stale_entity",
+    "count": 4,
+    "match": [
+     {
+      "campaign": "Demo - Display - Yeniden Pazarlama",
+      "ad_group": null
+     },
+     {
+      "campaign": "Demo - Jenerik - Konut",
+      "ad_group": null
+     },
+     {
+      "campaign": "Demo - Yeni - Arama",
+      "ad_group": null
+     },
+     {
+      "campaign": "Demo - Jenerik - Konut",
+      "ad_group": "Konut Genel"
+     }
+    ]
+   },
+   {
+    "rule": "stale_budget",
+    "count": 3,
+    "match": [
+     {
+      "campaign": "Demo - Display - Yeniden Pazarlama"
+     },
+     {
+      "campaign": "Demo - Jenerik - Konut"
+     },
+     {
+      "campaign": "Demo - Yeni - Arama"
+     }
+    ]
+   },
+   {
+    "rule": "off_hours",
+    "unit": "events",
+    "count": 4,
+    "events": [
+     1,
+     2,
+     6,
+     7
+    ]
+   },
+   {
+    "rule": "bulk_edit",
+    "count": 0
+   }
+  ],
+  "rules": {
+   "disabled": [
+    "unknown_user"
+   ]
+  },
+  "exec_summary": {
+   "budget": {
+    "increase_total": 450,
+    "increase_count": 2,
+    "decrease_total": 150,
+    "decrease_count": 1,
+    "net": 300
+   }
   }
  },
  "thresholds": {

@@ -2,7 +2,7 @@
 
 ## The skill is one file
 
-`skills/google-ads-change-history-dashboard/ads_change_history.py` is the entire skill — canonical schema, header-alias table, category rules, the pipeline (validate → normalize → categorize → aggregate), the dashboard HTML/CSS/JS template, built-in synthetic sample fixtures, and the self-test suite, all in one file, by design. `SKILL.md` in the same folder is the short workflow Claude follows, with details in `references/*.md` (keep them in step with the code); the module docstring at the top of `ads_change_history.py` is the actual spec. Behaviour changes that affect categories or values should also pass `python3 evals/run_evals.py`.
+`skills/google-ads-change-history-dashboard/ads_change_history.py` is the entire skill — canonical schema, header-alias table, category rules, the pipeline (validate → normalize → categorize → aggregate), the dashboard HTML/CSS/JS template, built-in synthetic sample fixtures, and the self-test suite, all in one file, by design. `SKILL.md` in the same folder is the short workflow Claude follows, with details in `references/*.md` (keep them in step with the code); the module docstring at the top of `ads_change_history.py` is the actual spec. Behaviour changes that affect categories, values or flags should also pass `python3 evals/run_evals.py`.
 
 Don't split it into multiple files or add a build step — that's a deliberate constraint, not an oversight.
 
@@ -35,9 +35,13 @@ If the phrasing is for a text-only source (no separate `field_name` column, e.g.
 
 The skill stops and returns a structured `needs_*` status rather than guessing at a genuine ambiguity (unrecognized header, ambiguous date format, ambiguous decimal separator, unrecognized category combination). Don't add a new "just default to X" branch — if something is genuinely ambiguous, it should stop and ask, matching the existing pattern.
 
-## The "never judge" rule
+## The wording rule
 
-V1 is strictly factual — it states "Campaign X hasn't changed in 23 days," never "the agency is neglecting Campaign X." No scores, no grades, no red/green good-bad framing on top of a change. A PR that adds evaluative output is out of scope for this version; open an issue to discuss it as a deliberate V2 instead.
+The report states facts. It says "Campaign X has had no change for 45 days," never "the agency is neglecting Campaign X." A flag is a fact measured against a threshold the user can set: it always shows the fact (old/new, %, count, minutes, days) and the rule that fired, and it is called "worth a look" ("göz atılacak"). Never "good", "bad", "wrong", "risky", "error", "anomaly" (or "hata", "kötü", "anomali"), no scores or grades, no red/green. The eval set checks the dashboard text, `digest.md` and the generated flag and summary sentences for these words.
+
+## Adding or changing a flag rule
+
+The rule ids, tiers and default parameters are listed in `references/rules.md`; keep that file in step with the code. A rule needs a default that `--rules-config` can override, a Turkish and an English title, description and fact sentence, a reason when it cannot run, a self-test case, and an eval case whose `flags` truth is written by hand from the rule's definition (including near-misses that must not fire). Lowering an eval threshold to make a rule pass is not a fix.
 
 ## No real data, ever
 

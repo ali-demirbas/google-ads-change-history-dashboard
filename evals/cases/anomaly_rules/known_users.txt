@@ -1,0 +1,4 @@
+# Ekip (uydurma adresler). Büyük/küçük harf fark etmez.
+Zeynep.Arslan@ornek.test
+
+can.demir@ORNEK.test

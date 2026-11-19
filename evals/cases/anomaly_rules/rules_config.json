@@ -1,0 +1,10 @@
+{
+ "stale_entity": {
+  "enabled": true,
+  "days": 45
+ },
+ "bulk_edit": {
+  "enabled": true,
+  "min_changes": 10
+ }
+}

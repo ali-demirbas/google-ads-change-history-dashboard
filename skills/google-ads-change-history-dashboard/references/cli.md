@@ -8,6 +8,7 @@ Run from this skill's folder, or prefix the script with `${CLAUDE_SKILL_DIR}/`.
 - `run`: facts only the user knows
 - `run`: answers to a stop
 - `run`: performance data and the digest
+- `run`: flags and language
 - `query`
 - `self-test`
 - Exit codes
@@ -66,13 +67,23 @@ python3 ads_change_history.py run <input> [<input> ...] --out-dir ./out [--open]
 | `--metrics PATH` (repeatable) | none | Daily performance CSV(s) for before/after numbers. See `metrics.md`. |
 | `--window-days N` | 7 | Days compared before and after each change. |
 | `--conversion-lag-days N` | 7 | After-window days within the last N days of the metrics' last day are counted as maturing. |
-| `--digest-lang auto\|tr\|en` | auto | Language of `digest.md`: Turkish for a Turkish export, else English. |
+| `--digest-lang auto\|tr\|en` | auto | Alias of `--lang`, kept for older commands. |
 
-`digest.md` holds the period and source files, totals, changes per category,
-per user (masked with `--mask-users`), per account and per ISO week, the ten
-most-changed campaigns, campaigns whose last change is 14 or 30+ days before
-the newest row, coverage notes and one data-quality line. It is Markdown
-tables, ready to paste.
+`digest.md` holds the period and source files, totals, a *Worth a look*
+section (flags per rule with their facts and thresholds), changes per
+category, per user (masked with `--mask-users`), per account and per ISO
+week, the ten most-changed campaigns, campaigns whose last change is 14 or
+30+ days before the newest row, coverage notes and one data-quality line. It
+is Markdown tables, ready to paste.
+
+## `run`: flags and language
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--lang auto\|tr\|en` | auto | Language of the dashboard and `digest.md`. `auto` is Turkish for a Turkish export, else English. Turkish shows dates as dd.mm.yyyy HH:MM, Turkish number formats and Turkish category names; the data keeps the English values. |
+| `--rules-config FILE.json` | none | Thresholds for the flag rules, `{rule: {"enabled": …, param: value}}`; only the keys given change. See `rules.md`. |
+| `--known-users FILE` | none | One e-mail or name per line (case-insensitive, `#` comments). Turns on `unknown_user`. |
+| `--work-hours 08-20` | 08-20 | Working hours for `off_hours`, start-end in local time (`08:30-19:00` also works); wins over `off_hours` start/end in `--rules-config`. Needs `--timezone` for UI exports. |
 
 ## `query`
 

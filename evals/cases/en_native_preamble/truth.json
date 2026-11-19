@@ -4,7 +4,76 @@
  "expected": {
   "status": "ok",
   "rows_in_report": 20,
-  "dropped": 0
+  "dropped": 0,
+  "flags": [
+   {
+    "rule": "budget_jump",
+    "count": 0
+   },
+   {
+    "rule": "budget_cumulative",
+    "count": 0
+   },
+   {
+    "rule": "reverted",
+    "count": 0
+   },
+   {
+    "rule": "repeat_edit",
+    "count": 0
+   },
+   {
+    "rule": "burst_session",
+    "count": 0
+   },
+   {
+    "rule": "bid_target_relearn",
+    "count": 0
+   },
+   {
+    "rule": "automation_source",
+    "count": 0
+   },
+   {
+    "rule": "unknown_user",
+    "count": 0
+   },
+   {
+    "rule": "stale_entity",
+    "count": 0
+   },
+   {
+    "rule": "stale_budget",
+    "count": 0
+   },
+   {
+    "rule": "off_hours",
+    "unit": "events",
+    "count": 2,
+    "events": [
+     7,
+     8
+    ]
+   },
+   {
+    "rule": "bulk_edit",
+    "count": 0
+   }
+  ],
+  "rules": {
+   "disabled": [
+    "unknown_user"
+   ]
+  },
+  "exec_summary": {
+   "budget": {
+    "increase_total": 25,
+    "increase_count": 1,
+    "decrease_total": 250,
+    "decrease_count": 1,
+    "net": -225
+   }
+  }
  },
  "thresholds": {
   "category_accuracy": 1.0,

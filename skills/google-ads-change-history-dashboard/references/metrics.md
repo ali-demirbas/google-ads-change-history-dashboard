@@ -51,6 +51,15 @@ an account column matches any account, unless `--input-account` or
 `--account-name` names its account. Unmatched rows have no
 `before_after` entry and are counted in `data_quality.before_after`.
 
+## Flags with metrics
+
+A change history cannot show a campaign that nobody touched in the period.
+With `--metrics`, the `stale_entity` rule also names campaigns and ad groups
+that have metrics rows in the last 14 days of the metrics period but no
+change in the last `days` days (`basis: "metrics"`), and `stale_budget` keeps
+only campaigns active in the metrics. No flag uses the before/after numbers
+themselves. See `rules.md`.
+
 ## Output
 
 Only with `--metrics`, `change_history.json` and the dashboard carry `metrics_meta` (files, levels,
