@@ -43,7 +43,7 @@
    },
    {
     "rule": "stale_entity",
-    "count": 4,
+    "count": 3,
     "match": [
      {
       "campaign": "Demo - Display - Yeniden Pazarlama",
@@ -56,10 +56,6 @@
      {
       "campaign": "Demo - Yeni - Arama",
       "ad_group": null
-     },
-     {
-      "campaign": "Demo - Jenerik - Konut",
-      "ad_group": "Konut Genel"
      }
     ]
    },

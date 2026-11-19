@@ -8,9 +8,10 @@ WHAT THIS IS
   reports which campaigns were touched recently and which weren't (within the
   scope of the data it was given).
 
-  It does NOT evaluate whether a change was good, risky, or strategic. "Campaign
-  X hasn't been touched in 23 days" is something this tool says. "The agency is
-  neglecting Campaign X" is not — that's a V2 judgment layer, not built here.
+  It flags facts against thresholds the user can set (12 rules, see
+  references/rules.md), e.g. "budget changed by +132% in one step" or "Campaign
+  X hasn't been touched in 23 days", worded as "worth a look". It never says
+  whether a change was good, bad or risky, and never guesses intent.
 
 PIPELINE
   INPUT -> SOURCE DETECTION -> VALIDATION -> NORMALIZATION -> CATEGORIZATION
