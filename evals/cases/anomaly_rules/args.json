@@ -1,0 +1,16 @@
+{
+ "inputs": [
+  "degisiklik_gecmisi.csv"
+ ],
+ "args": [
+  "--account-name",
+  "Demo Mağaza",
+  "--timezone",
+  "Europe/Istanbul",
+  "--known-users",
+  "known_users.txt",
+  "--rules-config",
+  "rules_config.json"
+ ],
+ "requires": []
+}

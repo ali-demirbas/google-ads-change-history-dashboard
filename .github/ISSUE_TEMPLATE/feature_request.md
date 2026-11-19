@@ -17,9 +17,10 @@ DASHBOARD_TEMPLATE (a new dashboard section/visual), or SKILL.md
 
 ## Stays factual?
 
-<!-- V1 is strictly factual, never judgmental — it states "Campaign X hasn't
-changed in 23 days," never "the agency is neglecting Campaign X." A request
-that requires scoring, grading, or flagging a change as good/bad/risky is
-out of scope for this version; say so explicitly if that's what you're
-proposing, so it's tracked as a deliberate future-version idea rather than
-silently dropped. -->
+<!-- The report states facts. A flag ("worth a look") is a fact measured
+against a threshold the user can set, shown with the rule that fired:
+"Campaign X has had no change for 45 days", never "the agency is neglecting
+Campaign X." A request for a new flag rule should name the fact, the default
+threshold and what the export cannot show. A request that requires scoring,
+grading, or calling a change good/bad/risky is out of scope; say so
+explicitly if that's what you're proposing. -->

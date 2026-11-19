@@ -1,0 +1,140 @@
+Değişiklik geçmişi raporu
+1 Haziran 2026 - 11 Eylül 2026
+Tarih ve saat,Kullanıcı,Kampanya,Reklam grubu,Değişiklik
+11 Eyl 2026 17:00:00,can.demir@ornek.test,Mağaza - Marka - Arama,,"1 dil eklendi
+  Fransızca"
+9 Eyl 2026 11:00:00,zeynep.arslan@ornek.test,Mağaza - Yeni Sezon - Arama,,"1 bütçenin tutarı artırıldı
+  Mağaza - Yeni Sezon - Arama: ₺500,00 olan Bütçe tutarı, ₺520,00 olarak değiştirildi"
+8 Eyl 2026 10:02:40,zeynep.arslan@ornek.test,Mağaza - Yeni Sezon - Arama,Yeni Sezon - Genel,"1 negatif sıralı eşlemeli anahtar kelime eklendi
+  -""ücretsiz"""
+8 Eyl 2026 10:02:00,zeynep.arslan@ornek.test,Mağaza - Yeni Sezon - Arama,Yeni Sezon - Genel,"2 sıralı eşlemeli anahtar kelimeler eklendi
+  ""yeni sezon çanta""
+  ""yeni sezon ayakkabı"""
+8 Eyl 2026 10:01:00,zeynep.arslan@ornek.test,Mağaza - Yeni Sezon - Arama,Yeni Sezon - Genel,"Reklam grubu oluşturuldu
+  Maks. TBM: ₺2,00
+  Durum: etkin
+  Ad: ""Yeni Sezon - Genel""
+1 duyarlı arama ağı reklamı oluşturuldu
+  Başlık: ""Yeni Sezon Ürünleri""
+2 tam eşlemeli anahtar kelimeler eklendi
+  [yeni sezon]
+  [yeni ürünler]"
+8 Eyl 2026 10:00:00,zeynep.arslan@ornek.test,Mağaza - Yeni Sezon - Arama,,"Bütçe oluşturuldu
+  Bütçe yayınlanma yöntemi ""standart: reklamlar zaman içinde eşit sıklıkta gösterilir"" olarak ayarlandı
+  Bütçe durumu: etkin
+  Mağaza - Yeni Sezon - Arama: Bütçe tutarı değeri: ₺500,00
+Kampanya oluşturuldu
+  Teklif stratejisi türü: ""Dönüşüm sayısını en üst düzeye çıkarma""
+1 dil eklendi
+  Türkçe
+1 ülke eklendi
+  Türkiye"
+3 Eyl 2026 14:04:00,zeynep.arslan@ornek.test,Mağaza - Şapka - Arama,,"1 dil eklendi
+  İngilizce
+1 teklif ayarlama değişikliği
+  Tabletler: Platform teklif ayarlaması %-10 olarak ayarlandı"
+3 Eyl 2026 14:03:00,zeynep.arslan@ornek.test,Mağaza - Kemer - Arama,,"1 dil eklendi
+  İngilizce
+1 teklif ayarlama değişikliği
+  Tabletler: Platform teklif ayarlaması %-10 olarak ayarlandı"
+3 Eyl 2026 14:02:00,zeynep.arslan@ornek.test,Mağaza - Gözlük - Arama,,"1 dil eklendi
+  İngilizce
+1 teklif ayarlama değişikliği
+  Tabletler: Platform teklif ayarlaması %-10 olarak ayarlandı"
+3 Eyl 2026 14:01:00,zeynep.arslan@ornek.test,Mağaza - Çanta - Arama,,"1 dil eklendi
+  İngilizce
+1 teklif ayarlama değişikliği
+  Tabletler: Platform teklif ayarlaması %-10 olarak ayarlandı"
+3 Eyl 2026 14:00:00,zeynep.arslan@ornek.test,Mağaza - Ayakkabı - Arama,,"1 dil eklendi
+  İngilizce
+1 teklif ayarlama değişikliği
+  Tabletler: Platform teklif ayarlaması %-10 olarak ayarlandı"
+2 Eyl 2026 15:02:30,can.demir@ornek.test,Mağaza - Saat - Arama,,"1 teklif ayarlama değişikliği
+  Tabletler: Platform teklif ayarlaması %-20 olarak ayarlandı"
+2 Eyl 2026 15:01:00,can.demir@ornek.test,Mağaza - Saat - Arama,Saat - Genel,"1 duyarlı arama ağı reklamı değiştirildi
+  Yol 1: ""Saat"""
+2 Eyl 2026 15:00:00,can.demir@ornek.test,Mağaza - Saat - Arama,Saat - Genel,"2 sıralı eşlemeli anahtar kelimeler eklendi
+  ""kol saati""
+  ""akıllı saat"""
+1 Eyl 2026 14:00:00,deniz.kara@ornek.test,Mağaza - Çanta - Arama,,"1 ülke eklendi
+  Almanya"
+1 Eyl 2026 11:00:00,deniz.kara@ornek.test,Mağaza - Şapka - Arama,,"1 dil eklendi
+  İngilizce"
+31 Ağu 2026 16:01:00,zeynep.arslan@ornek.test,Mağaza - Gözlük - Arama,Gözlük - Genel,"1 duyarlı arama ağı reklamı değiştirildi
+  Yol 1: ""Gozluk"""
+31 Ağu 2026 16:00:00,zeynep.arslan@ornek.test,Mağaza - Gözlük - Arama,Gözlük - Genel,"1 sıralı eşlemeli anahtar kelime eklendi
+  ""güneş gözlüğü"""
+28 Ağu 2026 11:30:00,can.demir@ornek.test,Mağaza - Saat - Arama,,"1 bütçenin tutarı azaltıldı
+  Mağaza - Saat - Arama: ₺1.490,00 olan Bütçe tutarı, ₺1.000,00 olarak değiştirildi"
+27 Ağu 2026 15:00:00,can.demir@ornek.test,Mağaza - Kemer - Arama,,"1 bütçenin tutarı azaltıldı
+  Mağaza - Kemer - Arama: ₺900,00 olan Bütçe tutarı, ₺800,00 olarak değiştirildi"
+27 Ağu 2026 08:00:00,zeynep.arslan@ornek.test,Mağaza - Gözlük - Arama,,"1 ülke eklendi
+  Fransa"
+26 Ağu 2026 07:59:00,zeynep.arslan@ornek.test,Mağaza - Şapka - Arama,,"1 teklif ayarlama değişikliği
+  Bilgisayarlar: Platform teklif ayarlaması %+10 olarak ayarlandı"
+25 Ağu 2026 21:30:00,can.demir@ornek.test,Mağaza - Gözlük - Arama,,"Kampanya öğesi oluşturuldu
+  Durum: Etkin
+  Uzantı türü: Site bağlantısı
+  Öğe kimliği: 200000000010"
+24 Ağu 2026 10:00:00,can.demir@ornek.test,Mağaza - Kemer - Arama,,"1 bütçenin tutarı artırıldı
+  Mağaza - Kemer - Arama: ₺800,00 olan Bütçe tutarı, ₺900,00 olarak değiştirildi"
+22 Ağu 2026 11:00:00,zeynep.arslan@ornek.test,Mağaza - Marka - Arama,,"1 dil eklendi
+  Almanca"
+20 Ağu 2026 10:30:00,can.demir@ornek.test,Mağaza - Saat - Arama,,"1 bütçenin tutarı artırıldı
+  Mağaza - Saat - Arama: ₺1.000,00 olan Bütçe tutarı, ₺1.490,00 olarak değiştirildi"
+18 Ağu 2026 11:04:00,can.demir@ornek.test,Mağaza - Marka - Arama,,"1 teklif ayarlama değişikliği
+  Mobil telefonlar: Platform teklif ayarlaması %+30 olarak ayarlandı"
+18 Ağu 2026 11:00:00,can.demir@ornek.test,Mağaza - Marka - Arama,,"1 teklif ayarlama değişikliği
+  Mobil telefonlar: Platform teklif ayarlaması %+20 olarak ayarlandı"
+14 Ağu 2026 10:00:00,Otomatik uygulanan öneriler,Mağaza - Ayakkabı - Arama,Ayakkabı - Genel,"1 geniş eşlemeli anahtar kelime eklendi
+  ayakkabı fiyatları"
+13 Ağu 2026 15:00:00,Otomatik uygulanan öneriler,Mağaza - Ayakkabı - Arama,Ayakkabı - Genel,"1 geniş eşlemeli anahtar kelime eklendi
+  koşu ayakkabısı"
+13 Ağu 2026 14:30:00,can.demir@ornek.test,Mağaza - Çanta - Arama,,"1 kampanya etkin
+  duraklatıldı olan Durum, etkin olarak değiştirildi"
+13 Ağu 2026 10:00:00,Otomatik uygulanan öneriler,Mağaza - Ayakkabı - Arama,Ayakkabı - Genel,"2 geniş eşlemeli anahtar kelimeler eklendi
+  ayakkabı modelleri
+  spor ayakkabı"
+13 Ağu 2026 09:30:00,can.demir@ornek.test,Mağaza - Çanta - Arama,,"1 kampanya duraklatıldı
+  etkin olan Durum, duraklatıldı olarak değiştirildi"
+12 Ağu 2026 11:00:00,can.demir@ornek.test,Mağaza - Çanta - Arama,,"1 bütçenin tutarı azaltıldı
+  Mağaza - Çanta - Arama: ₺1.000,00 olan Bütçe tutarı, ₺400,00 olarak değiştirildi"
+10 Ağu 2026 11:05:00,zeynep.arslan@ornek.test,Mağaza - Şapka - Arama,,"Kampanya öğesi değiştirildi
+  Etkin olan Durum, Kaldırıldı olarak değiştirildi
+  Uzantı türü: Site bağlantısı
+  Öğe kimliği: 200000000002"
+10 Ağu 2026 10:00:00,zeynep.arslan@ornek.test,Mağaza - Şapka - Arama,,"Kampanya öğesi oluşturuldu
+  Durum: Etkin
+  Uzantı türü: Site bağlantısı
+  Öğe kimliği: 200000000002"
+6 Ağu 2026 16:16:00,zeynep.arslan@ornek.test,Mağaza - Şapka - Arama,,"Kampanya öğesi değiştirildi
+  Etkin olan Durum, Kaldırıldı olarak değiştirildi
+  Uzantı türü: Site bağlantısı
+  Öğe kimliği: 200000000001"
+6 Ağu 2026 16:14:00,zeynep.arslan@ornek.test,Mağaza - Şapka - Arama,,"Kampanya öğesi oluşturuldu
+  Durum: Etkin
+  Uzantı türü: Site bağlantısı
+  Öğe kimliği: 200000000001"
+4 Ağu 2026 14:21:00,zeynep.arslan@ornek.test,Mağaza - Ayakkabı - Arama,,"1 bütçenin tutarı artırıldı
+  Mağaza - Ayakkabı - Arama: ₺300,00 olan Bütçe tutarı, ₺695,00 olarak değiştirildi"
+3 Ağu 2026 11:00:00,Google Ads Team [with user permission],Mağaza - Outlet - Arama,,"1 dil eklendi
+  İngilizce"
+31 Tem 2026 12:00:00,zeynep.arslan@ornek.test,Mağaza - Çanta - Arama,,"Kampanya değiştirildi
+  ""Dönüşüm sayısını en üst düzeye çıkarma"" olan Kampanyateklif stratejisi türü değeri, ""Dönüşüm değerini en üst düzeye çıkarma"" olarak değiştirildi"
+27 Tem 2026 11:00:00,zeynep.arslan@ornek.test,Mağaza - Çanta - Arama,,"Kampanya değiştirildi
+  ₺200,00 olan Hedef EBM değeri, ₺220,00 değerine artırıldı"
+22 Tem 2026 09:30:00,zeynep.arslan@ornek.test,Mağaza - Gözlük - Arama,,"1 bütçenin tutarı artırıldı
+  Mağaza - Gözlük - Arama: ₺1.400,00 olan Bütçe tutarı, ₺1.600,00 olarak değiştirildi"
+21 Tem 2026 15:00:00,zeynep.arslan@ornek.test,Mağaza - Gözlük - Arama,,"1 bütçenin tutarı artırıldı
+  Mağaza - Gözlük - Arama: ₺1.200,00 olan Bütçe tutarı, ₺1.400,00 olarak değiştirildi"
+21 Tem 2026 10:00:00,zeynep.arslan@ornek.test,Mağaza - Gözlük - Arama,,"1 bütçenin tutarı artırıldı
+  Mağaza - Gözlük - Arama: ₺1.000,00 olan Bütçe tutarı, ₺1.200,00 olarak değiştirildi"
+15 Tem 2026 10:00:00,zeynep.arslan@ornek.test,Mağaza - Marka - Arama,,"Kampanya değiştirildi
+  ₺55,00 olan Hedef EBM değeri, ₺60,00 değerine artırıldı"
+6 Tem 2026 10:00:00,zeynep.arslan@ornek.test,Mağaza - Marka - Arama,,"Kampanya değiştirildi
+  ₺50,00 olan Hedef EBM değeri, ₺55,00 değerine artırıldı"
+1 Tem 2026 10:00:00,zeynep.arslan@ornek.test,Mağaza - Marka - Arama,Eski Ürünler,"2 tam eşlemeli anahtar kelimeler eklendi
+  [eski model]
+  [geçen sezon]"
+3 Haz 2026 10:00:00,can.demir@ornek.test,Mağaza - Eski Sezon - Arama,,"1 bütçenin tutarı azaltıldı
+  Mağaza - Eski Sezon - Arama: ₺400,00 olan Bütçe tutarı, ₺300,00 olarak değiştirildi"

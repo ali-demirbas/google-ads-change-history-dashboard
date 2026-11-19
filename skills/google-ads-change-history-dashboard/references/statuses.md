@@ -10,6 +10,7 @@ says whether the files next to it come from a run that reached `ok`
 - The rule
 - Each status
 - After `ok`: `data_quality`
+- After `ok`: flags and rules that were off
 - Remembered answers
 
 ## The rule
@@ -64,6 +65,17 @@ several inputs, `file` says which file the question is about.
 Tell the user every non-zero count with its number. `meta.coverage_notes`
 lists what the sources cannot show (for example API data covers 30 days);
 repeat those notes too.
+
+## After `ok`: flags and rules that were off
+
+`flags` lists what crossed a threshold; `rules_config` lists every rule with
+the parameters used, its hits and, for a rule that could not run,
+`enabled: false` and `disabled_reason` (`unknown_user` without
+`--known-users`, `off_hours` without a time zone, or a rule the user turned
+off in `--rules-config`). Report flags as facts with their rule ("budget
+₺300 → ₺695, +132%; rule: one-step change of 50% or more"), say *worth a
+look*, and name each rule that was off with its reason. Never call a flag a
+problem, an error, risky or an anomaly. See `rules.md`.
 
 ## Remembered answers
 

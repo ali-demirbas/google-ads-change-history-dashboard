@@ -22,6 +22,10 @@ several statements becomes one row per statement, sharing an `event_id`.
 | Targeting | Ad schedule changed, Device targeting changed, Language targeting changed, Location targeting changed |
 | Other | no rule matched |
 
+The data always keeps these English values (`query --category Budget`
+works for every export). With `--lang tr` the dashboard shows Turkish display
+names for categories and subcategories.
+
 ## "Other"
 
 A row lands in "Other" when no rule matches. It is in the report and counted

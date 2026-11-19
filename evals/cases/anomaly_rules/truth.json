@@ -1,0 +1,923 @@
+{
+ "case": "anomaly_rules",
+ "description": "Synthetic TR UI export (2-line preamble, Europe/Istanbul) built to fire every flag rule a known number of times, with near-misses that must not fire. Truth written by hand from the round-12 rule definitions; --known-users and --rules-config (stale_entity days 45, bulk_edit min_changes 10) are exercised.",
+ "expected": {
+  "status": "ok",
+  "rows_in_report": 59,
+  "dropped": 0,
+  "flags": [
+   {
+    "rule": "budget_jump",
+    "count": 2,
+    "match": [
+     {
+      "changes": [
+       "38.0"
+      ]
+     },
+     {
+      "changes": [
+       "33.0"
+      ]
+     }
+    ]
+   },
+   {
+    "rule": "budget_cumulative",
+    "count": 1,
+    "match": [
+     {
+      "changes": [
+       "44.0",
+       "43.0",
+       "42.0"
+      ],
+      "campaign": "Mağaza - Gözlük - Arama"
+     }
+    ]
+   },
+   {
+    "rule": "reverted",
+    "count": 3,
+    "match": [
+     {
+      "changes": [
+       "37.0",
+       "36.0"
+      ]
+     },
+     {
+      "changes": [
+       "23.0",
+       "19.0"
+      ]
+     },
+     {
+      "changes": [
+       "32.0",
+       "30.0"
+      ]
+     }
+    ]
+   },
+   {
+    "rule": "repeat_edit",
+    "count": 1,
+    "match": [
+     {
+      "changes": [
+       "27.0",
+       "26.0"
+      ]
+     }
+    ]
+   },
+   {
+    "rule": "burst_session",
+    "count": 1,
+    "match": [
+     {
+      "changes": [
+       "13.0",
+       "12.0",
+       "11.0"
+      ],
+      "campaign": "Mağaza - Saat - Arama"
+     }
+    ]
+   },
+   {
+    "rule": "bid_target_relearn",
+    "count": 1,
+    "match": [
+     {
+      "changes": [
+       "40.0"
+      ],
+      "campaign": "Mağaza - Çanta - Arama"
+     }
+    ]
+   },
+   {
+    "rule": "automation_source",
+    "count": 3,
+    "match": [
+     {
+      "changes": [
+       "39.0"
+      ]
+     },
+     {
+      "changes": [
+       "31.0",
+       "29.0"
+      ]
+     },
+     {
+      "changes": [
+       "28.0"
+      ]
+     }
+    ]
+   },
+   {
+    "rule": "unknown_user",
+    "count": 1,
+    "match": [
+     {
+      "changes": [
+       "15.0",
+       "14.0"
+      ]
+     }
+    ]
+   },
+   {
+    "rule": "stale_entity",
+    "count": 2,
+    "match": [
+     {
+      "campaign": "Mağaza - Eski Sezon - Arama",
+      "ad_group": null
+     },
+     {
+      "campaign": "Mağaza - Marka - Arama",
+      "ad_group": "Eski Ürünler"
+     }
+    ]
+   },
+   {
+    "rule": "stale_budget",
+    "count": 4,
+    "match": [
+     {
+      "campaign": "Mağaza - Eski Sezon - Arama"
+     },
+     {
+      "campaign": "Mağaza - Marka - Arama"
+     },
+     {
+      "campaign": "Mağaza - Şapka - Arama"
+     },
+     {
+      "campaign": "Mağaza - Outlet - Arama"
+     }
+    ]
+   },
+   {
+    "rule": "off_hours",
+    "unit": "events",
+    "count": 3,
+    "events": [
+     21,
+     22,
+     24
+    ]
+   },
+   {
+    "rule": "bulk_edit",
+    "count": 1,
+    "match": [
+     {
+      "changes": [
+       "10.0",
+       "10.1",
+       "9.0",
+       "9.1",
+       "8.0",
+       "8.1",
+       "7.0",
+       "7.1",
+       "6.0",
+       "6.1"
+      ]
+     }
+    ]
+   }
+  ],
+  "rules": {
+   "params": {
+    "stale_entity": {
+     "days": 45
+    },
+    "bulk_edit": {
+     "min_changes": 10,
+     "min_campaigns": 5,
+     "minutes": 10
+    },
+    "budget_jump": {
+     "pct": 50
+    }
+   }
+  },
+  "exec_summary": {
+   "totals": {
+    "changes": 59,
+    "events": 49
+   },
+   "budget": {
+    "increase_total": 1605,
+    "increase_count": 7,
+    "decrease_total": 1290,
+    "decrease_count": 4,
+    "net": 315
+   }
+  }
+ },
+ "thresholds": {
+  "category_accuracy": 1.0,
+  "subcategory_accuracy": 1.0,
+  "operation_accuracy": 1.0,
+  "value_match_rate": 1.0,
+  "flag_precision": 1.0,
+  "flag_recall": 1.0
+ },
+ "events": [
+  {
+   "ts": "11 Eyl 2026 17:00:00",
+   "label": "e49",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "9 Eyl 2026 11:00:00",
+   "label": "e48",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 500.0,
+     "new": 520.0
+    }
+   ]
+  },
+  {
+   "ts": "8 Eyl 2026 10:02:40",
+   "label": "e47",
+   "statements": [
+    {
+     "head": "1 negatif sıralı eşlemeli anahtar kelime eklendi",
+     "category": "Keyword",
+     "subcategory": "Negative keyword",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "8 Eyl 2026 10:02:00",
+   "label": "e46",
+   "statements": [
+    {
+     "head": "2 sıralı eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "subcategory": "Keyword added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "8 Eyl 2026 10:01:00",
+   "label": "e45",
+   "statements": [
+    {
+     "head": "Reklam grubu oluşturuldu",
+     "category": "AdGroup",
+     "subcategory": "Ad group created",
+     "operation": "CREATE"
+    },
+    {
+     "head": "1 duyarlı arama ağı reklamı oluşturuldu",
+     "category": "Ad",
+     "subcategory": "Ad created",
+     "operation": "CREATE"
+    },
+    {
+     "head": "2 tam eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "subcategory": "Keyword added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "8 Eyl 2026 10:00:00",
+   "label": "e44",
+   "statements": [
+    {
+     "head": "Bütçe oluşturuldu",
+     "category": "Budget",
+     "subcategory": "Budget created",
+     "operation": "CREATE",
+     "new": 500.0
+    },
+    {
+     "head": "Kampanya oluşturuldu",
+     "category": "Campaign",
+     "subcategory": "Campaign created",
+     "operation": "CREATE"
+    },
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    },
+    {
+     "head": "1 ülke eklendi",
+     "category": "Targeting",
+     "subcategory": "Location targeting changed",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "3 Eyl 2026 14:04:00",
+   "label": "e43",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    },
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": -10.0
+    }
+   ]
+  },
+  {
+   "ts": "3 Eyl 2026 14:03:00",
+   "label": "e42",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    },
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": -10.0
+    }
+   ]
+  },
+  {
+   "ts": "3 Eyl 2026 14:02:00",
+   "label": "e41",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    },
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": -10.0
+    }
+   ]
+  },
+  {
+   "ts": "3 Eyl 2026 14:01:00",
+   "label": "e40",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    },
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": -10.0
+    }
+   ]
+  },
+  {
+   "ts": "3 Eyl 2026 14:00:00",
+   "label": "e39",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    },
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": -10.0
+    }
+   ]
+  },
+  {
+   "ts": "2 Eyl 2026 15:02:30",
+   "label": "e38",
+   "statements": [
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": -20.0
+    }
+   ]
+  },
+  {
+   "ts": "2 Eyl 2026 15:01:00",
+   "label": "e37",
+   "statements": [
+    {
+     "head": "1 duyarlı arama ağı reklamı değiştirildi",
+     "category": "Ad",
+     "subcategory": "Ad changed",
+     "operation": "UPDATE"
+    }
+   ]
+  },
+  {
+   "ts": "2 Eyl 2026 15:00:00",
+   "label": "e36",
+   "statements": [
+    {
+     "head": "2 sıralı eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "subcategory": "Keyword added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "1 Eyl 2026 14:00:00",
+   "label": "e35",
+   "statements": [
+    {
+     "head": "1 ülke eklendi",
+     "category": "Targeting",
+     "subcategory": "Location targeting changed",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "1 Eyl 2026 11:00:00",
+   "label": "e34",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "31 Ağu 2026 16:01:00",
+   "label": "e33",
+   "statements": [
+    {
+     "head": "1 duyarlı arama ağı reklamı değiştirildi",
+     "category": "Ad",
+     "subcategory": "Ad changed",
+     "operation": "UPDATE"
+    }
+   ]
+  },
+  {
+   "ts": "31 Ağu 2026 16:00:00",
+   "label": "e32",
+   "statements": [
+    {
+     "head": "1 sıralı eşlemeli anahtar kelime eklendi",
+     "category": "Keyword",
+     "subcategory": "Keyword added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "28 Ağu 2026 11:30:00",
+   "label": "e31",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı azaltıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 1490.0,
+     "new": 1000.0
+    }
+   ]
+  },
+  {
+   "ts": "27 Ağu 2026 15:00:00",
+   "label": "e30",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı azaltıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 900.0,
+     "new": 800.0
+    }
+   ]
+  },
+  {
+   "ts": "27 Ağu 2026 08:00:00",
+   "label": "e29",
+   "statements": [
+    {
+     "head": "1 ülke eklendi",
+     "category": "Targeting",
+     "subcategory": "Location targeting changed",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "26 Ağu 2026 07:59:00",
+   "label": "e28",
+   "statements": [
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": 10.0
+    }
+   ]
+  },
+  {
+   "ts": "25 Ağu 2026 21:30:00",
+   "label": "e27",
+   "statements": [
+    {
+     "head": "Kampanya öğesi oluşturuldu",
+     "category": "Asset",
+     "subcategory": "Asset added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "24 Ağu 2026 10:00:00",
+   "label": "e26",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 800.0,
+     "new": 900.0
+    }
+   ]
+  },
+  {
+   "ts": "22 Ağu 2026 11:00:00",
+   "label": "e25",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "20 Ağu 2026 10:30:00",
+   "label": "e24",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 1000.0,
+     "new": 1490.0
+    }
+   ]
+  },
+  {
+   "ts": "18 Ağu 2026 11:04:00",
+   "label": "e23",
+   "statements": [
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": 30.0
+    }
+   ]
+  },
+  {
+   "ts": "18 Ağu 2026 11:00:00",
+   "label": "e22",
+   "statements": [
+    {
+     "head": "1 teklif ayarlama değişikliği",
+     "category": "Bidding",
+     "subcategory": "Bid modifier changed",
+     "operation": "UPDATE",
+     "new": 20.0
+    }
+   ]
+  },
+  {
+   "ts": "14 Ağu 2026 10:00:00",
+   "label": "e21",
+   "statements": [
+    {
+     "head": "1 geniş eşlemeli anahtar kelime eklendi",
+     "category": "Keyword",
+     "subcategory": "Keyword added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "13 Ağu 2026 15:00:00",
+   "label": "e20",
+   "statements": [
+    {
+     "head": "1 geniş eşlemeli anahtar kelime eklendi",
+     "category": "Keyword",
+     "subcategory": "Keyword added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "13 Ağu 2026 14:30:00",
+   "label": "e18",
+   "statements": [
+    {
+     "head": "1 kampanya etkin",
+     "category": "Status",
+     "subcategory": "Enabled",
+     "operation": "UPDATE"
+    }
+   ]
+  },
+  {
+   "ts": "13 Ağu 2026 10:00:00",
+   "label": "e19",
+   "statements": [
+    {
+     "head": "2 geniş eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "subcategory": "Keyword added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "13 Ağu 2026 09:30:00",
+   "label": "e17",
+   "statements": [
+    {
+     "head": "1 kampanya duraklatıldı",
+     "category": "Status",
+     "subcategory": "Paused",
+     "operation": "UPDATE"
+    }
+   ]
+  },
+  {
+   "ts": "12 Ağu 2026 11:00:00",
+   "label": "e16",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı azaltıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 1000.0,
+     "new": 400.0
+    }
+   ]
+  },
+  {
+   "ts": "10 Ağu 2026 11:05:00",
+   "label": "e15",
+   "statements": [
+    {
+     "head": "Kampanya öğesi değiştirildi",
+     "category": "Asset",
+     "subcategory": "Asset removed",
+     "operation": "REMOVE"
+    }
+   ]
+  },
+  {
+   "ts": "10 Ağu 2026 10:00:00",
+   "label": "e14",
+   "statements": [
+    {
+     "head": "Kampanya öğesi oluşturuldu",
+     "category": "Asset",
+     "subcategory": "Asset added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "6 Ağu 2026 16:16:00",
+   "label": "e13",
+   "statements": [
+    {
+     "head": "Kampanya öğesi değiştirildi",
+     "category": "Asset",
+     "subcategory": "Asset removed",
+     "operation": "REMOVE"
+    }
+   ]
+  },
+  {
+   "ts": "6 Ağu 2026 16:14:00",
+   "label": "e12",
+   "statements": [
+    {
+     "head": "Kampanya öğesi oluşturuldu",
+     "category": "Asset",
+     "subcategory": "Asset added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "4 Ağu 2026 14:21:00",
+   "label": "e11",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 300.0,
+     "new": 695.0
+    }
+   ]
+  },
+  {
+   "ts": "3 Ağu 2026 11:00:00",
+   "label": "e10",
+   "statements": [
+    {
+     "head": "1 dil eklendi",
+     "category": "Targeting",
+     "subcategory": "Language targeting changed",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "31 Tem 2026 12:00:00",
+   "label": "e09",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "subcategory": "Strategy changed",
+     "operation": "UPDATE"
+    }
+   ]
+  },
+  {
+   "ts": "27 Tem 2026 11:00:00",
+   "label": "e08",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "subcategory": "Target CPA",
+     "operation": "UPDATE",
+     "old": 200.0,
+     "new": 220.0
+    }
+   ]
+  },
+  {
+   "ts": "22 Tem 2026 09:30:00",
+   "label": "e07",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 1400.0,
+     "new": 1600.0
+    }
+   ]
+  },
+  {
+   "ts": "21 Tem 2026 15:00:00",
+   "label": "e06",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 1200.0,
+     "new": 1400.0
+    }
+   ]
+  },
+  {
+   "ts": "21 Tem 2026 10:00:00",
+   "label": "e05",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı artırıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 1000.0,
+     "new": 1200.0
+    }
+   ]
+  },
+  {
+   "ts": "15 Tem 2026 10:00:00",
+   "label": "e04",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "subcategory": "Target CPA",
+     "operation": "UPDATE",
+     "old": 55.0,
+     "new": 60.0
+    }
+   ]
+  },
+  {
+   "ts": "6 Tem 2026 10:00:00",
+   "label": "e03",
+   "statements": [
+    {
+     "head": "Kampanya değiştirildi",
+     "category": "Bidding",
+     "subcategory": "Target CPA",
+     "operation": "UPDATE",
+     "old": 50.0,
+     "new": 55.0
+    }
+   ]
+  },
+  {
+   "ts": "1 Tem 2026 10:00:00",
+   "label": "e02",
+   "statements": [
+    {
+     "head": "2 tam eşlemeli anahtar kelimeler eklendi",
+     "category": "Keyword",
+     "subcategory": "Keyword added",
+     "operation": "CREATE"
+    }
+   ]
+  },
+  {
+   "ts": "3 Haz 2026 10:00:00",
+   "label": "e01",
+   "statements": [
+    {
+     "head": "1 bütçenin tutarı azaltıldı",
+     "category": "Budget",
+     "subcategory": "Budget changed",
+     "operation": "UPDATE",
+     "old": 400.0,
+     "new": 300.0
+    }
+   ]
+  }
+ ]
+}
