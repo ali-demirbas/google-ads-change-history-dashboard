@@ -5029,6 +5029,9 @@ _DIGEST_TEXT = {
         "unreadable_date": "unreadable date", "duplicate": "duplicate", "duplicate_across_files": "duplicate across files",
         "none": "none", "empty": "No change rows in this input.",
         "footer": "Counts from the given export only. Generated {at}.",
+        "worth": "Worth a look", "worth_none": "No rule threshold was crossed.", "worth_more": "{n} more in dashboard.html.",
+        "worth_info": "For information", "worth_off": "off", "worth_off_rules": "Rules turned off",
+        "worth_note": "Each line is a fact measured against a threshold you can change (--rules-config).",
     },
     "tr": {
         "title": "Google Ads değişiklik özeti", "period": "Dönem", "sources": "Kaynak dosyalar", "source_types": "Kaynak türü", "rows": "satır",
@@ -5048,6 +5051,9 @@ _DIGEST_TEXT = {
         "unreadable_date": "okunamayan tarih", "duplicate": "yinelenen", "duplicate_across_files": "dosyalar arası yinelenen",
         "none": "yok", "empty": "Bu girdide değişiklik satırı yok.",
         "footer": "Yalnız verilen dışa aktarımdan sayımlar. Oluşturulma: {at}.",
+        "worth": "Göz atılacaklar", "worth_none": "Hiçbir kural eşiği aşılmadı.", "worth_more": "{n} tane daha dashboard.html içinde.",
+        "worth_info": "Bilgi için", "worth_off": "kapalı", "worth_off_rules": "Kapalı kurallar",
+        "worth_note": "Her satır, değiştirilebilir bir eşiğe göre ölçülmüş bir olgudur (--rules-config).",
     },
 }
 # Turkish wording for the pipeline's coverage note ids; an unknown id keeps its English text.
@@ -5072,6 +5078,949 @@ def _digest_lang(rows, meta, lang):
         tr += bool(_DIGEST_TR_RE.search(s))
         en += bool(_DIGEST_EN_RE.search(s))
     return "tr" if tr > en else "en"
+
+
+# 2026-11-19 (round 12): rule flags, exec summary and campaign table.
+# Flags are facts against user-set thresholds ("worth a look"), never a verdict.
+RULE_DEFS = (  # display order; params are defaults, overridable by --rules-config
+    ("budget_jump", "attention", {"pct": 50}),
+    ("budget_cumulative", "attention", {"pct": 50, "hours": 24}),
+    ("reverted", "attention", {"add_remove_minutes": 60, "value_days": 7, "status_hours": 24}),
+    ("repeat_edit", "attention", {"minutes": 10, "min_count": 2}),
+    ("burst_session", "attention", {"minutes": 3, "min_events": 3}),
+    ("bid_target_relearn", "attention", {"days": 7}),
+    ("automation_source", "attention", {}),
+    ("unknown_user", "attention", {}),
+    ("stale_entity", "info", {"days": 30}),
+    ("stale_budget", "info", {"days": 60}),
+    ("off_hours", "info", {"start": "20:00", "end": "08:00", "weekends": True}),
+    ("bulk_edit", "info", {"minutes": 10, "min_changes": 20, "min_campaigns": 5}),
+)
+_RULE_COUNT_PARAMS = {"min_count", "min_events", "min_changes", "min_campaigns"}
+_HHMM_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+RULE_TEXT = {  # {name} placeholders are filled from the rule's params
+    "budget_jump": ({"tr": "Bütçe tek seferde %{pct} ya da daha fazla değişti", "en": "Budget changed by {pct}% or more in one step"},
+                    {"tr": "Günlük bütçe tek değişiklikte %{pct} ya da daha fazla arttı veya azaldı.", "en": "A daily budget went up or down by {pct}% or more in a single change."}),
+    "budget_cumulative": ({"tr": "Bütçe {hours} saat içinde toplamda %{pct} ya da daha fazla değişti", "en": "Budget moved {pct}% or more within {hours} hours"},
+                          {"tr": "Aynı kampanyada {hours} saat içindeki birden çok bütçe değişikliği toplamda %{pct} ya da daha fazla fark yarattı. Tek adımı zaten listelenenler hariç.",
+                           "en": "Several budget changes on one campaign within {hours} hours add up to {pct}% or more. Windows with a step already listed on its own are left out."}),
+    "reverted": ({"tr": "Eklenip hemen geri alınan değişiklik", "en": "Changes undone soon after"},
+                 {"tr": "Aynı öğe {add_remove_minutes} dakika içinde eklenip kaldırıldı, bir ayar {value_days} gün içinde önceki değerine döndü ya da durum {status_hours} saat içinde geri çevrildi.",
+                  "en": "The same item was added and removed within {add_remove_minutes} minutes, a setting went back to an earlier value within {value_days} days, or a status was switched back within {status_hours} hours."}),
+    "repeat_edit": ({"tr": "Aynı ayar birkaç dakika içinde tekrar değişti", "en": "Same setting edited again within minutes"},
+                    {"tr": "Aynı kişi aynı kampanyada aynı ayarı {minutes} dakika içinde {min_count} ya da daha fazla kez değiştirdi. Yeni kampanya kurulumları hariç.",
+                     "en": "One person edited the same setting on one campaign {min_count} or more times within {minutes} minutes. New campaign setups are left out."}),
+    "burst_session": ({"tr": "Kısa sürede çok sayıda değişiklik", "en": "Many changes in a few minutes"},
+                      {"tr": "Aynı kişi aynı kampanyada {minutes} dakika içinde {min_events} ya da daha fazla değişiklik olayı oluşturdu. Yeni kampanya kurulumları hariç.",
+                       "en": "One person created {min_events} or more change events on one campaign within {minutes} minutes. New campaign setups are left out."}),
+    "bid_target_relearn": ({"tr": "Teklif hedefi {days} gün içinde yeniden değişti", "en": "Bid target changed again within {days} days"},
+                           {"tr": "Hedef EBM, hedef ROAS ya da teklif stratejisi önceki değişiklikten sonraki {days} gün içinde yeniden değiştirildi.",
+                            "en": "Target CPA, target ROAS or the bid strategy was changed again within {days} days of the previous change."}),
+    "automation_source": ({"tr": "Otomasyon ya da Google kaynaklı değişiklik", "en": "Changes by automation or Google"},
+                          {"tr": "Değişikliği bir kişi değil otomatik bir kaynak (kural, komut dosyası, öneri) ya da türü belirlenemeyen adlı bir kullanıcı yaptı, örneğin kullanıcı izniyle çalışan bir Google temsilcisi.",
+                           "en": "The change came from an automated source (rule, script, recommendation) or from a named user of unknown type, such as a Google representative acting with user permission."}),
+    "unknown_user": ({"tr": "Listede olmayan kullanıcı", "en": "User not on the known list"},
+                     {"tr": "Değişikliği yapan kişi verilen bilinen kullanıcılar listesinde yok.", "en": "The person who made the change is not on the known-users list you gave."}),
+    "stale_entity": ({"tr": "Uzun süredir dokunulmayan kampanya", "en": "Campaigns left untouched for a long time"},
+                     {"tr": "Son değişikliği verideki en yeni günden {days} gün ya da daha önce olan kampanya ve reklam grupları.",
+                      "en": "Campaigns and ad groups whose last change is {days} or more days before the newest day in the data."}),
+    "stale_budget": ({"tr": "Bütçesi uzun süredir değişmeyen kampanya", "en": "Budget unchanged for a long time"},
+                     {"tr": "Son bütçe değişikliği verideki en yeni günden {days} gün ya da daha önce olan kampanyalar. Dışa aktarımda hiç bütçe değişikliği olmayan kampanya, ilk ve son kayıt arasında en az {days} gün varsa listelenir.",
+                      "en": "Campaigns whose last budget change is {days} or more days before the newest day in the data. A campaign with no budget change in the export is listed when the export's first and last records are at least {days} days apart."}),
+    "off_hours": ({"tr": "Mesai dışı yapılan değişiklik", "en": "Changes outside working hours"},
+                  {"tr": "Yerel saatle {start}-{end} arası{weekend_tr} yapılan değişiklikler.", "en": "Changes made between {start} and {end} local time{weekend_en}."}),
+    "bulk_edit": ({"tr": "Toplu düzenleme", "en": "Bulk edit"},
+                  {"tr": "Bir kişi {minutes} dakika içinde en az {min_campaigns} kampanyada {min_changes} ya da daha fazla değişiklik yaptı.",
+                   "en": "One person made {min_changes} or more changes across at least {min_campaigns} campaigns within {minutes} minutes."}),
+}
+_RULE_OFF_REASON = {
+    "config": {"tr": "Kural ayarlarında kapatıldı.", "en": "Turned off in the rules config."},
+    "no_known_users": {"tr": "Bilinen kullanıcılar listesi verilmedi (--known-users).", "en": "No known-users list was given (--known-users)."},
+    "no_timezone": {"tr": "Saat dilimi bilinmiyor (--timezone verilmedi), yerel saat hesaplanamıyor.", "en": "The time zone is unknown (no --timezone), so local time can't be worked out."},
+}
+_SUB_NAMES = {  # subcategory -> (tr, en) for flag sentences; the data keeps the English value
+    "Budget changed": ("Bütçe", "Budget"), "Bid changed": ("Teklif", "Bid"), "Strategy changed": ("Teklif stratejisi", "Bid strategy"),
+    "Target CPA": ("Hedef EBM", "Target CPA"), "Target ROAS": ("Hedef ROAS", "Target ROAS"), "Bid modifier changed": ("Teklif ayarlaması", "Bid adjustment"),
+    "Negative keyword": ("Negatif anahtar kelime", "Negative keyword"), "Ad changed": ("Reklam", "Ad"), "Asset changed": ("Öğe", "Asset"),
+    "Asset set changed": ("Öğe grubu", "Asset set"), "Location targeting changed": ("Konum hedeflemesi", "Location targeting"),
+    "Device targeting changed": ("Cihaz hedeflemesi", "Device targeting"), "Ad schedule changed": ("Reklam zaman planlaması", "Ad schedule"),
+    "Language targeting changed": ("Dil hedeflemesi", "Language targeting"), "Audience added": ("Kitle", "Audience"),
+    "Audience bid adjustment changed": ("Kitle teklif ayarlaması", "Audience bid adjustment"), "Enabled": ("Durum", "Status"), "Paused": ("Durum", "Status"),
+    "Campaign name changed": ("Kampanya adı", "Campaign name"), "Campaign settings changed": ("Kampanya ayarları", "Campaign settings"),
+    "Ad group name changed": ("Reklam grubu adı", "Ad group name"), "Ad group settings changed": ("Reklam grubu ayarları", "Ad group settings"),
+    "Conversion action changed": ("Dönüşüm işlemi", "Conversion action"), "Conversion tracking changed": ("Dönüşüm izleme", "Conversion tracking"),
+    "Feed changed": ("Feed", "Feed"), "Feed item changed": ("Feed öğesi", "Feed item"), "Account settings changed": ("Hesap ayarları", "Account settings"),
+    "Keyword added": ("Anahtar kelime", "Keyword"), "Asset added": ("Öğe", "Asset"),
+}
+_FAMILY_NAMES = {"keyword": ("Anahtar kelime", "Keyword"), "negative_keyword": ("Negatif anahtar kelime", "Negative keyword"), "asset": ("Öğe", "Asset"),
+                 "ad": ("Reklam", "Ad"), "audience": ("Kitle", "Audience"), "feed_item": ("Feed öğesi", "Feed item"), None: ("Öğe", "Item")}
+_ADD_REMOVE_SUBS = {"Keyword added": ("keyword", "add"), "Keyword removed": ("keyword", "remove"), "Asset added": ("asset", "add"),
+                    "Asset removed": ("asset", "remove"), "Ad created": ("ad", "add"), "Ad removed": ("ad", "remove"),
+                    "Audience added": ("audience", "add"), "Audience removed": ("audience", "remove"), "Feed item added": ("feed_item", "add"),
+                    "Feed item removed": ("feed_item", "remove"), "Negative keyword": ("negative_keyword", None), "Removed": (None, "remove")}
+_SETUP_SUBS = {"Campaign created", "Ad group created", "Budget created"}
+_BID_SUBS = {"Target CPA", "Target ROAS", "Strategy changed"}
+_BID_LIMIT_RE = re.compile(r"(teklif sınırı|bid limit)", re.IGNORECASE)
+_ITEM_ID_RE = re.compile(r"^\s*(?:öğe kimliği|asset id|item id|reklam kimliği|ad id|feed item id)\s*:\s*(\d+)\s*$", re.IGNORECASE)
+_ITEM_TYPE_RE = re.compile(r"^\s*(?:uzantı türü|öğe türü|extension type|asset type)\s*:\s*(.+?)\s*$", re.IGNORECASE)
+_ITEM_LINK_RE = re.compile(r"^\s*(?:bağlantı metni|site bağlantısı metni|link text|sitelink text)\s*:\s*(.+?)\s*$", re.IGNORECASE)
+_ITEM_STATUS_RE = re.compile(r"^\s*(.+?):\s*(?:\S+\s+olan\s+durum\b|status changed\b|\S+\s*->\s*\S+\s*$)", re.IGNORECASE)
+_NOT_ITEM_LINE_RE = re.compile(r"(\bolan\b.*\bolarak\b|\bchanged from\b|\bidi\s*$|\bwas\b|->)", re.IGNORECASE)
+_INLINE_ASSET_ID_RE = re.compile(r"\((?:Asset ID|Öğe kimliği):\s*(\d+)\)", re.IGNORECASE)
+_REMOVED_WORD_RE = re.compile(r"^\s*(kaldırıldı|removed|silindi|deleted)\s*$", re.IGNORECASE)
+_WEEKDAYS = {"tr": ("Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"),
+             "en": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")}
+_CUR_SYMBOL = {"TRY": "₺", "USD": "$", "EUR": "€", "GBP": "£"}
+
+
+def _parse_work_hours(text):
+    """--work-hours 08-20 (or 08:30-19:00) -> off_hours start/end ("20:00", "08:00")."""
+    m = re.match(r"^\s*(\d{1,2})(?::(\d{2}))?\s*-\s*(\d{1,2})(?::(\d{2}))?\s*$", str(text or ""))
+    if not m:
+        raise ValueError(f"--work-hours must look like 08-20 or 08:30-19:00, got {text!r}.")
+    a, b = f"{int(m.group(1)):02d}:{m.group(2) or '00'}", f"{int(m.group(3)):02d}:{m.group(4) or '00'}"
+    if not (_HHMM_RE.match(a) and _HHMM_RE.match(b)) or a == b:
+        raise ValueError(f"--work-hours must name two different times of day, got {text!r}.")
+    return {"start": b, "end": a}
+
+
+def resolve_rules_config(user_cfg=None, work_hours=None):
+    """(cfg, error): cfg is rule -> {tier, enabled, params, off}; user_cfg is the
+    --rules-config JSON {rule: {enabled, ...params}} (2026-11-19)."""
+    cfg = {name: {"tier": tier, "enabled": True, "params": dict(params), "off": None} for name, tier, params in RULE_DEFS}
+    if user_cfg is not None and not isinstance(user_cfg, dict):
+        return None, "--rules-config must be a JSON object {rule: {enabled, ...params}}."
+    for name, over in (user_cfg or {}).items():
+        if name not in cfg:
+            return None, f"Unknown rule in --rules-config: {name!r}. Known rules: {', '.join(n for n, _, _ in RULE_DEFS)}."
+        if not isinstance(over, dict):
+            return None, f"--rules-config {name}: expected an object like {{\"enabled\": true, ...}}."
+        for k, v in over.items():
+            defaults = cfg[name]["params"]
+            if k == "enabled":
+                if not isinstance(v, bool):
+                    return None, f"--rules-config {name}.enabled must be true or false."
+                cfg[name]["enabled"] = v
+            elif k not in defaults:
+                return None, f"--rules-config {name}: unknown setting {k!r}. Settings: {', '.join(['enabled'] + list(defaults)) }."
+            elif k in ("start", "end"):
+                if not isinstance(v, str) or not _HHMM_RE.match(v):
+                    return None, f"--rules-config {name}.{k} must be a time like \"20:00\"."
+                defaults[k] = f"{int(v.split(':')[0]):02d}:{v.split(':')[1]}"
+            elif k == "weekends":
+                if not isinstance(v, bool):
+                    return None, f"--rules-config {name}.weekends must be true or false."
+                defaults[k] = v
+            else:
+                if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0 or (k in _RULE_COUNT_PARAMS and int(v) != v):
+                    return None, f"--rules-config {name}.{k} must be a positive {'whole ' if k in _RULE_COUNT_PARAMS else ''}number."
+                defaults[k] = int(v) if int(v) == v else v
+    if work_hours:
+        try:
+            cfg["off_hours"]["params"].update(_parse_work_hours(work_hours))
+        except ValueError as e:
+            return None, str(e)
+    if cfg["off_hours"]["params"]["start"] == cfg["off_hours"]["params"]["end"]:
+        return None, "--rules-config off_hours.start and .end must differ."
+    for c in cfg.values():
+        if not c["enabled"]:
+            c["off"] = "config"
+    return cfg, None
+
+
+def _r12_num(v, lang, dec=0):
+    s = f"{v:,.{dec}f}"
+    return s.replace(",", "\x00").replace(".", ",").replace("\x00", ".") if lang == "tr" else s
+
+
+def _r12_param(v, lang):
+    return _r12_num(v, lang, 0 if float(v).is_integer() else 1) if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
+
+
+def _r12_money(v, cur, lang, dec=2):
+    body = _r12_num(abs(v), lang, dec)
+    sign = "-" if v < 0 else ""
+    if cur == "%":
+        return f"{sign}%{body}" if lang == "tr" else f"{sign}{body}%"
+    sym = _CUR_SYMBOL.get(cur)
+    return f"{sign}{sym}{body}" if sym else (f"{sign}{body} {cur}" if cur else sign + body)
+
+
+def _r12_pct(p, lang):
+    s = "+" if p > 0 else ("-" if p < 0 else "")
+    body = _r12_num(abs(p), lang, 0)
+    return f"{s}%{body}" if lang == "tr" else f"{s}{body}%"
+
+
+def _r12_span(sec, lang, after=False):
+    """Duration words: 'within N' rounds up, 'N later' rounds to nearest."""
+    import math
+    sec = max(0.0, sec or 0.0)
+    if after and sec < 60:
+        return "1 dakikadan kısa süre sonra" if lang == "tr" else "less than a minute later"
+    rnd = round if after else math.ceil
+    for size, tr_w, en_w in ((60, "dakika", "minute"), (3600, "saat", "hour"), (86400, "gün", "day")):
+        n = max(1, int(rnd(sec / size)))
+        if size == 86400 or (size == 60 and sec < 3600) or (size == 3600 and sec < 2 * 86400):
+            words = f"{n} {tr_w}" if lang == "tr" else f"{n} {en_w}{'' if n == 1 else 's'}"
+            return (words + (" sonra" if lang == "tr" else " later")) if after else words
+    return ""
+
+
+def _r12_cur(r):
+    c = r.get("currency") or r.get("value_unit")
+    return c if c and (c == "%" or CURRENCY_CODE_RE.match(str(c))) else None
+
+
+def _r12_epoch(r):
+    v = r.get("timestamp_utc")
+    if v:
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            pass
+    v = r.get("timestamp_iso")
+    if v:
+        try:
+            return datetime.fromisoformat(str(v)[:19]).replace(tzinfo=dt_timezone.utc).timestamp()
+        except ValueError:
+            pass
+    return None
+
+
+def _r12_actor(r):
+    if r.get("actor_type") == "automation":
+        return r.get("client_type") or r.get("user_name") or "Automation"
+    return r.get("user_name") or r.get("user_email") or None
+
+
+def _r12_item_keys(r, family=None):
+    """Identity keys of the item(s) one statement names: API resource id, else an
+    asset/ad id line, a sitelink text, or plain item lines (keyword text)."""
+    if r.get("resource_id") or r.get("resource_name"):
+        return {("res", str(r.get("resource_type") or ""), str(r.get("resource_id") or r.get("resource_name")))}, None
+    _, details = split_statement(r.get("raw_summary") or "")
+    ext = next((m.group(1).strip('"') for m in map(_ITEM_TYPE_RE.match, details) if m), None)
+    ids = {m.group(1) for m in map(_ITEM_ID_RE.match, details) if m}
+    if ids:
+        return {("id", x) for x in ids}, ext
+    if family == "ad":
+        inline = sorted(set(_INLINE_ASSET_ID_RE.findall("\n".join(details))))
+        return ({("ad", ",".join(inline))} if inline else set()), ext
+    links = {("text", _entity_key(m.group(1)), m.group(1).strip()) for m in map(_ITEM_LINK_RE.match, details) if m}
+    if links:
+        return links, ext
+    keys = set()
+    for line in details:
+        m = _ITEM_STATUS_RE.match(line)
+        if m and not _NOT_ITEM_LINE_RE.search(m.group(1)):
+            keys.add(("text", _entity_key(m.group(1)), m.group(1).strip()))
+        elif ":" not in line and not _NOT_ITEM_LINE_RE.search(line):
+            keys.add(("text", _entity_key(line), line.strip()))
+    return keys, ext
+
+
+def _r12_key(k):
+    """Matching part of an item key (text keys carry their display text third)."""
+    return k[:2] if k[0] == "text" else k
+
+
+def _r12_item_label(key):
+    return key[2] if key[0] == "res" else (key[2].lstrip("-").strip('"[]') if key[0] == "text" else None)
+
+
+def compute_rule_flags(rows, cfg, known=None, metrics_files=None):
+    """(flags, extra): flags sorted attention-first then newest-first, ids F1..;
+    rows are the final (masked) rows; known[i] says whether row i's person is on --known-users."""
+    import bisect
+    n = len(rows)
+    ep = [_r12_epoch(r) for r in rows]
+    acct = [account_identity(r) for r in rows]
+    camp = [campaign_identity(r) for r in rows]
+    adg = [ad_group_identity(r) for r in rows]
+    who = [user_identity(r) if r.get("actor_type") == "human" else None for r in rows]
+    sub = [r.get("subcategory") for r in rows]
+    op = [r.get("operation") for r in rows]
+    evid = [r.get("event_id") for r in rows]
+    raw = []  # (rule, row indices, fact, text, overrides)
+
+    def on(rule):
+        return cfg[rule]["enabled"] and not cfg[rule]["off"]
+
+    def P(rule):
+        return cfg[rule]["params"]
+
+    def by_time(idx):
+        return sorted(idx, key=lambda i: (ep[i], i))
+
+    def events_of(idx):
+        """Distinct events (event_id) of row indices -> [(t, [rows])] by time."""
+        ev = {}
+        for i in idx:
+            ev.setdefault(evid[i] or ("row", i), []).append(i)
+        return sorted(((min(ep[i] for i in v), v) for v in ev.values()), key=lambda e: (e[0], e[1][0]))
+
+    timed = [i for i in range(n) if ep[i] is not None]
+    setup = defaultdict(list)
+    for i in timed:
+        if sub[i] in _SETUP_SUBS and camp[i]:
+            setup[(who[i], acct[i], camp[i])].append(ep[i])
+    for v in setup.values():
+        v.sort()
+
+    def is_setup(key, t0, t1, minutes):
+        times = setup.get(key) or []
+        k = bisect.bisect_left(times, t0 - minutes * 60)
+        return k < len(times) and times[k] <= t1 + minutes * 60
+
+    # 1 budget_jump
+    budget_num = [i for i in range(n) if sub[i] == "Budget changed"
+                  and isinstance(rows[i].get("old_value_num"), (int, float)) and isinstance(rows[i].get("new_value_num"), (int, float))
+                  and rows[i]["old_value_num"] > 0]
+    jumped = set()
+    if on("budget_jump"):
+        for i in budget_num:
+            o, nw = rows[i]["old_value_num"], rows[i]["new_value_num"]
+            pct = (nw - o) / o * 100
+            if abs(pct) >= P("budget_jump")["pct"] - 1e-9:
+                jumped.add(i)
+                cur = _r12_cur(rows[i])
+                raw.append(("budget_jump", [i], {"old": o, "new": nw, "pct": round(pct, 1), "currency": cur},
+                            {lg: f"{'Bütçe' if lg == 'tr' else 'Budget'} {_r12_money(o, cur, lg)} → {_r12_money(nw, cur, lg)} ({_r12_pct(pct, lg)})" for lg in ("tr", "en")}, {}))
+    # 2 budget_cumulative
+    if on("budget_cumulative"):
+        pc, hrs = P("budget_cumulative")["pct"], P("budget_cumulative")["hours"]
+        groups = defaultdict(list)
+        for i in budget_num:
+            if ep[i] is not None and camp[i]:
+                groups[(acct[i], camp[i])].append(i)
+        for seq in groups.values():
+            seq = by_time(seq)
+            a = 0
+            while a < len(seq):
+                i = seq[a]
+                if i in jumped:
+                    a += 1
+                    continue
+                best, b = None, a + 1
+                while b < len(seq) and ep[seq[b]] - ep[i] <= hrs * 3600:
+                    if seq[b] in jumped:
+                        break
+                    cum = (rows[seq[b]]["new_value_num"] - rows[i]["old_value_num"]) / rows[i]["old_value_num"] * 100
+                    if abs(cum) >= pc - 1e-9 and (best is None or abs(cum) > abs(best[1])):
+                        best = (b, cum)
+                    b += 1
+                if not best:
+                    a += 1
+                    continue
+                win = seq[a:best[0] + 1]
+                o, nw, cur = rows[i]["old_value_num"], rows[seq[best[0]]]["new_value_num"], _r12_cur(rows[i])
+                span = ep[win[-1]] - ep[win[0]]
+                raw.append(("budget_cumulative", win, {"old": o, "new": nw, "pct": round(best[1], 1), "steps": len(win), "hours": round(span / 3600, 1), "currency": cur},
+                            {"tr": f"Bütçe {_r12_span(span, 'tr')} içinde {len(win)} adımda {_r12_money(o, cur, 'tr')} → {_r12_money(nw, cur, 'tr')} ({_r12_pct(best[1], 'tr')})",
+                             "en": f"Budget {_r12_money(o, cur, 'en')} → {_r12_money(nw, cur, 'en')} in {len(win)} steps within {_r12_span(span, 'en')} ({_r12_pct(best[1], 'en')})"}, {}))
+                a = best[0] + 1
+    # 3 reverted
+    if on("reverted"):
+        prm = P("reverted")
+        adds, removes = [], defaultdict(list)
+        for i in timed:
+            fam = _ADD_REMOVE_SUBS.get(sub[i])
+            if not fam:
+                continue
+            kind = fam[1] or {"CREATE": "add", "REMOVE": "remove"}.get(op[i])
+            if (kind == "add" and op[i] != "CREATE") or (kind == "remove" and op[i] not in ("REMOVE", "UPDATE")) or not kind:
+                continue
+            keys, ext = _r12_item_keys(rows[i], fam[0])
+            for k in keys:
+                if kind == "add":
+                    adds.append((i, fam[0], k, ext))
+                else:
+                    removes[(acct[i], camp[i], adg[i], _r12_key(k))].append((ep[i], i, fam[0]))
+        pairs = {}  # one flag per (add event, remove event, family), 2026-11-19
+        for i, fam, k, ext in adds:
+            cands = [(t, j) for t, j, f in removes.get((acct[i], camp[i], adg[i], _r12_key(k)), ())
+                     if (f is None or f == fam) and j != i and evid[j] != evid[i] and 0 <= t - ep[i] <= prm["add_remove_minutes"] * 60]
+            if cands:
+                j = min(cands)[1]
+                p_ = pairs.setdefault((evid[i] or i, evid[j] or j, fam), {"rows": [], "keys": {}, "exts": set()})
+                p_["rows"] += [i, j]
+                p_["keys"].setdefault(_r12_key(k), k)
+                p_["exts"].add(ext)
+        for (_, _, fam), p_ in pairs.items():
+            keys, exts = list(p_["keys"].values()), {e for e in p_["exts"] if e}
+            names = _FAMILY_NAMES.get(fam, _FAMILY_NAMES[None])
+            label = _r12_item_label(keys[0]) if len(keys) == 1 else None
+            ext = next(iter(exts)) if len(exts) == 1 else None
+            span = max(ep[x] for x in p_["rows"]) - min(ep[x] for x in p_["rows"])
+            txt = {}
+            for lg, nm in (("tr", names[0]), ("en", names[1])):
+                what = (f"{len(keys)} {nm.lower() if lg == 'tr' else nm.lower() + 's'}" + (f" ({ext})" if ext else "")) if len(keys) > 1 else (
+                    f'{nm} "{label}"' if label else (f"{nm} ({ext})" if ext else nm))
+                txt[lg] = f"{what} eklendi, {_r12_span(span, 'tr', True)} kaldırıldı" if lg == "tr" else f"{what} added, removed {_r12_span(span, 'en', True)}"
+            raw.append(("reverted", p_["rows"], {"kind": "add_remove", "items": len(keys), "minutes": round(span / 60, 1)}, txt, {}))
+        # (b) numeric setting back to an earlier value
+        vals = defaultdict(list)
+        for i in timed:
+            r = rows[i]
+            o, nw = r.get("old_value_num"), r.get("new_value_num")
+            if not isinstance(o, (int, float)) or not isinstance(nw, (int, float)) or o == nw or not camp[i]:
+                continue
+            kind = {"Budget changed": "budget", "Target CPA": "target_cpa", "Target ROAS": "target_roas"}.get(sub[i]) or (
+                "bid_limit" if _BID_LIMIT_RE.search(str(r.get("raw_summary") or r.get("field_name") or "")) else None)
+            if kind:
+                vals[(acct[i], camp[i], adg[i], kind)].append(i)
+        kind_names = {"budget": ("Bütçe", "Budget"), "target_cpa": ("Hedef EBM", "Target CPA"), "target_roas": ("Hedef ROAS", "Target ROAS"), "bid_limit": ("Teklif sınırı", "Bid limit")}
+        for (_, _, _, kind), seq in vals.items():
+            seq = by_time(seq)
+            for b in range(1, len(seq)):
+                k = seq[b]
+                back = rows[k]["new_value_num"]
+                for a in range(b - 1, -1, -1):
+                    j = seq[a]
+                    if ep[k] - ep[j] > prm["value_days"] * 86400:
+                        break
+                    if abs(rows[j]["old_value_num"] - back) <= 1e-6 * max(1.0, abs(back)):
+                        cur, span = _r12_cur(rows[k]), ep[k] - ep[j]
+                        o, nw = rows[j]["old_value_num"], rows[j]["new_value_num"]
+                        nm = kind_names[kind]
+                        raw.append(("reverted", seq[a:b + 1], {"kind": "value", "setting": kind, "old": o, "new": nw, "back": back, "days": round(span / 86400, 1), "currency": cur},
+                                    {"tr": f"{nm[0]} {_r12_money(o, cur, 'tr')} iken {_r12_money(nw, cur, 'tr')} yapıldı, {_r12_span(span, 'tr', True)} yeniden {_r12_money(back, cur, 'tr')} oldu",
+                                     "en": f"{nm[1]} went from {_r12_money(o, cur, 'en')} to {_r12_money(nw, cur, 'en')} and was back at {_r12_money(back, cur, 'en')} {_r12_span(span, 'en', True)}"}, {}))
+                        break
+        # (c) status paused <-> enabled and back
+        status = defaultdict(list)
+        for i in timed:
+            if sub[i] not in ("Paused", "Enabled") or (sub[i] == "Enabled" and _REMOVED_WORD_RE.match(str(rows[i].get("old_value") or ""))):
+                continue
+            keys, _ = _r12_item_keys(rows[i])
+            for k in (keys or {("self",)}):
+                status[(acct[i], camp[i], adg[i], _r12_key(k))].append((i, k))
+        spairs = defaultdict(list)
+        for key, seq in status.items():
+            full = dict(seq)
+            seq = by_time(full)
+            for a in range(1, len(seq)):
+                j, k = seq[a - 1], seq[a]
+                if sub[j] != sub[k] and ep[k] - ep[j] <= prm["status_hours"] * 3600:
+                    spairs[(j, k)].append(full[j])
+        for (j, k), keys in spairs.items():
+            span, first = ep[k] - ep[j], sub[j]
+            label = _r12_item_label(keys[0]) if len(keys) == 1 and keys[0] != ("self",) else None
+            subj_tr = f'"{label}"' if label else (f"{len(keys)} öğe" if len(keys) > 1 else ("Reklam grubu" if adg[j] else "Kampanya"))
+            subj_en = f'"{label}"' if label else (f"{len(keys)} items" if len(keys) > 1 else ("Ad group" if adg[j] else "Campaign"))
+            v1, v2 = ("duraklatıldı", "etkinleştirildi") if first == "Paused" else ("etkinleştirildi", "duraklatıldı")
+            e1, e2 = ("paused", "enabled") if first == "Paused" else ("enabled", "paused")
+            raw.append(("reverted", [j, k], {"kind": "status", "first": e1, "then": e2, "items": len(keys), "hours": round(span / 3600, 1)},
+                        {"tr": f"{subj_tr} {v1}, {_r12_span(span, 'tr', True)} yeniden {v2}", "en": f"{subj_en} {e1}, {e2} again {_r12_span(span, 'en', True)}"}, {}))
+    # 4 repeat_edit
+    if on("repeat_edit"):
+        mins, mc = P("repeat_edit")["minutes"], P("repeat_edit")["min_count"]
+        groups = defaultdict(list)
+        for i in timed:
+            if who[i] and camp[i] and op[i] == "UPDATE":
+                groups[(who[i], acct[i], camp[i], adg[i], sub[i])].append(i)
+        for (u, ac, cp, _, sc), idx in groups.items():
+            evs = events_of(idx)
+            a = b = 0
+            while a < len(evs):
+                b = max(b, a)
+                while b + 1 < len(evs) and evs[b + 1][0] - evs[a][0] <= mins * 60:
+                    b += 1
+                if b - a + 1 >= mc:
+                    if not is_setup((u, ac, cp), evs[a][0], evs[b][0], mins):
+                        win = [i for e in evs[a:b + 1] for i in e[1]]
+                        span = evs[b][0] - evs[a][0]
+                        nm = _SUB_NAMES.get(sc, (sc, sc))
+                        raw.append(("repeat_edit", win, {"subcategory": sc, "count": b - a + 1, "minutes": round(span / 60, 1)},
+                                    {"tr": f"{nm[0]} {_r12_span(span, 'tr')} içinde {b - a + 1} kez değişti", "en": f"{nm[1]} changed {b - a + 1} times within {_r12_span(span, 'en')}"}, {}))
+                    a = b + 1
+                else:
+                    a += 1
+    # 5 burst_session
+    if on("burst_session"):
+        mins, me = P("burst_session")["minutes"], P("burst_session")["min_events"]
+        groups = defaultdict(list)
+        for i in timed:
+            if who[i] and camp[i]:
+                groups[(who[i], acct[i], camp[i])].append(i)
+        for key, idx in groups.items():
+            evs = events_of(idx)
+            a = b = 0
+            while a < len(evs):
+                b = max(b, a)
+                while b + 1 < len(evs) and evs[b + 1][0] - evs[a][0] <= mins * 60:
+                    b += 1
+                if b - a + 1 >= me:
+                    if not is_setup(key, evs[a][0], evs[b][0], mins):
+                        win = [i for e in evs[a:b + 1] for i in e[1]]
+                        span, ne = evs[b][0] - evs[a][0], b - a + 1
+                        raw.append(("burst_session", win, {"events": ne, "changes": len(win), "minutes": round(span / 60, 1)},
+                                    {"tr": f"{_r12_span(span, 'tr')} içinde {ne} değişiklik olayı ({len(win)} değişiklik)",
+                                     "en": f"{ne} change events ({len(win)} changes) within {_r12_span(span, 'en')}"}, {}))
+                    a = b + 1
+                else:
+                    a += 1
+    # 6 bid_target_relearn
+    if on("bid_target_relearn"):
+        days = P("bid_target_relearn")["days"]
+        groups = defaultdict(list)
+        for i in timed:
+            if sub[i] in _BID_SUBS and camp[i]:
+                groups[(acct[i], camp[i])].append(i)
+        for idx in groups.values():
+            evs = events_of(idx)
+            for a in range(1, len(evs)):
+                gap = evs[a][0] - evs[a - 1][0]
+                if gap > days * 86400:
+                    continue
+                cur_rows = evs[a][1]
+
+                def describe(ev_rows, mid):
+                    """'Hedef EBM ₺1 → ₺2' (or 'teklif stratejisi değişti' mid-sentence) per language."""
+                    pick = next((i for i in ev_rows if sub[i] != "Strategy changed" and isinstance(rows[i].get("new_value_num"), (int, float))), None)
+                    if pick is None:
+                        return ({"tr": "teklif stratejisi değişti", "en": "bid strategy changed"} if mid else {"tr": "Teklif stratejisi değişti", "en": "Bid strategy changed"}), None
+                    r, cur = rows[pick], _r12_cur(rows[pick])
+                    nm, o = _SUB_NAMES[r["subcategory"]], r.get("old_value_num")
+                    val = {lg: (f"{_r12_money(o, cur, lg)} → {_r12_money(r['new_value_num'], cur, lg)}" if isinstance(o, (int, float))
+                                else (f"{_r12_money(r['new_value_num'], cur, lg)} olarak ayarlandı" if lg == "tr" else f"set to {_r12_money(r['new_value_num'], cur, lg)}")) for lg in ("tr", "en")}
+                    return {"tr": f"{nm[0]} {val['tr']}", "en": f"{nm[1]} {val['en']}"}, (r["subcategory"], val)
+                d1, k1 = describe(evs[a - 1][1], False)
+                d2, k2 = describe(cur_rows, True)
+                if k1 and k2 and k1[0] == k2[0]:
+                    d2 = k2[1]  # same setting twice: name it once
+                after_tr, after_en = _r12_span(gap, "tr", True), _r12_span(gap, "en", True)
+                txt = {"tr": f"{d1['tr']}, {after_tr} {d2['tr']}", "en": f"{d1['en']}; {after_en}, {d2['en']}"}
+                raw.append(("bid_target_relearn", evs[a - 1][1] + cur_rows,
+                            {"days_since_previous": round(gap / 86400, 1), "subcategories": sorted({sub[i] for i in cur_rows})}, txt, {}))
+    # 7 automation_source
+    if on("automation_source"):
+        groups = defaultdict(list)
+        for i in range(n):
+            r = rows[i]
+            if r.get("actor_type") == "automation" or (r.get("actor_type") == "unknown" and _r12_actor(r)):
+                groups[(_r12_actor(r), r.get("actor_type"), acct[i], camp[i], (r.get("timestamp_iso") or "")[:10])].append(i)
+        for (label, at, _, _, day), idx in groups.items():
+            k = len(idx)
+            if at == "automation":
+                txt = {"tr": f"Otomatik kaynaktan {_r12_num(k, 'tr')} değişiklik ({label})", "en": f"{k:,} change{'s' if k != 1 else ''} from an automated source ({label})"}
+            else:
+                txt = {"tr": f"Türü belirlenemeyen kullanıcıdan {_r12_num(k, 'tr')} değişiklik ({label})", "en": f"{k:,} change{'s' if k != 1 else ''} from a user of unknown type ({label})"}
+            raw.append(("automation_source", idx, {"count": k, "actor_type": at, "day": day or None}, txt, {}))
+    # 8 unknown_user
+    if on("unknown_user") and known is not None:
+        groups = defaultdict(list)
+        for i in range(n):
+            if who[i] and not known[i]:
+                groups[who[i]].append(i)
+        for idx in groups.values():
+            k, nc = len(idx), len({(acct[i], camp[i]) for i in idx if camp[i]})
+            label = _r12_actor(rows[idx[0]])
+            raw.append(("unknown_user", idx, {"count": k, "campaigns": nc},
+                        {"tr": f"Bilinen kullanıcılar listesinde olmayan {label}, {_r12_num(nc, 'tr')} kampanyada {_r12_num(k, 'tr')} değişiklik yaptı",
+                         "en": f"Not on the known-users list: {label} made {k:,} change{'s' if k != 1 else ''} in {nc:,} campaign{'s' if nc != 1 else ''}"}, {"campaign": None, "ad_group": None}))
+    # 9/10 stale rules (calendar days on the chrono_key basis, as in the untouched list)
+    chrono = [chrono_key(r) for r in rows]
+    end_s = max((c for c in chrono if c), default=None)
+    start_s = min((c for c in chrono if c), default=None)
+    end_d = datetime.fromisoformat(end_s[:19]).date() if end_s else None
+    span_days = (end_d - datetime.fromisoformat(start_s[:19]).date()).days if end_s else 0
+    last_c, last_g, last_b = {}, {}, {}
+    for i in range(n):
+        if not chrono[i] or not camp[i]:
+            continue
+        ck = (acct[i], camp[i])
+        if ck not in last_c or chrono[i] > chrono[last_c[ck]]:
+            last_c[ck] = i
+        if adg[i]:
+            gk = ck + (adg[i],)
+            if gk not in last_g or chrono[i] > chrono[last_g[gk]]:
+                last_g[gk] = i
+        if sub[i] in ("Budget changed", "Budget created") and (ck not in last_b or chrono[i] > chrono[last_b[ck]]):
+            last_b[ck] = i
+
+    def days_before_end(i):
+        return (end_d - datetime.fromisoformat(chrono[i][:19]).date()).days
+
+    ev_rows = defaultdict(list)
+    for i in range(n):
+        if evid[i]:
+            ev_rows[evid[i]].append(i)
+
+    def same_event_rows(i, keyfn):
+        ev = evid[i]
+        return [j for j in ev_rows[ev] if keyfn(j)] if ev else [i]
+
+    def acc_ok(accs, i):
+        if None in accs:
+            return True
+        return bool(accs & (_acct_keys(str(rows[i].get("account_name") or "")) | _acct_keys(str(rows[i].get("account_id") or ""))))
+
+    def acct_disp(i):
+        r = rows[i]
+        return r.get("account_name") or (f"Account {r['account_id']}" if r.get("account_id") else None)
+
+    active_c, active_g, metrics_end = _r12_metrics_active(metrics_files) if metrics_files else (None, None, None)
+    stale_c, stale_g = set(), set()
+    if on("stale_entity") and end_d:
+        D = P("stale_entity")["days"]
+        for ck, i in last_c.items():
+            d = days_before_end(i)
+            if d >= D:
+                stale_c.add(ck)
+                raw.append(("stale_entity", same_event_rows(i, lambda j: (acct[j], camp[j]) == ck), {"days": d, "basis": "export", "level": "campaign"},
+                            {"tr": f"Son değişiklik, verideki en yeni günden {_r12_num(d, 'tr')} gün önce yapıldı",
+                             "en": f"Last change {d:,} day{'s' if d != 1 else ''} before the newest day in the data"},
+                            {"user": None, "ad_group": None}))
+        for gk, i in last_g.items():
+            d = days_before_end(i)
+            if d >= D and gk[:2] not in stale_c:
+                stale_g.add(gk)
+                raw.append(("stale_entity", same_event_rows(i, lambda j: (acct[j], camp[j], adg[j]) == gk), {"days": d, "basis": "export", "level": "ad_group"},
+                            {"tr": f"Reklam grubunda son değişiklik, verideki en yeni günden {_r12_num(d, 'tr')} gün önce yapıldı",
+                             "en": f"Last change in this ad group {d:,} day{'s' if d != 1 else ''} before the newest day in the data"},
+                            {"user": None}))
+        if active_c is not None and metrics_end:
+            # 2026-11-19: entities with spend in the metrics but no recent change; the export alone can't show these.
+            by_c, by_g = defaultdict(list), defaultdict(list)
+            for ck, i in last_c.items():
+                by_c[(_entity_key(rows[i].get("campaign_name") or ""),)].append((ck, i))
+            for gk, i in last_g.items():
+                by_g[(_entity_key(rows[i].get("campaign_name") or ""), _entity_key(rows[i].get("ad_group_name") or ""))].append((gk, i))
+            m_flagged = set()
+            for level, table, index in (("campaign", active_c, by_c), ("ad_group", active_g, by_g)):
+                for nk, ent in sorted(table.items(), key=lambda kv: (kv[1]["campaign"], kv[1]["ad_group"] or "")):
+                    cands = [(k, i) for k, i in index.get(nk, []) if acc_ok(ent["accs"], i)]
+                    if any(k[:2] in stale_c or k in stale_g for k, _ in cands) or (level == "ad_group" and nk[:1] in m_flagged):
+                        continue
+                    last = max((i for _, i in cands), key=lambda i: chrono[i], default=None)
+                    d = (metrics_end - datetime.fromisoformat(chrono[last][:19]).date()).days if last is not None else None
+                    if d is not None and d < D:
+                        continue
+                    if level == "campaign":
+                        m_flagged.add(nk)
+                    tr_tail = f"son değişiklik performans verisinin son gününden {_r12_num(d, 'tr')} gün önce" if d is not None else "dışa aktarımda değişikliği yok"
+                    en_tail = f"last change {d:,} day{'s' if d != 1 else ''} before its last day" if d is not None else "no change in the export"
+                    ov = {"user": None}
+                    if last is None:
+                        idx = []
+                        ov.update({"account": ent["account"], "campaign": ent["campaign"], "ad_group": ent["ad_group"], "ts_first": None, "ts_last": None})
+                    else:
+                        idx = same_event_rows(last, lambda j: camp[j] == camp[last] and (level == "campaign" or adg[j] == adg[last]))
+                        if level == "campaign":
+                            ov["ad_group"] = None
+                    raw.append(("stale_entity", idx, {"days": d, "basis": "metrics", "level": level},
+                                {"tr": f"Performans verisinin son 14 gününde gösterim ya da harcaması var, {tr_tail}",
+                                 "en": f"Impressions or spend in the last 14 days of the performance data, {en_tail}"}, ov))
+    if on("stale_budget") and end_d:
+        D = P("stale_budget")["days"]
+        for ck, i in last_c.items():
+            if active_c is not None:
+                ent = active_c.get((_entity_key(rows[i].get("campaign_name") or ""),))
+                if not ent or not acc_ok(ent["accs"], i):
+                    continue
+            b = last_b.get(ck)
+            if b is not None:
+                d = days_before_end(b)
+                if d >= D:
+                    raw.append(("stale_budget", same_event_rows(b, lambda j: (acct[j], camp[j]) == ck and sub[j] in ("Budget changed", "Budget created")),
+                                {"days": d, "basis": "export", "no_budget_change_in_export": False},
+                                {"tr": f"Son bütçe değişikliği, verideki en yeni günden {_r12_num(d, 'tr')} gün önce yapıldı",
+                                 "en": f"Last budget change {d:,} day{'s' if d != 1 else ''} before the newest day in the data"}, {"user": None, "ad_group": None}))
+            elif span_days >= D:
+                raw.append(("stale_budget", [], {"days": span_days, "basis": "export", "no_budget_change_in_export": True},
+                            {"tr": f"Dışa aktarımda bütçe değişikliği yok, ilk ve son kayıt arasında {_r12_num(span_days, 'tr')} gün var",
+                             "en": f"No budget change in the export; its first and last records are {span_days:,} days apart"},
+                            {"user": None, "ad_group": None, "account": acct_disp(i), "_ck": {ck},
+                             "campaign": rows[i].get("campaign_name") or f"Campaign {rows[i].get('campaign_id')}", "ts_first": None, "ts_last": None}))
+    # 11 off_hours (local time each row carries)
+    tz_rows = [i for i in range(n) if rows[i].get("timezone") not in (None, "", "unknown") and rows[i].get("timestamp_iso")]
+    extra = {"off_hours_no_timezone": bool(n) and not tz_rows}
+    tz_rows = [i for i in tz_rows if who[i]]  # people only: scheduled automation runs at night by design
+    if on("off_hours") and tz_rows:
+        prm = P("off_hours")
+        s_m = int(prm["start"][:2]) * 60 + int(prm["start"][3:])
+        e_m = int(prm["end"][:2]) * 60 + int(prm["end"][3:])
+        evs = defaultdict(list)
+        for i in tz_rows:
+            evs[evid[i] or ("row", i)].append(i)
+        for idx in evs.values():
+            ts = datetime.fromisoformat(str(rows[idx[0]]["timestamp_iso"])[:19])
+            m = ts.hour * 60 + ts.minute
+            off_time = (m >= s_m or m < e_m) if s_m > e_m else (s_m <= m < e_m)
+            weekend = ts.weekday() >= 5
+            if off_time or (prm["weekends"] and weekend):
+                k = len(idx)
+                hm = ts.strftime("%H:%M")
+                raw.append(("off_hours", idx, {"weekday": ts.weekday(), "time": hm, "weekend": weekend, "outside_hours": off_time, "changes": k},
+                            {"tr": f"{_WEEKDAYS['tr'][ts.weekday()]} saat {hm}, {_r12_num(k, 'tr')} değişiklik",
+                             "en": f"{_WEEKDAYS['en'][ts.weekday()]} {hm}, {k:,} change{'s' if k != 1 else ''}"}, {}))
+    # 12 bulk_edit (sliding window, linear)
+    if on("bulk_edit"):
+        prm = P("bulk_edit")
+        groups = defaultdict(list)
+        for i in timed:
+            if who[i]:
+                groups[who[i]].append(i)
+        for idx in groups.values():
+            seq = by_time(idx)
+            cc, ncamp = Counter(), 0
+            a = b = 0  # window is seq[a:b]; ncamp = distinct campaigns in it
+            while a < len(seq):
+                while b < len(seq) and ep[seq[b]] - ep[seq[a]] <= prm["minutes"] * 60:
+                    k = (acct[seq[b]], camp[seq[b]])
+                    cc[k] += 1
+                    ncamp += cc[k] == 1 and bool(k[1])
+                    b += 1
+                if b - a >= prm["min_changes"] and ncamp >= prm["min_campaigns"]:
+                    win = seq[a:b]
+                    span = ep[win[-1]] - ep[win[0]]
+                    raw.append(("bulk_edit", win, {"changes": len(win), "campaigns": ncamp, "minutes": round(span / 60, 1)},
+                                {"tr": f"{_r12_span(span, 'tr')} içinde {_r12_num(ncamp, 'tr')} kampanyada {_r12_num(len(win), 'tr')} değişiklik",
+                                 "en": f"{len(win):,} changes across {ncamp:,} campaigns within {_r12_span(span, 'en')}"}, {"campaign": None, "ad_group": None}))
+                    cc.clear()
+                    ncamp = 0
+                    a = b
+                else:
+                    k = (acct[seq[a]], camp[seq[a]])
+                    cc[k] -= 1
+                    if cc[k] <= 0:
+                        del cc[k]
+                        ncamp -= bool(k[1])
+                    a += 1
+    return _r12_finish_flags(rows, raw, ep, cfg, acct, camp), extra
+
+
+def _r12_metrics_active(metrics_files):
+    """Entities with impressions, clicks or spend in the last 14 days of the metrics period:
+    ({(campaign_key,): ent}, {(campaign_key, ad_group_key): ent}, end date); ent = {accs, account, campaign, ad_group}."""
+    days = [m["day"] for mf in metrics_files for m in mf["rows"]]
+    if not days:
+        return {}, {}, None
+    end = max(days)
+    c_tab, g_tab = {}, {}
+    for mf in metrics_files:
+        for m in mf["rows"]:
+            if (end - m["day"]).days >= 14 or not any((m["values"].get(f) or 0) > 0 for f in ("impressions", "clicks", "cost")):
+                continue
+            for tab, key, ag in ((c_tab, (_entity_key(m["campaign"]),), None), (g_tab, (_entity_key(m["campaign"]), _entity_key(m["ad_group"] or "")), m.get("ad_group"))):
+                if tab is g_tab and not ag:
+                    continue
+                ent = tab.setdefault(key, {"accs": set(), "account": m["account"], "campaign": m["campaign"], "ad_group": ag})
+                ent["accs"].add(_entity_key(m["account"]) if m["account"] else None)
+    return c_tab, g_tab, end
+
+
+def _r12_finish_flags(rows, raw, ep, cfg, acct, camp):
+    order = {name: k for k, (name, _, _) in enumerate(RULE_DEFS)}
+    disp = {}
+
+    def labels(i):
+        v = disp.get(i)
+        if v is None:
+            r = rows[i]
+            v = disp[i] = (r.get("account_name") or (f"Account {r['account_id']}" if r.get("account_id") else None),
+                           r.get("campaign_name") or (f"Campaign {r['campaign_id']}" if r.get("campaign_id") else None),
+                           r.get("ad_group_name") or (f"Ad group {r['ad_group_id']}" if r.get("ad_group_id") else None), _r12_actor(r))
+        return v
+
+    def one(vals):
+        vals = [v for v in dict.fromkeys(vals) if v]
+        return vals[0] if len(vals) == 1 else (", ".join(vals) if vals else None)
+    flags = []
+    for rule, idx, fact, text, ov in raw:
+        if len(idx) > 1:
+            idx = list(dict.fromkeys(idx))
+            tsorted = sorted(idx, key=lambda i: (ep[i] if ep[i] is not None else 0, i))
+            lab = list(zip(*(labels(i) for i in idx)))
+            a_, c_, g_, u_ = (one(x) for x in lab)
+        else:
+            tsorted = idx
+            a_, c_, g_, u_ = labels(idx[0]) if idx else (None, None, None, None)
+        f = {
+            "rule": rule, "tier": cfg[rule]["tier"],
+            "change_ids": [rows[i].get("change_id") for i in idx],
+            "event_ids": list(dict.fromkeys(rows[i].get("event_id") for i in idx if rows[i].get("event_id"))),
+            "account": a_, "campaign": c_, "ad_group": g_, "user": u_,
+            "ts_first": rows[tsorted[0]].get("timestamp_iso") if idx else None, "ts_last": rows[tsorted[-1]].get("timestamp_iso") if idx else None,
+            "fact": fact, "text": text,
+            "_ck": {(acct[i], camp[i]) for i in idx if camp[i]},
+        }
+        f.update(ov)
+        flags.append(f)
+    flags.sort(key=lambda f: (f["tier"] != "attention", -_r12_sort_ts(f["ts_first"]), order[f["rule"]], str(f.get("campaign") or "")))
+    return [dict({"id": f"F{k}"}, **f) for k, f in enumerate(flags, 1)]
+
+
+def _r12_sort_ts(ts):
+    try:
+        return datetime.fromisoformat(str(ts)[:19]).replace(tzinfo=dt_timezone.utc).timestamp() if ts else float("-inf")
+    except ValueError:
+        return float("-inf")
+
+
+def build_rules_config(cfg, flags, extra=None):
+    """The rules_config list for change_history.json / DASH_DATA, in display order."""
+    hits = Counter(f["rule"] for f in flags)
+    out = []
+    for name, tier, _ in RULE_DEFS:
+        c = cfg[name]
+        p = c["params"]
+        off = c["off"]
+        if not off and name == "off_hours" and (extra or {}).get("off_hours_no_timezone"):
+            off = "no_timezone"
+        fill = {lg: {k: _r12_param(v, lg) for k, v in p.items()} for lg in ("tr", "en")}
+        if name == "off_hours":
+            fill["tr"]["weekend_tr"] = " ya da hafta sonu" if p["weekends"] else ""
+            fill["en"]["weekend_en"] = " or at the weekend" if p["weekends"] else ""
+        title, desc = RULE_TEXT[name]
+        out.append({"rule": name, "tier": tier, "enabled": not off, "params": dict(p),
+                    "title": {lg: title[lg].format(**fill[lg]) for lg in ("tr", "en")},
+                    "description": {lg: desc[lg].format(**fill[lg]) for lg in ("tr", "en")},
+                    "hits": hits.get(name, 0), "disabled_reason": _RULE_OFF_REASON[off] if off else None})
+    return out
+
+
+def build_campaign_table(rows, flags):
+    """One entry per campaign in the report (2026-11-19), most changes first."""
+    camps = {}
+    end_s = max((chrono_key(r) for r in rows if chrono_key(r)), default=None)
+    end_d = datetime.fromisoformat(end_s[:19]).date() if end_s else None
+    for r in rows:
+        cid = campaign_identity(r)
+        if not cid:
+            continue
+        ck = (account_identity(r), cid)
+        e = camps.setdefault(ck, {"account": r.get("account_name") or (f"Account {r['account_id']}" if r.get("account_id") else None),
+                                  "campaign": r.get("campaign_name") or f"Campaign {r.get('campaign_id')}", "changes": 0, "budget_changes": 0,
+                                  "last_change": None, "days_since": None, "flags_by_rule": {}, "_last": ""})
+        e["changes"] += 1
+        e["budget_changes"] += r.get("subcategory") == "Budget changed"
+        ck_ts = chrono_key(r)
+        if ck_ts and ck_ts > e["_last"]:
+            e["_last"], e["last_change"] = ck_ts, r.get("timestamp_iso")
+            e["days_since"] = (end_d - datetime.fromisoformat(ck_ts[:19]).date()).days
+    for f in flags:
+        for ck in f["_ck"]:
+            if ck in camps:
+                fr = camps[ck]["flags_by_rule"]
+                fr[f["rule"]] = fr.get(f["rule"], 0) + 1
+    out = sorted(camps.items(), key=lambda kv: (-kv[1]["changes"], str(kv[1]["campaign"])))
+    for _, e in out:
+        del e["_last"]
+    return [dict(e, _ck=ck) for ck, e in out]
+
+
+def build_exec_summary(rows, flags, campaign_table):
+    """Totals, people, budget movement, stale list, top campaigns and template sentences (2026-11-19)."""
+    total = len(rows)
+    loc = sorted((r.get("timestamp_iso") or "")[:10] for r in rows if r.get("timestamp_iso"))
+    humans, autos, people = set(), set(), Counter()
+    for r in rows:
+        at = r.get("actor_type")
+        label = _r12_actor(r)
+        people[(label, at)] += 1
+        if at == "human":
+            humans.add(user_identity(r) or label)
+        elif at == "automation":
+            autos.add(label)
+    att = sum(1 for f in flags if f["tier"] == "attention")
+    deltas, curs = [], set()
+    for r in rows:
+        o, nw = r.get("old_value_num"), r.get("new_value_num")
+        if r.get("subcategory") == "Budget changed" and isinstance(o, (int, float)) and isinstance(nw, (int, float)):
+            deltas.append(nw - o)
+            curs.add(_r12_cur(r))
+    inc = [d for d in deltas if d > 0]
+    dec = [d for d in deltas if d < 0]
+    currency = next(iter(curs)) if len(curs) == 1 else None
+    budget = {"currency": currency, "increase_total": round(sum(inc), 2), "increase_count": len(inc),
+              "decrease_total": round(sum(dec), 2), "decrease_count": len(dec), "net": round(sum(deltas), 2), "mixed_currencies": len(curs) > 1}
+    stale = sorted(({"account": f["account"], "campaign": f["campaign"], "days": f["fact"]["days"], "basis": f["fact"]["basis"]}
+                    for f in flags if f["rule"] == "stale_entity" and f["fact"].get("level") == "campaign"),
+                   key=lambda s: (s["days"] is None, -(s["days"] or 0)))
+    att_by = Counter()
+    for f in flags:
+        if f["tier"] == "attention":
+            for ck in f["_ck"]:
+                att_by[ck] += 1
+    top = [{"account": e["account"], "campaign": e["campaign"], "changes": e["changes"], "attention_flags": att_by.get(e["_ck"], 0)} for e in campaign_table[:10]]
+    ev = len({r.get("event_id") for r in rows})
+    head, sent = {}, {"tr": [], "en": []}
+    if not total:
+        head = {"tr": "Bu dönemde değişiklik kaydı yok.", "en": "No changes in this period."}
+    else:
+        nt = {"tr": _r12_num(total, "tr"), "en": f"{total:,}"}
+        if att:
+            head = {"tr": f"Bu dönemde {nt['tr']} değişiklik yapıldı, {_r12_num(att, 'tr')} durum göz atmayı hak ediyor.",
+                    "en": f"{nt['en']} change{'s' if total != 1 else ''} in this period; {att:,} {'item is' if att == 1 else 'items are'} worth a look."}
+        else:
+            head = {"tr": f"Bu dönemde {nt['tr']} değişiklik yapıldı, hiçbiri kural eşiklerini aşmadı.",
+                    "en": f"{nt['en']} change{'s' if total != 1 else ''} in this period; none crossed the rule thresholds."}
+        # sentence 1: where (fewest campaigns holding more than half of the changes) and who
+        acc, k = 0, 0
+        for e in campaign_table:
+            acc += e["changes"]
+            k += 1
+            if acc * 2 > total:
+                break
+        where = k if campaign_table and acc * 2 > total else None
+        h, a = len(humans), len(autos)
+        who_tr = (f"{_r12_num(h, 'tr')} kişi" if h else "") + (" ve " if h and a else "") + (f"{_r12_num(a, 'tr')} otomatik kaynak" if a else "")
+        who_en = (f"{h:,} {'person' if h == 1 else 'people'}" if h else "") + (" and " if h and a else "") + (f"{a:,} automated source{'s' if a != 1 else ''}" if a else "")
+        if where is not None:
+            w_tr = "tek kampanyada" if where == 1 else f"{_r12_num(where, 'tr')} kampanyada"
+            w_en = "one campaign" if where == 1 else f"{where:,} campaigns"
+            sent["tr"].append(f"Değişikliklerin yarısından fazlası {w_tr} yapıldı" + (f", bu dönemde {who_tr} değişiklik yaptı." if who_tr else "."))
+            sent["en"].append(f"More than half of the changes were in {w_en}" + (f", and {who_en} made changes in this period." if who_en else "."))
+        elif who_tr:
+            sent["tr"].append(f"Bu dönemde {who_tr} değişiklik yaptı.")
+            sent["en"].append(f"{who_en[0].upper() + who_en[1:]} made changes in this period.")
+        # sentence 2: budget movement
+        if deltas and not budget["mixed_currencies"]:
+            net = budget["net"]
+            dec_n = 0 if float(net).is_integer() else 2
+            if net > 0:
+                sent["tr"].append(f"Bütçeler toplamda günlük {_r12_money(net, currency, 'tr', dec_n)} arttı.")
+                sent["en"].append(f"Daily budgets went up by {_r12_money(net, currency, 'en', dec_n)} in total.")
+            elif net < 0:
+                sent["tr"].append(f"Bütçeler toplamda günlük {_r12_money(-net, currency, 'tr', dec_n)} azaldı.")
+                sent["en"].append(f"Daily budgets went down by {_r12_money(-net, currency, 'en', dec_n)} in total.")
+            else:
+                sent["tr"].append("Bütçe artışları ve azalışları toplamda birbirini dengeledi.")
+                sent["en"].append("Budget increases and decreases cancelled each other out.")
+        # sentence 3: campaigns left untouched (export basis)
+        st = [s for s in stale if s["basis"] == "export" and s["days"] is not None]
+        if len(st) == 1:
+            sent["tr"].append(f"Bir kampanyaya {_r12_num(st[0]['days'], 'tr')} gündür hiç dokunulmadı.")
+            sent["en"].append(f"One campaign has had no change for {st[0]['days']:,} days.")
+        elif st:
+            lo = min(s["days"] for s in st)
+            sent["tr"].append(f"{_r12_num(len(st), 'tr')} kampanyaya en az {_r12_num(lo, 'tr')} gündür dokunulmadı, en uzunu {_r12_num(st[0]['days'], 'tr')} gün.")
+            sent["en"].append(f"{len(st):,} campaigns have had no change for at least {lo:,} days; the longest gap is {st[0]['days']:,} days.")
+    return {
+        "period": {"from": loc[0] if loc else None, "to": loc[-1] if loc else None},
+        "totals": {"changes": total, "events": ev if total else 0, "campaigns_changed": len(campaign_table),
+                   "ad_groups_changed": len({(account_identity(r), campaign_identity(r), ad_group_identity(r)) for r in rows if ad_group_identity(r)}),
+                   "people": len(humans), "automation": len(autos), "attention_flags": att, "info_flags": len(flags) - att},
+        "people": [{"label": lbl, "actor_type": at, "changes": c} for (lbl, at), c in sorted(people.items(), key=lambda kv: (-kv[1], str(kv[0][0])))],
+        "budget": budget, "stale": stale, "top_campaigns": top, "headline": head, "sentences": sent,
+    }
+
+
+def build_rule_outputs(rows, cfg, known=None, metrics_files=None, ui_lang="en"):
+    """Every round-12 field for change_history.json and DASH_DATA, from the final rows."""
+    if known is None and not cfg["unknown_user"]["off"]:
+        cfg["unknown_user"]["off"] = "no_known_users"
+    flags, extra = compute_rule_flags(rows, cfg, known=known, metrics_files=metrics_files)
+    table = build_campaign_table(rows, flags)
+    summary = build_exec_summary(rows, flags, table)
+    rcfg = build_rules_config(cfg, flags, extra)
+    for f in flags:
+        f.pop("_ck", None)
+    return {"ui_lang": ui_lang, "rules_config": rcfg, "flags": flags, "exec_summary": summary,
+            "campaign_table": [{k: v for k, v in e.items() if k != "_ck"} for e in table]}
 
 
 def write_digest(out_dir, rows, aggregation, meta, lang):
@@ -5123,6 +6072,30 @@ def write_digest(out_dir, rows, aggregation, meta, lang):
         [t["changes"], num(total)], [t["events"], num(meta.get("event_count", 0))], [t["accounts"], num(s.get("active_accounts", 0))],
         [t["humans"], num(s.get("active_users", 0))], [t["automation"], num(len(users.get("automation", [])))],
         [t["campaigns"], num(s.get("changed_campaigns", 0))], [t["ad_groups"], num(s.get("changed_ad_groups", 0))]])
+    # 2026-11-19: rule flags grouped by rule, up to 3 example lines each; info rules one line each.
+    rcfg = aggregation.get("rules_config") or []
+    if rcfg and rows:
+        by_rule = defaultdict(list)
+        for f in aggregation.get("flags") or []:
+            by_rule[f["rule"]].append(f)
+        flat = lambda v: " ".join(str(v).split())
+        stamp = lambda ts: (f"{ts[8:10]}.{ts[5:7]}.{ts[:4]} {ts[11:16]}" if lang == "tr" else f"{ts[:10]} {ts[11:16]}") if ts else None
+        L += [f"## {t['worth']}", "", t["worth_note"], ""]
+        att = [c for c in rcfg if c["tier"] == "attention" and c["enabled"] and by_rule.get(c["rule"])]
+        if not att:
+            L += [t["worth_none"], ""]
+        for c in att:
+            fl = by_rule[c["rule"]]
+            L += [f"### {flat(c['title'][lang])} ({num(len(fl))})", ""]
+            L += ["- " + " · ".join(flat(x) for x in (stamp(f.get("ts_first")), f.get("campaign"), f["text"][lang]) if x) for f in fl[:3]]
+            L += ([f"- {t['worth_more'].format(n=num(len(fl) - 3))}"] if len(fl) > 3 else []) + [""]
+        info = [c for c in rcfg if c["tier"] == "info"]
+        if info:
+            L += [f"**{t['worth_info']}**", ""]
+            L += [f"- {flat(c['title'][lang])}: " + (num(c["hits"]) if c["enabled"] else f"{t['worth_off']}. {c['disabled_reason'][lang]}") for c in info] + [""]
+        off = [c for c in rcfg if c["tier"] == "attention" and not c["enabled"]]
+        if off:
+            L += [f"**{t['worth_off_rules']}**", ""] + [f"- {flat(c['title'][lang])}: {c['disabled_reason'][lang]}" for c in off] + [""]
     if aggregation.get("categories"):
         L += [f"## {t['by_category']}", ""] + table([t["category"], t["count"], t["share"]],
                                                     [[c["category"], num(c["count"]), pct(c["count"])] for c in aggregation["categories"]])
@@ -5187,7 +6160,8 @@ def write_digest(out_dir, rows, aggregation, meta, lang):
 def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decimal_style=None,
                   tz="unknown", mask_users=False, allow_unknown_categories=False, force_review=False,
                   extra_rules=None, open_browser=False, generated_at=None, account_name=None, currency=None, column_map=None,
-                  input_accounts=None, metrics=None, window_days=7, conversion_lag_days=7):
+                  input_accounts=None, metrics=None, window_days=7, conversion_lag_days=7,
+                  rules_config=None, known_users=None, work_hours=None, lang=None):
     # 2026-11-14: input_path may be a list of files (one run, several exports/accounts).
     inputs = [str(p) for p in input_path] if isinstance(input_path, (list, tuple)) else [str(input_path)]
     inputs, dup_inputs = _dedupe_inputs(inputs)
@@ -5204,6 +6178,14 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         return blocked
     if window_days < 1 or conversion_lag_days < 0:
         return {"status": "error", "message": "--window-days must be at least 1 and --conversion-lag-days at least 0."}
+    # 2026-11-19: rule thresholds (--rules-config/--work-hours) and the UI/digest language (--lang).
+    lang = lang or DIGEST_LANG
+    if lang not in ("auto", "tr", "en"):
+        return {"status": "error", "message": f"--lang must be auto, tr or en, got {lang!r}."}
+    rules_cfg, rules_err = resolve_rules_config(rules_config, work_hours)
+    if rules_err:
+        return {"status": "error", "message": rules_err}
+    known_set = {str(k).strip().lower() for k in known_users if str(k).strip()} if known_users is not None else None
     if all(_is_empty_event_list(p) for p in inputs):
         dq = {"input_rows": 0, "rows_added_by_field_split": 0, "left_out": {"unreadable_date": 0, "duplicate": 0, **({"duplicate_across_files": 0} if multi else {})}, "rows_in_report": 0,
               "in_report_with_limits": {}, "ignored_headers": []}
@@ -5211,7 +6193,8 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         (out_dir / "coverage.txt").write_text("Input rows: 0\nThe input is an empty event list: no change in the requested range.\n", encoding="utf-8")
         empty_infos = [{"file": names[p], "source_label": "empty_event_list", "is_api": True} for p in inputs]
         build_dashboard([], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at, json_out=out_dir / "change_history.json", data_quality=dq,
-                        meta_extra={"sources": build_sources_meta([], empty_infos), "coverage_notes": build_coverage_notes(empty_infos, False)})
+                        meta_extra={"sources": build_sources_meta([], empty_infos), "coverage_notes": build_coverage_notes(empty_infos, False)},
+                        extra=build_rule_outputs([], rules_cfg, known=None if known_set is None else [], ui_lang=lang if lang != "auto" else "en"))
         res = {"status": "ok", "out": str(out_dir / "dashboard.html"), "row_count": 0, "empty": True,
                "message": "The input holds zero change events (nothing changed in the requested range, or the range is outside the API's 30 days).",
                "data_quality": dq}
@@ -5303,6 +6286,9 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
     # can leak an identity --mask-users was asked to hide.
     if currency:
         apply_currency(c["rows"], currency)
+    # 2026-11-19: --known-users is matched on the real identity, before masking (row order is kept).
+    known_flags = None if known_set is None else [r.get("actor_type") != "human" or bool({str(r.get("user_email") or "").strip().lower(), str(r.get("user_name") or "").strip().lower()} & known_set)
+                                                  for r in c["rows"]]
     c["rows"] = mask_rows(c["rows"], mask_users)
 
     # Fixed 2026-10-10 (6th audit round): a naive timestamp with no
@@ -5393,12 +6379,14 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
 
     source_warnings = [w for _, v in validated if v for w in v.get("warnings", [])] + [w for pr in profiles for w in save_mapping_profile(pr)]
     source_warnings += [f"{Path(d).name} was given more than once; it was read once." for d in dup_inputs]
+    ui_lang = _digest_lang(c["rows"], {"sources": sources_meta}, lang)
+    rule_out = build_rule_outputs(c["rows"], rules_cfg, known=known_flags, metrics_files=metrics_files, ui_lang=ui_lang)
     data = build_dashboard(c["rows"], out_dir / "dashboard.html", mask_users=mask_users, generated_at=generated_at,
                             json_out=out_dir / "change_history.json", rows_skipped_unparseable_date=n["rows_skipped_unparseable_date"],
                             data_quality=data_quality, meta_extra={"sources": sources_meta, "coverage_notes": build_coverage_notes(file_infos, bool(metrics_files))},
-                            extra=({"metrics_meta": metrics_meta, "before_after": before_after,
-                                    "metrics_daily": compute_metrics_daily(metrics_files)} if metrics_files else None))
-    write_digest(out_dir, c["rows"], data, data["meta"], DIGEST_LANG)
+                            extra=dict(rule_out, **({"metrics_meta": metrics_meta, "before_after": before_after,
+                                                     "metrics_daily": compute_metrics_daily(metrics_files)} if metrics_files else {})))
+    write_digest(out_dir, c["rows"], data, data["meta"], ui_lang)
 
     result = {
         "status": "ok", "out": str(out_dir / "dashboard.html"), "row_count": len(c["rows"]),
@@ -5411,6 +6399,8 @@ def run_pipeline(input_path, out_dir, mapping_file=None, date_format=None, decim
         "date_format_used": n["date_format_used"], "decimal_style_used": n["decimal_style_used"],
         "ignored_headers": ignored_headers,
         "data_quality": data_quality,
+        "flags": {"attention": rule_out["exec_summary"]["totals"]["attention_flags"], "info": rule_out["exec_summary"]["totals"]["info_flags"]},
+        "ui_lang": ui_lang,
     }
     if multi:
         result["files"] = file_results
@@ -6337,6 +7327,223 @@ def _run_r11_cases(td):
         proc = subprocess.run(["node", "-e", stub + body + "\n" + _JS_R11_EXPLORER_SUITE], capture_output=True, text=True, timeout=15)
         assert proc.returncode == 0, f"r11 explorer JS check failed:\n{proc.stdout}\n{proc.stderr}"
         print(f"[PASS] r11 B-2 (Node): {proc.stdout.strip()}")
+
+
+def _r12_rules_fixture():
+    """Synthetic export: each rule fires once on purpose, plus near-misses that must not fire."""
+    B = lambda c, a, b, inc=True: f"1 bütçenin tutarı {'artırıldı' if inc else 'azaltıldı'}\n  {c}: ₺{a} olan Bütçe tutarı, ₺{b} olarak değiştirildi"
+    T = lambda a, b: f"Kampanya değiştirildi\n  ₺{a} olan Hedef EBM değeri, ₺{b} değerine artırıldı"
+    lang = lambda x: f"1 dil eklendi\n  Dil {x}"
+    u1, u2, u3 = "u1@example.test", "u2@example.test", "u3@example.test"
+    rows = [
+        ["2026-08-03 10:00:00", u1, "Camp Stale", "", B("Camp Stale", "100,00", "110,00")],          # stale_budget
+        ["2026-08-20 10:00:00", u1, "Camp Stale", "", lang("A")],                                    # stale_entity
+        ["2026-10-05 10:00:00", u1, "Camp Budget", "", B("Camp Budget", "300,00", "695,00")],       # budget_jump +132%
+        ["2026-10-05 11:00:00", u1, "Camp Near", "", B("Camp Near", "100,00", "149,00")],           # near: +49%
+        ["2026-10-05 10:00:00", u2, "Camp Cum", "", B("Camp Cum", "100,00", "130,00")],             # budget_cumulative
+        ["2026-10-05 15:00:00", u2, "Camp Cum", "", B("Camp Cum", "130,00", "160,00")],
+        ["2026-10-06 10:00:00", u1, "Camp Revert", "", "Kampanya öğesi oluşturuldu\n  Durum: Etkin\n  Uzantı türü: Site bağlantısı\n  Öğe kimliği: 111"],
+        ["2026-10-06 10:05:00", u1, "Camp Revert", "", "Kampanya öğesi değiştirildi\n  Etkin olan Durum, Kaldırıldı olarak değiştirildi\n  Uzantı türü: Site bağlantısı\n  Öğe kimliği: 111"],
+        ["2026-10-06 13:00:00", u1, "Camp Revert", "G1", '1 sıralı eşlemeli anahtar kelime eklendi\n  "kelime b"'],      # near: removed after 90 min
+        ["2026-10-06 14:30:00", u1, "Camp Revert", "G1", '1 sıralı eşlemeli anahtar kelime kaldırıldı\n  "kelime b"'],
+        ["2026-10-02 10:00:00", u2, "Camp Revert", "", B("Camp Revert", "100,00", "120,00")],       # reverted value (3 days)
+        ["2026-10-05 12:00:00", u2, "Camp Revert", "", B("Camp Revert", "120,00", "100,00", False)],
+        ["2026-10-08 10:00:00", u1, "Camp Revert", "G1", "1 geniş eşlemeli anahtar kelime duraklatıldı\n  kelime c: etkin olan durum duraklatıldı olarak değiştirildi"],
+        ["2026-10-08 15:00:00", u1, "Camp Revert", "G1", "1 geniş eşlemeli anahtar kelime etkin\n  kelime c: duraklatıldı olan durum etkin olarak değiştirildi"],
+        ["2026-09-01 10:00:00", u2, "Camp Near2", "", B("Camp Near2", "200,00", "220,00")],         # near: back after 8 days
+        ["2026-09-09 10:00:00", u2, "Camp Near2", "", B("Camp Near2", "220,00", "200,00", False)],
+        ["2026-10-06 16:00:00", u2, "Camp Repeat", "", B("Camp Repeat", "500,00", "520,00")],       # repeat_edit
+        ["2026-10-06 16:03:00", u2, "Camp Repeat", "", B("Camp Repeat", "520,00", "540,00")],
+        ["2026-10-07 11:00:00", u1, "Camp Setup", "", "Kampanya oluşturuldu\n  Bütçe tutarı: ₺500,00"],      # near: setup burst
+        ["2026-10-07 11:00:40", u1, "Camp Setup", "", "1 teklif ayarlama değişikliği\n  Mobil: %10 olarak ayarlandı"],
+        ["2026-10-07 11:01:20", u1, "Camp Setup", "", "1 teklif ayarlama değişikliği\n  Mobil: %20 olarak ayarlandı"],
+        ["2026-10-07 11:02:00", u1, "Camp Setup", "", lang("B")],
+        ["2026-10-06 14:00:00", u2, "Camp Burst", "", lang("A")],                                    # burst_session
+        ["2026-10-06 14:01:00", u2, "Camp Burst", "", lang("B")],
+        ["2026-10-06 14:02:00", u2, "Camp Burst", "", lang("C")],
+        ["2026-10-06 14:00:00", u2, "Camp Burst2", "", lang("A")],                                   # near: 5 minutes
+        ["2026-10-06 14:02:30", u2, "Camp Burst2", "", lang("B")],
+        ["2026-10-06 14:05:00", u2, "Camp Burst2", "", lang("C")],
+        ["2026-10-05 10:00:00", u1, "Camp Bid", "", T("40,00", "45,00")],                           # bid_target_relearn
+        ["2026-10-08 10:00:00", u1, "Camp Bid", "", T("45,00", "50,00")],
+        ["2026-09-24 10:00:00", u1, "Camp Bid2", "", T("40,00", "45,00")],                          # near: 8 days
+        ["2026-10-02 10:00:00", u1, "Camp Bid2", "", T("45,00", "50,00")],
+        ["2026-10-07 10:00:00", "Automated rule", "Camp Auto", "", lang("A")],                       # automation_source
+        ["2026-10-07 10:30:00", u3, "Camp Auto", "", lang("B")],                                     # unknown_user (with --known-users)
+        ["2026-10-10 11:00:00", u1, "Camp Off", "", lang("A")],                                      # off_hours: Saturday
+        ["2026-10-07 21:30:00", u1, "Camp Off", "", lang("B")],                                      # off_hours: 21:30
+        ["2026-10-06 08:00:00", u1, "Camp Off", "", lang("C")],                                      # near: weekday 08:00
+    ]
+    for k in range(20):  # bulk_edit: 20 statements, 5 campaigns, under 8 minutes, no 3-minute burst
+        rows.append([f"2026-10-09 09:{(k % 5) * 10 // 60 + (k // 5) * 150 // 60:02d}:{((k % 5) * 10 + (k // 5) * 150) % 60:02d}", u1, f"Bulk {k % 5}", "", lang(k)])
+    for k in range(19):  # near: 19 statements
+        rows.append([f"2026-10-09 10:{(k % 5) * 10 // 60 + (k // 5) * 150 // 60:02d}:{((k % 5) * 10 + (k // 5) * 150) % 60:02d}", u2, f"Bulk {5 + k % 5}", "", lang(k)])
+    rows.append(["2026-10-12 12:00:00", u1, "Camp End", "", lang("Z")])
+    return rows
+
+def _run_r12_rules_cases(td):
+    """2026-11-19 round 12 (RULES): rule flags, rules config, exec summary, campaign table, digest section. Synthetic data only."""
+    import subprocess
+    global DIGEST_LANG
+    f = _r9_csv(td, "r12_rules.csv", _r12_rules_fixture())
+    known = ["u1@example.test", "U2@Example.test"]
+    run = lambda out, **kw: run_pipeline(f, td / out, account_name="Acc", generated_at="2026-10-13T00:00:00", **dict({"tz": "Europe/Istanbul"}, **kw))
+    load = lambda out: json.loads((td / out / "change_history.json").read_text(encoding="utf-8"))
+    judge_re = re.compile(r"\b(hata|hatalı|kötü|anomali|riskli|error|bad|wrong|risky|anomal\w*)\b", re.IGNORECASE)
+    with _test_case("r12 rules: every rule fires once on its fixture and the near-misses stay quiet"):
+        r = run("r12_all", known_users=known)
+        assert r["status"] == "ok" and r["ui_lang"] == "tr", r
+        d = load("r12_all")
+        fl = d["flags"]
+        att = sorted((x["rule"], x["campaign"]) for x in fl if x["tier"] == "attention")
+        want = sorted([("budget_jump", "Camp Budget"), ("budget_cumulative", "Camp Cum"), ("reverted", "Camp Revert"), ("reverted", "Camp Revert"),
+                       ("reverted", "Camp Revert"), ("repeat_edit", "Camp Repeat"), ("burst_session", "Camp Burst"), ("bid_target_relearn", "Camp Bid"),
+                       ("automation_source", "Camp Auto"), ("unknown_user", None)])
+        assert att == want, att
+        kinds = sorted(x["fact"]["kind"] for x in fl if x["rule"] == "reverted")
+        assert kinds == ["add_remove", "status", "value"], kinds
+        assert not any("kelime b" in x["text"]["tr"] for x in fl), "a removal 90 minutes later is outside 60 minutes"
+        ju = [x for x in fl if x["rule"] == "budget_jump"][0]
+        assert ju["fact"]["pct"] == 131.7 and ju["text"] == {"tr": "Bütçe ₺300,00 → ₺695,00 (+%132)", "en": "Budget ₺300.00 → ₺695.00 (+132%)"}, ju
+        uu = [x for x in fl if x["rule"] == "unknown_user"][0]
+        assert uu["user"] == "u3@example.test" and uu["fact"] == {"count": 1, "campaigns": 1}, uu
+        off = sorted(x["ts_first"] for x in fl if x["rule"] == "off_hours")
+        assert off == ["2026-10-07T21:30:00", "2026-10-10T11:00:00"], f"Saturday and 21:30 only, not a weekday 08:00: {off}"
+        bulk = [x for x in fl if x["rule"] == "bulk_edit"]
+        assert len(bulk) == 1 and bulk[0]["user"] == "u1@example.test" and bulk[0]["fact"]["changes"] == 20 and bulk[0]["fact"]["campaigns"] == 5, bulk
+        st = {x["campaign"]: x["fact"] for x in fl if x["rule"] == "stale_entity"}
+        assert st["Camp Stale"] == {"days": 53, "basis": "export", "level": "campaign"}, st
+        sb = {x["campaign"]: x["fact"] for x in fl if x["rule"] == "stale_budget"}
+        assert sb["Camp Stale"]["days"] == 70 and sb["Camp Stale"]["no_budget_change_in_export"] is False and sb["Camp End"]["no_budget_change_in_export"] is True, sb
+        print("[PASS] r12 rules: every rule fires once on its fixture and the near-misses stay quiet")
+
+    with _test_case("r12 rules: setup sessions are left out of burst_session and repeat_edit, and only those"):
+        rows = _r9_rows(td / "r12_all")
+        cfg, _ = resolve_rules_config(None)
+        with_setup, _ = compute_rule_flags(rows, cfg)
+        without, _ = compute_rule_flags([x for x in rows if x["subcategory"] != "Campaign created"], cfg)
+        pick = lambda fl: sorted(x["rule"] for x in fl if x["campaign"] == "Camp Setup" and x["tier"] == "attention")
+        assert pick(with_setup) == [] and pick(without) == ["burst_session", "repeat_edit"], (pick(with_setup), pick(without))
+        print("[PASS] r12 rules: setup sessions are left out of burst_session and repeat_edit, and only those")
+
+    with _test_case("r12 rules: flag, rules_config, exec_summary and campaign_table shapes; same data in DASH_DATA"):
+        ids = {x["change_id"] for x in d["changes"]}
+        assert [x["id"] for x in fl] == [f"F{k}" for k in range(1, len(fl) + 1)], "ids F1.. in order"
+        keys = ["id", "rule", "tier", "change_ids", "event_ids", "account", "campaign", "ad_group", "user", "ts_first", "ts_last", "fact", "text"]
+        for x in fl:
+            assert sorted(x) == sorted(keys) and set(x["change_ids"]) <= ids and set(x["text"]) == {"tr", "en"}, x
+            assert x["ts_first"] is None or x["ts_first"] <= x["ts_last"], x
+        tiers = [x["tier"] for x in fl]
+        assert tiers == sorted(tiers, key=lambda t: t != "attention"), "attention first"
+        a_ts = [x["ts_first"] for x in fl if x["tier"] == "attention"]
+        assert a_ts == sorted(a_ts, reverse=True), "newest first within a tier"
+        rc = d["rules_config"]
+        assert [c["rule"] for c in rc] == [n for n, _, _ in RULE_DEFS] and all(sorted(c) == ["description", "disabled_reason", "enabled", "hits", "params", "rule", "tier", "title"] for c in rc), rc[0]
+        assert {c["rule"]: c["hits"] for c in rc} == dict(Counter(x["rule"] for x in fl), **{c["rule"]: 0 for c in rc if not any(x["rule"] == c["rule"] for x in fl)})
+        es = d["exec_summary"]
+        assert sorted(es) == ["budget", "headline", "people", "period", "sentences", "stale", "top_campaigns", "totals"], sorted(es)
+        assert es["period"] == {"from": "2026-08-03", "to": "2026-10-12"} and es["totals"]["attention_flags"] == 10 and es["totals"]["automation"] == 1, es
+        assert es["budget"] == {"currency": "TRY", "increase_total": 594.0, "increase_count": 9, "decrease_total": -40.0, "decrease_count": 2, "net": 554.0, "mixed_currencies": False}, es["budget"]
+        assert es["headline"]["tr"] == f"Bu dönemde {_r12_num(len(d['changes']), 'tr')} değişiklik yapıldı, 10 durum göz atmayı hak ediyor." and es["headline"]["en"].endswith("10 items are worth a look."), es["headline"]
+        assert "Bütçeler toplamda günlük ₺554 arttı." in es["sentences"]["tr"] and "Daily budgets went up by ₺554 in total." in es["sentences"]["en"], es["sentences"]
+        assert es["stale"][0] == {"account": "Acc", "campaign": "Camp Stale", "days": 53, "basis": "export"}, es["stale"]
+        ct = {c["campaign"]: c for c in d["campaign_table"]}
+        assert len(ct) == len({x["campaign_name"] for x in d["changes"]}) and ct["Camp Revert"]["flags_by_rule"] == {"reverted": 3}, ct["Camp Revert"]
+        assert ct["Camp Stale"]["days_since"] == 53 and ct["Camp Stale"]["last_change"] == "2026-08-20T10:00:00" and ct["Camp Cum"]["budget_changes"] == 2, ct["Camp Stale"]
+        html = (td / "r12_all" / "dashboard.html").read_text(encoding="utf-8")
+        emb = json.loads(re.search(r"/\*__DASH_DATA__\*/(\{.*?\});?\s*\n", html, re.S).group(1))
+        assert all(emb[k] == d[k] for k in ("flags", "rules_config", "exec_summary", "campaign_table", "ui_lang")), "DASH_DATA carries the same rule data"
+        print("[PASS] r12 rules: flag, rules_config, exec_summary and campaign_table shapes; same data in DASH_DATA")
+
+    with _test_case("r12 rules: wording is factual, Turkish strings start with a capital, no em-dash"):
+        texts = [c[k][lg] for c in rc for k in ("title", "description") for lg in ("tr", "en")] + [x["text"][lg] for x in fl for lg in ("tr", "en")]
+        texts += [es["headline"][lg] for lg in ("tr", "en")] + es["sentences"]["tr"] + es["sentences"]["en"]
+        assert not any(judge_re.search(t) or _DIGEST_JUDGEMENT_RE.search(t) for t in texts), [t for t in texts if judge_re.search(t) or _DIGEST_JUDGEMENT_RE.search(t)]
+        assert not any("\u2014" in t for t in texts), "no em-dash"
+        tr = [c[k]["tr"] for c in rc for k in ("title", "description")] + [x["text"]["tr"] for x in fl] + [es["headline"]["tr"]] + es["sentences"]["tr"]
+        bad = [t for t in tr if not (t[0].isdigit() or t[0] in '"%₺' or t[0] == t[0].upper() != t[0].lower())]
+        assert not bad, bad
+        print("[PASS] r12 rules: wording is factual, Turkish strings start with a capital, no em-dash")
+
+    with _test_case("r12 rules: --rules-config overrides and validation, --work-hours, no timezone, masking"):
+        r = run("r12_cfg", rules_config={"budget_jump": {"pct": 40}, "off_hours": {"enabled": False}}, work_hours="09-18")
+        d2 = load("r12_cfg")
+        rc2 = {c["rule"]: c for c in d2["rules_config"]}
+        assert r["status"] == "ok" and sorted(x["campaign"] for x in d2["flags"] if x["rule"] == "budget_jump") == ["Camp Budget", "Camp Near"], "49% fires at a 40% threshold"
+        assert rc2["off_hours"]["enabled"] is False and rc2["off_hours"]["hits"] == 0 and rc2["off_hours"]["disabled_reason"]["en"] == "Turned off in the rules config.", rc2["off_hours"]
+        assert rc2["off_hours"]["params"] == {"start": "18:00", "end": "09:00", "weekends": True} and rc2["budget_jump"]["params"] == {"pct": 40}, rc2["off_hours"]
+        assert rc2["unknown_user"]["enabled"] is False and "--known-users" in rc2["unknown_user"]["disabled_reason"]["tr"], rc2["unknown_user"]
+        r = run("r12_wh", work_hours="09-18")
+        assert sorted(x["ts_first"][11:16] for x in load("r12_wh")["flags"] if x["rule"] == "off_hours" and x["campaign"] == "Camp Off") == ["08:00", "11:00", "21:30"], "08:00 is outside 09-18"
+        for bad_cfg, frag in (({"nope": {}}, "Unknown rule"), ({"budget_jump": {"pct": -1}}, "positive"), ({"budget_jump": {"foo": 1}}, "unknown setting"),
+                              ({"repeat_edit": {"min_count": 2.5}}, "whole"), ({"off_hours": {"start": "25:00"}}, "time like"), ([], "JSON object")):
+            r = run("r12_bad", rules_config=bad_cfg)
+            assert r["status"] == "error" and frag in r["message"], (bad_cfg, r)
+        r = run("r12_bad", work_hours="9-9")
+        assert r["status"] == "error" and "--work-hours" in r["message"], r
+        r = run("r12_notz", tz="unknown")
+        oh = {c["rule"]: c for c in load("r12_notz")["rules_config"]}["off_hours"]
+        assert oh["enabled"] is False and oh["hits"] == 0 and "--timezone" in oh["disabled_reason"]["en"], oh
+        r = run("r12_mask", known_users=known, mask_users=True)
+        d3 = load("r12_mask")
+        uu = [x for x in d3["flags"] if x["rule"] == "unknown_user"]
+        assert len(uu) == 1 and "@" not in json.dumps(d3["flags"]) + json.dumps(d3["exec_summary"]), uu
+        print("[PASS] r12 rules: --rules-config overrides and validation, --work-hours, no timezone, masking")
+
+    with _test_case("r12 rules: zero flags headline, empty input and metrics-basis stale entities"):
+        r = run("r12_none", rules_config={n: {"enabled": False} for n, _, _ in RULE_DEFS})
+        es0 = load("r12_none")["exec_summary"]
+        assert es0["headline"]["tr"].endswith("değişiklik yapıldı, hiçbiri kural eşiklerini aşmadı.") and es0["headline"]["en"].endswith("none crossed the rule thresholds."), es0["headline"]
+        empty = td / "r12_empty.json"
+        empty.write_text("[]", encoding="utf-8")
+        r = run_pipeline(empty, td / "r12_empty_out", generated_at="2026-10-13T00:00:00")
+        de = json.loads((td / "r12_empty_out" / "change_history.json").read_text(encoding="utf-8"))
+        assert r["status"] == "ok" and de["flags"] == [] and len(de["rules_config"]) == 12 and de["campaign_table"] == [] and de["exec_summary"]["totals"]["changes"] == 0, de["exec_summary"]
+        m = td / "r12_metrics.csv"
+        m.write_text("Day,Campaign,Impressions,Clicks,Cost\n" + "".join(f"2026-10-{d:02d},{c},100,5,10\n" for d in range(1, 13) for c in ("Camp Stale", "Camp Metric")), encoding="utf-8")
+        r = run("r12_metrics", metrics=[m])
+        dm = load("r12_metrics")
+        se = {(x["campaign"], x["fact"]["basis"]): x["fact"] for x in dm["flags"] if x["rule"] == "stale_entity"}
+        assert se[("Camp Metric", "metrics")] == {"days": None, "basis": "metrics", "level": "campaign"} and ("Camp Stale", "metrics") not in se, se
+        assert sorted(x["campaign"] for x in dm["flags"] if x["rule"] == "stale_budget") == ["Camp Stale"], "with metrics, only campaigns active in the metrics"
+        print("[PASS] r12 rules: zero flags headline, empty input and metrics-basis stale entities")
+
+    with _test_case("r12 rules: digest 'Göz atılacaklar / Worth a look' section, both languages"):
+        md = (td / "r12_all" / "digest.md").read_text(encoding="utf-8")
+        sec = md[md.index("## Göz atılacaklar"):md.index("## Kategoriye")]
+        for want in ("### Bütçe tek seferde %50 ya da daha fazla değişti (1)", "- 05.10.2026 10:00 · Camp Budget · Bütçe ₺300,00 → ₺695,00 (+%132)",
+                     "### Eklenip hemen geri alınan değişiklik (3)", "**Bilgi için**", "- Mesai dışı yapılan değişiklik: 2", "- Toplu düzenleme: 1"):
+            assert want in sec, (want, sec)
+        assert sec.count("\n- ") >= 12 and not _DIGEST_JUDGEMENT_RE.search(sec), sec
+        DIGEST_LANG = "en"
+        try:
+            run("r12_en", rules_config={n: {"enabled": False} for n, _, _ in RULE_DEFS})
+        finally:
+            DIGEST_LANG = "auto"
+        md = (td / "r12_en" / "digest.md").read_text(encoding="utf-8")
+        assert "## Worth a look" in md and "No rule threshold was crossed." in md and "- Bulk edit: off. Turned off in the rules config." in md, md
+        assert load("r12_en")["ui_lang"] == "en", "--lang en sets ui_lang"
+        print("[PASS] r12 rules: digest 'Göz atılacaklar / Worth a look' section, both languages")
+
+    with _test_case("r12 rules: CLI --lang/--digest-lang alias, --known-users file, --rules-config errors"):
+        ku = td / "r12_known.txt"
+        ku.write_text("# team\nu1@example.test\nU2@EXAMPLE.TEST  # lead\n\n", encoding="utf-8")
+        rc_file = td / "r12_rc.json"
+        rc_file.write_text('{"bulk_edit": {"min_changes": 50}}', encoding="utf-8")
+        base = [sys.executable, str(Path(__file__).resolve()), "run", str(f), "--account-name", "Acc", "--timezone", "Europe/Istanbul"]
+        env = dict(os.environ, XDG_DATA_HOME=str(td / "r12_xdg"))
+        p = subprocess.run(base + ["--out-dir", str(td / "r12_cli"), "--digest-lang", "en", "--known-users", str(ku), "--rules-config", str(rc_file), "--work-hours", "08-20"],
+                           capture_output=True, text=True, timeout=60, env=env)
+        res = json.loads(p.stdout)
+        dc = load("r12_cli")
+        assert p.returncode == 0 and res["ui_lang"] == "en" and dc["ui_lang"] == "en", (p.returncode, p.stderr[-300:])
+        assert [x["user"] for x in dc["flags"] if x["rule"] == "unknown_user"] == ["u3@example.test"] and not any(x["rule"] == "bulk_edit" for x in dc["flags"]), "file list read, case-insensitive, comments skipped"
+        p = subprocess.run(base + ["--out-dir", str(td / "r12_cli2"), "--lang", "tr"], capture_output=True, text=True, timeout=60, env=env)
+        assert p.returncode == 0 and json.loads(p.stdout)["ui_lang"] == "tr", p.stderr[-300:]
+        rc_file.write_text("{not json", encoding="utf-8")
+        p = subprocess.run(base + ["--out-dir", str(td / "r12_cli3"), "--rules-config", str(rc_file)], capture_output=True, text=True, timeout=60, env=env)
+        assert p.returncode == 2 and json.loads(p.stdout)["status"] == "error" and "not valid JSON" in json.loads(p.stdout)["message"], p.stdout
+        print("[PASS] r12 rules: CLI --lang/--digest-lang alias, --known-users file, --rules-config errors")
 
 
 def _run_round6_regressions(td):
@@ -8107,6 +9314,7 @@ def _run_pipeline_cases(td):
     _run_r10_dashboard_cases(td)
     _run_r10_fix3_cases(td)
     _run_r11_cases(td)
+    _run_r12_rules_cases(td)
 
 
 # =====================================================================
@@ -8182,7 +9390,10 @@ def _main():
     p_run.add_argument("--window-days", type=int, default=7, help="Days in each before/after window (default 7).")
     p_run.add_argument("--conversion-lag-days", type=int, default=7, help="Most recent days of metrics whose conversions may still grow (default 7).")
     p_run.add_argument("--open", action="store_true")
-    p_run.add_argument("--digest-lang", choices=["auto", "tr", "en"], default="auto", help="Language of digest.md: auto (default) is tr for a Turkish export, else en.")
+    p_run.add_argument("--lang", "--digest-lang", dest="lang", choices=["auto", "tr", "en"], default="auto", help="Language of the dashboard and digest.md: auto (default) is tr for a Turkish export, else en. --digest-lang is the old name.")
+    p_run.add_argument("--rules-config", metavar="FILE.json", help="Rule thresholds: {rule: {enabled, ...params}}, e.g. {\"budget_jump\": {\"pct\": 30}, \"off_hours\": {\"enabled\": false}}. Unlisted rules keep their defaults.")
+    p_run.add_argument("--known-users", metavar="FILE", help="One e-mail or name per line (# comments, case-insensitive). Turns on the unknown_user rule: people not on the list are listed.")
+    p_run.add_argument("--work-hours", metavar="HH-HH", help="Working hours for the off_hours rule, e.g. 08-20 or 08:30-19:00 (local time). Overrides off_hours start/end from --rules-config.")
     p_run.add_argument("--encoding", help="Input text encoding (e.g. cp1254, cp1251, utf-16) when auto-detection rejects the file as garbled.")
 
     p_query = sub.add_parser("query", help="Deterministic filter over a changes.jsonl.")
@@ -8209,7 +9420,23 @@ def _main():
         global INPUT_ENCODING
         INPUT_ENCODING = args.encoding or None
         global DIGEST_LANG
-        DIGEST_LANG = args.digest_lang
+        DIGEST_LANG = args.lang
+        rules_config = known_users = None
+        # 2026-11-19: same JSON error envelope as --extra-rules for the two new input files.
+        try:
+            if args.rules_config:
+                with open(args.rules_config, encoding="utf-8") as f:
+                    rules_config = json.load(f)
+            if args.known_users:
+                with open(args.known_users, encoding="utf-8-sig") as f:
+                    known_users = [ln.split("#", 1)[0].strip() for ln in f]
+                known_users = [k for k in known_users if k]
+        except OSError as e:
+            print(json.dumps({"status": "error", "message": f"Could not read {e.filename}: {e.strerror}"}, indent=2, ensure_ascii=False))
+            sys.exit(2)
+        except json.JSONDecodeError as e:
+            print(json.dumps({"status": "error", "message": f"--rules-config file is not valid JSON: {args.rules_config} ({e})"}, indent=2, ensure_ascii=False))
+            sys.exit(2)
         extra_rules = None
         if args.extra_rules:
             # Fixed 2026-08-18 (4th audit round, confirmed): same structured-
@@ -8241,6 +9468,7 @@ def _main():
             allow_unknown_categories=args.allow_unknown_categories, force_review=args.force_review,
             extra_rules=extra_rules, open_browser=args.open, account_name=args.account_name, currency=args.currency,
             input_accounts=input_accounts, metrics=args.metrics, window_days=args.window_days, conversion_lag_days=args.conversion_lag_days,
+            rules_config=rules_config, known_users=known_users, work_hours=args.work_hours, lang=args.lang,
         )
         _write_run_status(args.out_dir, result)
         print(json.dumps(result, indent=2, ensure_ascii=False))
