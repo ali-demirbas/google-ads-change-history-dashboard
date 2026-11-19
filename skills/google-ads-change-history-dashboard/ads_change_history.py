@@ -5108,8 +5108,8 @@ RULE_TEXT = {  # {name} placeholders are filled from the rule's params
                  {"tr": "Aynı öğe {add_remove_minutes} dakika içinde eklenip kaldırıldı, bir ayar {value_days} gün içinde önceki değerine döndü ya da durum {status_hours} saat içinde geri çevrildi.",
                   "en": "The same item was added and removed within {add_remove_minutes} minutes, a setting went back to an earlier value within {value_days} days, or a status was switched back within {status_hours} hours."}),
     "repeat_edit": ({"tr": "Aynı ayar birkaç dakika içinde tekrar değişti", "en": "Same setting edited again within minutes"},
-                    {"tr": "Aynı kişi aynı kampanyada aynı ayarı {minutes} dakika içinde {min_count} ya da daha fazla kez değiştirdi. Yeni kampanya kurulumları hariç.",
-                     "en": "One person edited the same setting on one campaign {min_count} or more times within {minutes} minutes. New campaign setups are left out."}),
+                    {"tr": "Aynı kişi aynı kampanyada aynı öğenin aynı ayarını {minutes} dakika içinde {min_count} ya da daha fazla kez art arda değiştirdi; her değişiklik bir öncekinin bıraktığı değerden başladı. Yeni kampanya kurulumları hariç.",
+                     "en": "One person edited the same setting of the same item on one campaign {min_count} or more times in a row within {minutes} minutes, each edit starting from the value the previous one left. New campaign setups are left out."}),
     "burst_session": ({"tr": "Kısa sürede çok sayıda değişiklik", "en": "Many changes in a few minutes"},
                       {"tr": "Aynı kişi aynı kampanyada {minutes} dakika içinde {min_events} ya da daha fazla değişiklik olayı oluşturdu. Yeni kampanya kurulumları hariç.",
                        "en": "One person created {min_events} or more change events on one campaign within {minutes} minutes. New campaign setups are left out."}),
@@ -5320,6 +5320,35 @@ def _r12_item_keys(r, family=None):
     return keys, ext
 
 
+_REPEAT_SINGLE_SUBS = {"Budget changed", "Target CPA", "Target ROAS", "Strategy changed"}
+_ITEM_TARGET_RE = re.compile(r"^\s*([^\n]{1,200}?):\s+(?=.*(?:->|\b(?:olarak ayarlandı|olarak değiştirildi|değerine|olan|artırıldı|düşürüldü|set to|changed|increased|decreased)\b))", re.IGNORECASE)
+
+
+def _r12_repeat_keys(r):
+    """Items one UPDATE statement edits, for repeat_edit: the campaign's budget or bid
+    target, an API resource, an id line or a 'target: change' line; empty when the
+    statement doesn't say which item (two such statements are not a repeat)."""
+    if r.get("resource_id") or r.get("resource_name"):
+        return {("res", str(r.get("resource_type") or ""), str(r.get("resource_id") or r.get("resource_name")))}
+    if r.get("subcategory") in _REPEAT_SINGLE_SUBS:
+        return {("setting",)}
+    _, details = split_statement(r.get("raw_summary") or "")
+    ids = {("id", m.group(1)) for m in map(_ITEM_ID_RE.match, details) if m}
+    if ids:
+        return ids
+    return {("text", _entity_key(m.group(1)), m.group(1).strip()) for m in map(_ITEM_TARGET_RE.match, details)
+            if m and not _NOT_ITEM_LINE_RE.search(m.group(1))}
+
+
+def _r12_val(r, side):
+    """Comparable old/new value of a row, or None when the export doesn't give it."""
+    v = r.get(side + "_value_num")
+    if isinstance(v, (int, float)):
+        return ("n", round(float(v), 6))
+    v = r.get(side + "_value")
+    return ("s", _entity_key(v)) if v not in (None, "") else None
+
+
 def _r12_key(k):
     """Matching part of an item key (text keys carry their display text third)."""
     return k[:2] if k[0] == "text" else k
@@ -5513,30 +5542,54 @@ def compute_rule_flags(rows, cfg, known=None, metrics_files=None):
             e1, e2 = ("paused", "enabled") if first == "Paused" else ("enabled", "paused")
             raw.append(("reverted", [j, k], {"kind": "status", "first": e1, "then": e2, "items": len(keys), "hours": round(span / 3600, 1)},
                         {"tr": f"{subj_tr} {v1}, {_r12_span(span, 'tr', True)} yeniden {v2}", "en": f"{subj_en} {e1}, {e2} again {_r12_span(span, 'en', True)}"}, {}))
-    # 4 repeat_edit
+    # 4 repeat_edit: the same item edited again, each edit starting where the last one ended (2026-11-19)
     if on("repeat_edit"):
         mins, mc = P("repeat_edit")["minutes"], P("repeat_edit")["min_count"]
         groups = defaultdict(list)
         for i in timed:
             if who[i] and camp[i] and op[i] == "UPDATE":
-                groups[(who[i], acct[i], camp[i], adg[i], sub[i])].append(i)
-        for (u, ac, cp, _, sc), idx in groups.items():
-            evs = events_of(idx)
-            a = b = 0
-            while a < len(evs):
-                b = max(b, a)
-                while b + 1 < len(evs) and evs[b + 1][0] - evs[a][0] <= mins * 60:
-                    b += 1
-                if b - a + 1 >= mc:
-                    if not is_setup((u, ac, cp), evs[a][0], evs[b][0], mins):
-                        win = [i for e in evs[a:b + 1] for i in e[1]]
-                        span = evs[b][0] - evs[a][0]
-                        nm = _SUB_NAMES.get(sc, (sc, sc))
-                        raw.append(("repeat_edit", win, {"subcategory": sc, "count": b - a + 1, "minutes": round(span / 60, 1)},
-                                    {"tr": f"{nm[0]} {_r12_span(span, 'tr')} içinde {b - a + 1} kez değişti", "en": f"{nm[1]} changed {b - a + 1} times within {_r12_span(span, 'en')}"}, {}))
-                    a = b + 1
+                for k in _r12_repeat_keys(rows[i]):
+                    groups[(who[i], acct[i], camp[i], adg[i], sub[i], _r12_key(k))].append((i, k))
+        seen_win = set()
+        for (u, ac, cp, _, sc, _), pairs_ in groups.items():
+            label = {i: k for i, k in pairs_}
+            seq, last_ev = [], None
+            for i in by_time(label):
+                if evid[i] is None or evid[i] != last_ev:  # one save = one edit
+                    seq.append(i)
+                last_ev = evid[i]
+            segs, cur_seg = [], seq[:1]
+            for prev, i in zip(seq, seq[1:]):
+                a_, b_ = _r12_val(rows[prev], "new"), _r12_val(rows[i], "old")
+                if a_ is None or b_ is None or a_ == b_:
+                    cur_seg.append(i)
                 else:
-                    a += 1
+                    segs.append(cur_seg)
+                    cur_seg = [i]
+            segs.append(cur_seg)
+            for sg in segs:
+                a = b = 0
+                while a < len(sg):
+                    b = max(b, a)
+                    while b + 1 < len(sg) and ep[sg[b + 1]] - ep[sg[a]] <= mins * 60:
+                        b += 1
+                    if b - a + 1 >= mc:
+                        win = sg[a:b + 1]
+                        if not is_setup((u, ac, cp), ep[win[0]], ep[win[-1]], mins) and tuple(win) not in seen_win:
+                            seen_win.add(tuple(win))
+                            span, nm, k = ep[win[-1]] - ep[win[0]], _SUB_NAMES.get(sc, (sc, sc)), label[win[0]]
+                            item = f' "{_r12_item_label(k)}"' if k[0] == "text" else ""
+                            nums = [rows[win[0]].get("old_value_num")] + [rows[i].get("new_value_num") for i in win]
+                            chain = {lg: "" for lg in ("tr", "en")}
+                            if all(isinstance(v, (int, float)) for v in nums) and len(nums) <= 6:
+                                cur = _r12_cur(rows[win[0]])
+                                chain = {lg: " (" + " → ".join(_r12_money(v, cur, lg) for v in nums) + ")" for lg in ("tr", "en")}
+                            raw.append(("repeat_edit", win, {"subcategory": sc, "count": len(win), "minutes": round(span / 60, 1)},
+                                        {"tr": f"{nm[0]}{item} {_r12_span(span, 'tr')} içinde {len(win)} kez art arda değişti{chain['tr']}",
+                                         "en": f"{nm[1]}{item} changed {len(win)} times in a row within {_r12_span(span, 'en')}{chain['en']}"}, {}))
+                        a = b + 1
+                    else:
+                        a += 1
     # 5 burst_session
     if on("burst_session"):
         mins, me = P("burst_session")["minutes"], P("burst_session")["min_events"]
@@ -7334,6 +7387,8 @@ def _r12_rules_fixture():
     B = lambda c, a, b, inc=True: f"1 bütçenin tutarı {'artırıldı' if inc else 'azaltıldı'}\n  {c}: ₺{a} olan Bütçe tutarı, ₺{b} olarak değiştirildi"
     T = lambda a, b: f"Kampanya değiştirildi\n  ₺{a} olan Hedef EBM değeri, ₺{b} değerine artırıldı"
     lang = lambda x: f"1 dil eklendi\n  Dil {x}"
+    S = lambda slot, v: f"1 teklif ayarlama değişikliği\n  {slot}: Reklam zaman planlaması teklif ayarlaması %{v} olarak ayarlandı"
+    AD = "1 duyarlı arama ağı reklamı değiştirildi\n  etkin olan Durum, duraklatıldı olarak değiştirildi"
     u1, u2, u3 = "u1@example.test", "u2@example.test", "u3@example.test"
     rows = [
         ["2026-08-03 10:00:00", u1, "Camp Stale", "", B("Camp Stale", "100,00", "110,00")],          # stale_budget
@@ -7354,6 +7409,14 @@ def _r12_rules_fixture():
         ["2026-09-09 10:00:00", u2, "Camp Near2", "", B("Camp Near2", "220,00", "200,00", False)],
         ["2026-10-06 16:00:00", u2, "Camp Repeat", "", B("Camp Repeat", "500,00", "520,00")],       # repeat_edit
         ["2026-10-06 16:03:00", u2, "Camp Repeat", "", B("Camp Repeat", "520,00", "540,00")],
+        ["2026-10-06 15:00:00", u2, "Camp Gap", "", B("Camp Gap", "500,00", "520,00")],             # near: not a chain (600 != 520)
+        ["2026-10-06 15:02:00", u2, "Camp Gap", "", B("Camp Gap", "600,00", "620,00")],
+        ["2026-10-06 15:00:00", u1, "Camp Sched", "", S("Pazartesi 08:00 ÖÖ - 12:00 ÖS", "+10")],     # near: two different slots
+        ["2026-10-06 15:00:04", u1, "Camp Sched", "", S("Pazartesi 12:00 ÖS - 04:00 ÖS", "+10")],
+        ["2026-10-06 15:10:00", u1, "Camp Ads", "G1", AD],                                            # near: two ads, can't be told apart
+        ["2026-10-06 15:10:02", u1, "Camp Ads", "G1", AD],
+        ["2026-10-06 15:20:00", u1, "Camp Slot", "", S("Salı 08:00 ÖÖ - 12:00 ÖS", "+10")],           # repeat_edit: same slot twice
+        ["2026-10-06 15:22:00", u1, "Camp Slot", "", S("Salı 08:00 ÖÖ - 12:00 ÖS", "+20")],
         ["2026-10-07 11:00:00", u1, "Camp Setup", "", "Kampanya oluşturuldu\n  Bütçe tutarı: ₺500,00"],      # near: setup burst
         ["2026-10-07 11:00:40", u1, "Camp Setup", "", "1 teklif ayarlama değişikliği\n  Mobil: %10 olarak ayarlandı"],
         ["2026-10-07 11:01:20", u1, "Camp Setup", "", "1 teklif ayarlama değişikliği\n  Mobil: %20 olarak ayarlandı"],
@@ -7397,12 +7460,15 @@ def _run_r12_rules_cases(td):
         fl = d["flags"]
         att = sorted((x["rule"], x["campaign"]) for x in fl if x["tier"] == "attention")
         want = sorted([("budget_jump", "Camp Budget"), ("budget_cumulative", "Camp Cum"), ("reverted", "Camp Revert"), ("reverted", "Camp Revert"),
-                       ("reverted", "Camp Revert"), ("repeat_edit", "Camp Repeat"), ("burst_session", "Camp Burst"), ("bid_target_relearn", "Camp Bid"),
+                       ("reverted", "Camp Revert"), ("repeat_edit", "Camp Repeat"), ("repeat_edit", "Camp Slot"), ("burst_session", "Camp Burst"), ("bid_target_relearn", "Camp Bid"),
                        ("automation_source", "Camp Auto"), ("unknown_user", None)])
         assert att == want, att
         kinds = sorted(x["fact"]["kind"] for x in fl if x["rule"] == "reverted")
         assert kinds == ["add_remove", "status", "value"], kinds
         assert not any("kelime b" in x["text"]["tr"] for x in fl), "a removal 90 minutes later is outside 60 minutes"
+        rp = {x["campaign"]: x["text"]["tr"] for x in fl if x["rule"] == "repeat_edit"}
+        assert rp == {"Camp Repeat": "Bütçe 3 dakika içinde 2 kez art arda değişti (₺500,00 → ₺520,00 → ₺540,00)",
+                      "Camp Slot": 'Teklif ayarlaması "Salı 08:00 ÖÖ - 12:00 ÖS" 2 dakika içinde 2 kez art arda değişti'}, rp
         ju = [x for x in fl if x["rule"] == "budget_jump"][0]
         assert ju["fact"]["pct"] == 131.7 and ju["text"] == {"tr": "Bütçe ₺300,00 → ₺695,00 (+%132)", "en": "Budget ₺300.00 → ₺695.00 (+132%)"}, ju
         uu = [x for x in fl if x["rule"] == "unknown_user"][0]
@@ -7442,10 +7508,10 @@ def _run_r12_rules_cases(td):
         assert {c["rule"]: c["hits"] for c in rc} == dict(Counter(x["rule"] for x in fl), **{c["rule"]: 0 for c in rc if not any(x["rule"] == c["rule"] for x in fl)})
         es = d["exec_summary"]
         assert sorted(es) == ["budget", "headline", "people", "period", "sentences", "stale", "top_campaigns", "totals"], sorted(es)
-        assert es["period"] == {"from": "2026-08-03", "to": "2026-10-12"} and es["totals"]["attention_flags"] == 10 and es["totals"]["automation"] == 1, es
-        assert es["budget"] == {"currency": "TRY", "increase_total": 594.0, "increase_count": 9, "decrease_total": -40.0, "decrease_count": 2, "net": 554.0, "mixed_currencies": False}, es["budget"]
-        assert es["headline"]["tr"] == f"Bu dönemde {_r12_num(len(d['changes']), 'tr')} değişiklik yapıldı, 10 durum göz atmayı hak ediyor." and es["headline"]["en"].endswith("10 items are worth a look."), es["headline"]
-        assert "Bütçeler toplamda günlük ₺554 arttı." in es["sentences"]["tr"] and "Daily budgets went up by ₺554 in total." in es["sentences"]["en"], es["sentences"]
+        assert es["period"] == {"from": "2026-08-03", "to": "2026-10-12"} and es["totals"]["attention_flags"] == 11 and es["totals"]["automation"] == 1, es
+        assert es["budget"] == {"currency": "TRY", "increase_total": 634.0, "increase_count": 11, "decrease_total": -40.0, "decrease_count": 2, "net": 594.0, "mixed_currencies": False}, es["budget"]
+        assert es["headline"]["tr"] == f"Bu dönemde {_r12_num(len(d['changes']), 'tr')} değişiklik yapıldı, 11 durum göz atmayı hak ediyor." and es["headline"]["en"].endswith("11 items are worth a look."), es["headline"]
+        assert "Bütçeler toplamda günlük ₺594 arttı." in es["sentences"]["tr"] and "Daily budgets went up by ₺594 in total." in es["sentences"]["en"], es["sentences"]
         assert es["stale"][0] == {"account": "Acc", "campaign": "Camp Stale", "days": 53, "basis": "export"}, es["stale"]
         ct = {c["campaign"]: c for c in d["campaign_table"]}
         assert len(ct) == len({x["campaign_name"] for x in d["changes"]}) and ct["Camp Revert"]["flags_by_rule"] == {"reverted": 3}, ct["Camp Revert"]
