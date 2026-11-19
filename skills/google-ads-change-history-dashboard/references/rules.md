@@ -5,8 +5,16 @@ Every run checks the changes against twelve rules. A rule that fires adds a
 "Budget ₺300,00 → ₺695,00 (+132%)" under the rule "one-step budget change of
 50% or more". The report calls flags *worth a look* (Turkish: *göz atılacak*)
 and always shows the fact next to the rule that fired. It never says a change
-was good, bad, wrong, risky, an error or an anomaly, and it uses no red/green.
-Whether a flag matters is the reader's call.
+was good, bad, wrong, risky, an error or an anomaly. Whether a flag matters is
+the reader's call.
+
+**High (red on the summary page).** A flag is marked *high* (*yüksek*) when it
+is at least twice its threshold or a value was set back: `budget_jump` and
+`budget_cumulative` at 2× `pct`, `reverted` of kind `value` or `status`,
+`repeat_edit` with 3+ edits, `burst_session` at 2× `min_events`,
+`bid_target_relearn` within 2 days, and every `unknown_user`. Rules with at
+least one high flag are shown in red with the high count; this is still a
+measured distance from your threshold, not a verdict.
 
 ## Contents
 

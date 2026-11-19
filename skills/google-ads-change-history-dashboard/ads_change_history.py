@@ -2677,6 +2677,7 @@ DASHBOARD_TEMPLATE = r"""<!doctype html>
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400 600; font-display: swap; unicode-range: U+0100-0130,U+0132-0151,U+0154-017F,U+0218-021B,U+20A0-20C0; src: url(data:font/woff2;base64,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) format('woff2'); }
 /* 2026-11-19: Optimize Peak tokens (approved mockup); dark mode re-points them. */
 :root {
+  --hot: #c4321a; --hot-bg: #fdf0ed; --hot-line: #f4c6bd; --hot-on: #ffffff;
   --paper: #fcfcf8; --paper-2: #f4f4ec; --card: #ffffff;
   --ink: #141511; --text: #2a2a27; --muted: #64645e;
   --line: #e4e4dc; --line-strong: #d3d3ca;
@@ -2698,7 +2699,7 @@ DASHBOARD_TEMPLATE = r"""<!doctype html>
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #101114; --paper-2: #1c1e23; --card: #17191d;
+    --hot: #ff8f7e; --hot-bg: #2e1916; --hot-line: #6a2c23; --hot-on: #1f0a06; --paper: #101114; --paper-2: #1c1e23; --card: #17191d;
     --ink: #f2f2ec; --text: #dadad3; --muted: #a5a59d;
     --line: #2b2e34; --line-strong: #3b3f46;
     --blue: #9fb1ff; --link: #a9b9ff; --night: #e3e9ff; --ice: #3a4677; --ice-100: #1f2540; --ice-200: #2c365c;
@@ -2716,7 +2717,7 @@ DASHBOARD_TEMPLATE = r"""<!doctype html>
   }
 }
 :root[data-theme="dark"] {
-  --paper: #101114; --paper-2: #1c1e23; --card: #17191d;
+  --hot: #ff8f7e; --hot-bg: #2e1916; --hot-line: #6a2c23; --hot-on: #1f0a06; --paper: #101114; --paper-2: #1c1e23; --card: #17191d;
   --ink: #f2f2ec; --text: #dadad3; --muted: #a5a59d;
   --line: #2b2e34; --line-strong: #3b3f46;
   --blue: #9fb1ff; --link: #a9b9ff; --night: #e3e9ff; --ice: #3a4677; --ice-100: #1f2540; --ice-200: #2c365c;
@@ -2809,6 +2810,26 @@ h2.h2 { font: 300 32px/1.1 var(--serif); letter-spacing: -.02em; color: var(--in
 .flag-info .fi-h { font-weight: 600; color: var(--ink); margin-right: 2px; }
 .flag-info a { color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 .flag-info a:hover { text-decoration: underline; }
+/* 2026-11-20: page 1 rule rows and the red "high" state */
+.rrows { display: grid; gap: 8px; margin-bottom: 10px; }
+.rrow { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 14px; background: var(--card); box-shadow: var(--ring); color: var(--ink); text-decoration: none; position: relative; transition: box-shadow .2s, transform .2s; }
+.rrow:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.rrow .rt { font-weight: 500; font-size: 15px; line-height: 1.35; }
+.rrow .rc { display: inline-flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; min-width: 64px; justify-content: flex-end; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.rrow .rc b { font: 300 30px/1 var(--serif); color: var(--ink); letter-spacing: -.02em; }
+.rrow.hot { background: var(--hot-bg); box-shadow: 0 0 0 1px var(--hot-line); }
+.rrow.hot::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--hot); }
+.rrow.hot .rc b { color: var(--hot); font-weight: 400; }
+.hotpill { font: 600 11.5px/1 var(--sans); color: var(--hot-on); background: var(--hot); padding: 6px 10px; border-radius: 999px; white-space: nowrap; box-shadow: 0 4px 14px -6px var(--hot); }
+.stat.focus.hot { background: var(--hot); box-shadow: 0 18px 40px -20px var(--hot); }
+.stat.focus.hot .v, .stat.focus.hot .l { color: var(--hot-on); }
+.stale li small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.gbar .p3top { padding: 26px 0 0; }
+body[data-page="p3"] .gbar { max-width: 92rem; }
+body[data-page="p1"] #fSearch { display: none; }
+#p1 .card .sub, #p1 .lede { display: none; }
+@media print { .gbar { display: none !important; } }
+
 .budget .v .sgn { font-family: var(--sans); font-weight: 300; margin-right: .06em; } /* 2026-11-19: the light serif's plus is too small */
 .flag .ex time, .flist time { font-family: var(--mono); font-size: 11.5px; color: var(--muted); min-width: 92px; flex: none; padding-top: 1px; }
 .flag .ex span { min-width: 0; overflow-wrap: anywhere; }
@@ -3167,6 +3188,59 @@ input.ctl[aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
 </nav>
 <main id="main" tabindex="-1">
 
+<!-- 2026-11-20: one filter bar for all three pages; page 1 recomputes from it. -->
+<div class="wrap gbar" id="gbar">
+  <section class="p3top" id="filtersSection" aria-labelledby="hFilters">
+    <h2 class="sr" id="hFilters" data-t="filters_h">Filters</h2>
+    <!-- 2026-11-10 (C-2/F-12): every control has a visible label; multi-selects are checkbox popovers -->
+    <div class="searchrow">
+      <input type="search" class="bigsearch" id="fSearch" aria-label="Search changes" data-ta="aria-label:search_aria;placeholder:search_ph" placeholder="Campaign, user, change text…">
+      <details class="ms chipms" id="fCampaign" data-state="campaigns" data-all="All campaigns"><summary aria-labelledby="lCampaign fCampaignSum"><span class="fld-l" id="lCampaign" data-t="f_campaign">Campaign</span><span class="ms-val" id="fCampaignSum"></span></summary><div class="ms-panel" role="group" aria-labelledby="lCampaign"></div></details>
+      <details class="ms chipms" id="fUser" data-state="users" data-all="All users"><summary aria-labelledby="lUser fUserSum"><span class="fld-l" id="lUser" data-t="f_user">User</span><span class="ms-val" id="fUserSum"></span></summary><div class="ms-panel" role="group" aria-labelledby="lUser"></div></details>
+      <details class="ms chipms" id="fCategory" data-state="categories" data-all="All categories"><summary aria-labelledby="lCategory fCategorySum"><span class="fld-l" id="lCategory" data-t="f_category">Category</span><span class="ms-val" id="fCategorySum"></span></summary><div class="ms-panel" role="group" aria-labelledby="lCategory"></div></details>
+      <label class="chipsel" id="fldFlag" hidden><span class="fld-l" data-t="f_flag">Worth a look</span><select id="fFlag"></select></label>
+      <button type="button" class="chipbtn" id="moreFilters" aria-expanded="false" aria-controls="advFilters"><span data-t="more_filters">More filters</span><span id="moreCount"></span></button>
+    </div>
+    <div class="adv" id="advFilters" hidden>
+      <div class="filters">
+        <div class="fld"><span class="fld-l" id="lAccount" data-t="f_account">Account</span><details class="ms" id="fAccount" data-state="accounts" data-all="All accounts"><summary aria-labelledby="lAccount fAccountSum"><span id="fAccountSum">All accounts</span></summary><div class="ms-panel" role="group" aria-labelledby="lAccount"></div></details></div>
+        <label class="fld"><span class="fld-l" data-t="f_actor">Actor type</span>
+          <select id="fActor">
+            <option value="" data-t="actor_all">All actors</option>
+            <option value="human" data-t="actor_human">Human</option>
+            <option value="automation" data-t="actor_auto">Automation</option>
+            <option value="unknown" data-t="actor_unknown">Unknown</option>
+          </select></label>
+        <div class="fld"><span class="fld-l" id="lOperation" data-t="f_operation">Operation</span><details class="ms" id="fOperation" data-state="operations" data-all="All types"><summary aria-labelledby="lOperation fOperationSum"><span id="fOperationSum">All types</span></summary><div class="ms-panel" role="group" aria-labelledby="lOperation"></div></details></div>
+        <div class="fld"><span class="fld-l" id="lSource" data-t="f_source">Source</span><details class="ms" id="fSource" data-state="sources" data-all="All sources"><summary aria-labelledby="lSource fSourceSum"><span id="fSourceSum">All sources</span></summary><div class="ms-panel" role="group" aria-labelledby="lSource"></div></details></div>
+        <div class="fld" id="fldSourceFile" hidden><span class="fld-l" id="lSourceFile" data-t="f_file">Source file</span><details class="ms" id="fSourceFile" data-state="sourceFiles" data-all="All files"><summary aria-labelledby="lSourceFile fSourceFileSum"><span id="fSourceFileSum">All files</span></summary><div class="ms-panel" role="group" aria-labelledby="lSourceFile"></div></details></div>
+        <label class="fld"><span class="fld-l" data-t="f_rule">Rule match</span>
+          <select id="fRuleMatch">
+            <option value="" data-t="rm_all">All changes</option>
+            <option value="__matched__" data-t="rm_any">Matched a rule</option>
+          </select></label>
+        <div class="fld fld-range"><span class="fld-l" id="lRange" data-t="f_range">Date range</span>
+          <div class="rangebtns" id="rangeBtns" role="group" aria-labelledby="lRange">
+            <button type="button" data-range="all" class="active" aria-pressed="true" data-t="range_all">All</button>
+            <button type="button" data-range="30" aria-pressed="false" data-t="range_30">30d</button>
+            <button type="button" data-range="7" aria-pressed="false" data-t="range_7">7d</button>
+            <button type="button" data-range="1" aria-pressed="false" data-t="range_1">Last 24h</button>
+          </div></div>
+        <label class="fld"><span class="fld-l" data-t="f_anchor">Range ends at</span>
+          <select id="fAnchor">
+            <option value="data" data-t="anchor_data">Newest change in the data</option>
+            <option value="today" data-t="anchor_today">Today</option>
+          </select></label>
+        <div class="fld"><span class="fld-l" aria-hidden="true">&nbsp;</span><button type="button" class="clearbtn" id="clearFilters" data-t="clear_filters">Clear filters</button></div>
+      </div>
+    </div>
+    <!-- A stated filter-context line, so a screenshot mid-filter is self-explanatory. -->
+    <div id="filterContext" aria-live="polite"></div>
+    <div class="chip-row day-chip"></div>
+    <div class="chip-row" id="flagChip"></div>
+  </section>
+</div>
+
 <!-- ============ PAGE 1: SUMMARY ============ -->
 <div class="page wrap" id="p1">
   <header class="hero">
@@ -3319,55 +3393,6 @@ input.ctl[aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
 <!-- ============ PAGE 3: ALL CHANGES ============ -->
 <div class="page wrap wide" id="p3" hidden>
   <h1 class="sr" id="hP3" data-t="tab3">All changes</h1>
-  <section class="p3top" id="filtersSection" aria-labelledby="hFilters">
-    <h2 class="sr" id="hFilters" data-t="filters_h">Filters</h2>
-    <!-- 2026-11-10 (C-2/F-12): every control has a visible label; multi-selects are checkbox popovers -->
-    <div class="searchrow">
-      <input type="search" class="bigsearch" id="fSearch" aria-label="Search changes" data-ta="aria-label:search_aria;placeholder:search_ph" placeholder="Campaign, user, change text…">
-      <details class="ms chipms" id="fCampaign" data-state="campaigns" data-all="All campaigns"><summary aria-labelledby="lCampaign fCampaignSum"><span class="fld-l" id="lCampaign" data-t="f_campaign">Campaign</span><span class="ms-val" id="fCampaignSum"></span></summary><div class="ms-panel" role="group" aria-labelledby="lCampaign"></div></details>
-      <details class="ms chipms" id="fUser" data-state="users" data-all="All users"><summary aria-labelledby="lUser fUserSum"><span class="fld-l" id="lUser" data-t="f_user">User</span><span class="ms-val" id="fUserSum"></span></summary><div class="ms-panel" role="group" aria-labelledby="lUser"></div></details>
-      <details class="ms chipms" id="fCategory" data-state="categories" data-all="All categories"><summary aria-labelledby="lCategory fCategorySum"><span class="fld-l" id="lCategory" data-t="f_category">Category</span><span class="ms-val" id="fCategorySum"></span></summary><div class="ms-panel" role="group" aria-labelledby="lCategory"></div></details>
-      <label class="chipsel" id="fldFlag" hidden><span class="fld-l" data-t="f_flag">Worth a look</span><select id="fFlag"></select></label>
-      <button type="button" class="chipbtn" id="moreFilters" aria-expanded="false" aria-controls="advFilters"><span data-t="more_filters">More filters</span><span id="moreCount"></span></button>
-    </div>
-    <div class="adv" id="advFilters" hidden>
-      <div class="filters">
-        <div class="fld"><span class="fld-l" id="lAccount" data-t="f_account">Account</span><details class="ms" id="fAccount" data-state="accounts" data-all="All accounts"><summary aria-labelledby="lAccount fAccountSum"><span id="fAccountSum">All accounts</span></summary><div class="ms-panel" role="group" aria-labelledby="lAccount"></div></details></div>
-        <label class="fld"><span class="fld-l" data-t="f_actor">Actor type</span>
-          <select id="fActor">
-            <option value="" data-t="actor_all">All actors</option>
-            <option value="human" data-t="actor_human">Human</option>
-            <option value="automation" data-t="actor_auto">Automation</option>
-            <option value="unknown" data-t="actor_unknown">Unknown</option>
-          </select></label>
-        <div class="fld"><span class="fld-l" id="lOperation" data-t="f_operation">Operation</span><details class="ms" id="fOperation" data-state="operations" data-all="All types"><summary aria-labelledby="lOperation fOperationSum"><span id="fOperationSum">All types</span></summary><div class="ms-panel" role="group" aria-labelledby="lOperation"></div></details></div>
-        <div class="fld"><span class="fld-l" id="lSource" data-t="f_source">Source</span><details class="ms" id="fSource" data-state="sources" data-all="All sources"><summary aria-labelledby="lSource fSourceSum"><span id="fSourceSum">All sources</span></summary><div class="ms-panel" role="group" aria-labelledby="lSource"></div></details></div>
-        <div class="fld" id="fldSourceFile" hidden><span class="fld-l" id="lSourceFile" data-t="f_file">Source file</span><details class="ms" id="fSourceFile" data-state="sourceFiles" data-all="All files"><summary aria-labelledby="lSourceFile fSourceFileSum"><span id="fSourceFileSum">All files</span></summary><div class="ms-panel" role="group" aria-labelledby="lSourceFile"></div></details></div>
-        <label class="fld"><span class="fld-l" data-t="f_rule">Rule match</span>
-          <select id="fRuleMatch">
-            <option value="" data-t="rm_all">All changes</option>
-            <option value="__matched__" data-t="rm_any">Matched a rule</option>
-          </select></label>
-        <div class="fld fld-range"><span class="fld-l" id="lRange" data-t="f_range">Date range</span>
-          <div class="rangebtns" id="rangeBtns" role="group" aria-labelledby="lRange">
-            <button type="button" data-range="all" class="active" aria-pressed="true" data-t="range_all">All</button>
-            <button type="button" data-range="30" aria-pressed="false" data-t="range_30">30d</button>
-            <button type="button" data-range="7" aria-pressed="false" data-t="range_7">7d</button>
-            <button type="button" data-range="1" aria-pressed="false" data-t="range_1">Last 24h</button>
-          </div></div>
-        <label class="fld"><span class="fld-l" data-t="f_anchor">Range ends at</span>
-          <select id="fAnchor">
-            <option value="data" data-t="anchor_data">Newest change in the data</option>
-            <option value="today" data-t="anchor_today">Today</option>
-          </select></label>
-        <div class="fld"><span class="fld-l" aria-hidden="true">&nbsp;</span><button type="button" class="clearbtn" id="clearFilters" data-t="clear_filters">Clear filters</button></div>
-      </div>
-    </div>
-    <!-- A stated filter-context line, so a screenshot mid-filter is self-explanatory. -->
-    <div id="filterContext" aria-live="polite"></div>
-    <div class="chip-row day-chip"></div>
-    <div class="chip-row" id="flagChip"></div>
-  </section>
   <section id="summarySection" aria-labelledby="hSummary">
     <h2 class="sr" id="hSummary" data-t="sum_h">Summary</h2>
     <div class="fsum" id="summaryGrid"></div>
@@ -3454,6 +3479,9 @@ en: {
   flags_nodata:'This report has no rule results; it may have been built with an older version. You can still try your own thresholds on',
   flags_nodata2:'This report has no rule results.', flags_zero:'No rule crossed its threshold in this period.',
   more_n_one:'+{n} more', more_n:'+{n} more', info_h:'For information',
+  n_times_one:'{n} time', n_times:'{n} times', hot_n:'{n} high', hot_title:'At least twice the threshold, or a value set back', st_attention_hot:'Worth a look · {h} high',
+  hl_filtered:'{c} changes in this filter; {f} are worth a look.', hl_filtered_0:'{c} changes in this filter; none crossed a threshold.', flags_zero_f:'No rule fired for this filter.',
+  stale_adgroup_in:'Ad group · {c}', stale_campaign:'Campaign',
   who_h:'Who made the changes', who_sub:'Where the changes came from', who_seg:'{label} {p}%',
   other_people_one:'{n} other person', other_people:'{n} other people', auto_google:'Automation and Google',
   budget_h:'Budget movement', budget_sub:'Total change in daily budgets', n_increases_one:'{n} increase', n_increases:'{n} increases',
@@ -3595,6 +3623,9 @@ tr: {
   flags_nodata:'Bu raporda kural sonuçları yok; daha eski bir sürümle oluşturulmuş olabilir. Kendi eşiğinle denemek için:',
   flags_nodata2:'Bu raporda kural sonuçları yok.', flags_zero:'Bu dönemde hiçbir kural eşiğini aşmadı.',
   more_n_one:'+{n} daha', more_n:'+{n} daha', info_h:'Bilgi amaçlı',
+  n_times_one:'{n} kez', n_times:'{n} kez', hot_n:'{n} yüksek', hot_title:'Eşiğin en az 2 katı ya da geri alınan bir değer', st_attention_hot:'Göz atılacak · {h} yüksek',
+  hl_filtered:'Seçili filtrede {c} değişiklik var, {f} durum göz atmayı hak ediyor.', hl_filtered_0:'Seçili filtrede {c} değişiklik var, hiçbiri eşiği aşmadı.', flags_zero_f:'Bu filtrede hiçbir kural tetiklenmedi.',
+  stale_adgroup_in:'Reklam grubu · {c}', stale_campaign:'Kampanya',
   who_h:'Kim değiştirdi', who_sub:'Değişikliklerin kaynağı', who_seg:'{label} yüzde {p}',
   other_people_one:'{n} kişi daha', other_people:'{n} kişi daha', auto_google:'Otomasyon ve Google',
   budget_h:'Bütçe hareketi', budget_sub:'Günlük bütçelerdeki toplam değişim', n_increases_one:'{n} artış', n_increases:'{n} artış',
@@ -4460,7 +4491,7 @@ function initFilters(){
     document.querySelectorAll('#ruleMatchesMagnitudeInputs input').forEach(inp=>{ inp.value = ruleState.pct[inp.dataset.ruleId]; inp.removeAttribute('aria-invalid'); });
     document.querySelectorAll('#ruleMatchesMagnitudeInputs .cfg-err').forEach(e=>{ e.textContent=''; });
     document.querySelectorAll('#ruleMatchesStateInputs input').forEach(cb=>{ cb.checked = ruleState.stateOn[cb.dataset.ruleId]; });
-    if(/\?/.test(location.hash)) replaceHash(location.hash.replace(/\?.*$/, ''));
+    if(/\?/.test(curHash())) replaceHash(curHash().replace(/\?.*$/, ''));
     render();
   };
   document.getElementById('clearFilters').addEventListener('click', clear);
@@ -4940,6 +4971,7 @@ function render(){
   renderSummary(filtered); renderTimeline(allDays); renderUsers(filtered);
   renderAccounts(filtered); renderRollup(filtered); renderCategories(filtered); renderRuleMatches(filtered);
   renderUntouched(filtered); renderBA2(filtered); renderExplorer(filtered);
+  renderP1();
   numberSections();
   focusRestore(memo);
 }
@@ -4968,23 +5000,45 @@ function rowSpan(){
   rowsAll().forEach(c=>{ const tt = rowTime(c); if(tt==null) return; if(!first || tt<rowTime(first)) first = c; if(!last || tt>rowTime(last)) last = c; });
   return {first, last};
 }
-function renderHero(){
+// 2026-11-20: page 1 follows the shared filter bar. Unfiltered it shows the generator's
+// exec_summary; filtered it recomputes from the visible rows and the flags that touch them.
+function p1Ctx(){
+  if(!filterParts().length) return {filtered: false, rows: rowsAll(), flags: flagList()};
+  const rows = getFiltered(), ids = new Set(rows.map(c=>c.change_id)), camps = new Set(rows.map(c=>campaignName(c)).filter(Boolean));
+  const flags = flagList().filter(f=> Array.isArray(f.change_ids) && f.change_ids.length ? f.change_ids.some(id=>ids.has(id)) : (f.campaign ? camps.has(f.campaign) : rows.length>0));
+  return {filtered: true, rows, flags};
+}
+// A flag is "high" when it is at least twice its threshold, or a value was set back (red on page 1).
+function flagHot(f){
+  const x = (f && f.fact) || {}, c = ruleCfg(f.rule), p = (c && asObj(c.params)) || {};
+  switch(f.rule){
+    case 'budget_jump': case 'budget_cumulative': return Math.abs(numOrNull(x.pct) || 0) >= 2*(numOrNull(p.pct) ?? 50);
+    case 'reverted': return x.kind==='value' || x.kind==='status';
+    case 'repeat_edit': return (numOrNull(x.count) || 0) >= 3;
+    case 'burst_session': return (numOrNull(x.events) || 0) >= 2*(numOrNull(p.min_events) ?? 3);
+    case 'bid_target_relearn': return (numOrNull(x.days_since_previous) ?? 99) <= 2;
+    case 'unknown_user': return true;
+    default: return false;
+  }
+}
+function groupsFrom(flags){
+  const by = new Map(); flags.forEach(f=>{ if(!by.has(f.rule)) by.set(f.rule, []); by.get(f.rule).push(f); });
+  const order = rulesConfig().map(c=>c.rule); [...by.keys()].forEach(r=>{ if(!order.includes(r)) order.push(r); });
+  const out = order.filter(r=>by.has(r)).map(rule=>{ const fl = by.get(rule); return {rule, tier: ruleTierOf(rule), title: ruleTitle(rule), n: fl.length, hot: fl.filter(flagHot).length}; });
+  return [...out.filter(g=>g.tier!=='info'), ...out.filter(g=>g.tier==='info')];
+}
+function renderP1(){ const ctx = p1Ctx(); renderHero(ctx); renderStats(ctx); renderFlagCards(ctx); renderWho(ctx); renderBudget(ctx); renderStale(ctx); }
+function renderHero(ctx){
+  ctx = ctx || p1Ctx();
   const es = execSummary(), m = dmeta(), rows = rowsAll();
   const accs = accountNames();
   const acct = accs.length===1 ? accs[0] : accs.length>1 ? tn('n_accounts', accs.length) : '';
   document.getElementById('eyebrow').textContent = acct ? `${acct} · Google Ads` : 'Google Ads';
-  const total = numOrNull(m.row_count) ?? rows.length;
-  const head = (es && loc(es.headline)) || tn('headline_fb', total);
+  let head;
+  if(ctx.filtered){ const nf = ctx.flags.filter(f=>f.tier!=='info').length; head = t(nf ? 'hl_filtered' : 'hl_filtered_0', {c: fmtInt(ctx.rows.length), f: fmtInt(nf)}); }
+  else head = (es && loc(es.headline)) || tn('headline_fb', numOrNull(m.row_count) ?? rows.length);
   document.getElementById('headline').innerHTML = emFirstNumber(head);
-  const sent = es && es.sentences ? (Array.isArray(es.sentences[LANG()]) ? es.sentences[LANG()] : Array.isArray(es.sentences.en) ? es.sentences.en : []) : [];
-  let lede = sent.filter(x=>typeof x==='string' && x).join(' ');
-  if(!lede){
-    const sm = asObj(DASH_DATA.summary) || {};
-    const camps = numOrNull(sm.changed_campaigns) ?? new Set(rows.filter(c=>campaignIdentity(c)).map(c=>accountIdentity(c)+'||'+campaignIdentity(c))).size;
-    const people = numOrNull(sm.active_users) ?? new Set(rows.filter(c=>c.actor_type==='human').map(userIdentity)).size;
-    lede = t('lede_fb', {c: fmtInt(camps), p: fmtInt(people), a: fmtInt(rows.filter(c=>c.actor_type==='automation').length)});
-  }
-  document.getElementById('lede').innerHTML = boldNumbers(lede);
+  const lede = document.getElementById('lede'); lede.innerHTML = ''; lede.hidden = true;
   const sp = rowSpan(), per = es && asObj(es.period);
   const from = (per && per.from) || (sp.first && (sp.first.timestamp_iso || sp.first.timestamp_utc));
   const to = (per && per.to) || (sp.last && (sp.last.timestamp_iso || sp.last.timestamp_utc));
@@ -4994,42 +5048,41 @@ function renderHero(){
     [t('m_tz'), tzLabel(m.timeline_reference_tz)], [t('m_generated'), m.generated_at ? fmtWall(m.generated_at, true) : '—']];
   document.getElementById('metaList').innerHTML = items.map(([k,v])=>`<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('');
 }
-function renderStats(){
-  const es = execSummary(), tot = (es && asObj(es.totals)) || {}, sm = asObj(DASH_DATA.summary) || {}, rows = rowsAll(), m = dmeta();
+function renderStats(ctx){
+  ctx = ctx || p1Ctx();
+  const es = execSummary(), tot = (!ctx.filtered && es && asObj(es.totals)) || {}, sm = (!ctx.filtered && asObj(DASH_DATA.summary)) || {}, rows = ctx.rows, m = ctx.filtered ? {} : dmeta();
   const changes = numOrNull(tot.changes) ?? numOrNull(m.row_count) ?? rows.length;
   const camps = numOrNull(tot.campaigns_changed) ?? numOrNull(sm.changed_campaigns) ?? new Set(rows.filter(c=>campaignIdentity(c)).map(c=>accountIdentity(c)+'||'+campaignIdentity(c))).size;
   const people = numOrNull(tot.people) ?? numOrNull(sm.active_users) ?? new Set(rows.filter(c=>c.actor_type==='human').map(userIdentity)).size;
   const auto = numOrNull(tot.automation) ?? rows.filter(c=>c.actor_type==='automation').length;
-  const attn = numOrNull(tot.attention_flags) ?? (Array.isArray(DASH_DATA.flags) ? flagList().filter(f=>f.tier!=='info').length : null);
+  const hasFlags = Array.isArray(DASH_DATA.flags);
+  const attn = hasFlags ? ctx.flags.filter(f=>f.tier!=='info').length : numOrNull(tot.attention_flags);
+  const hot = hasFlags ? ctx.flags.filter(f=>f.tier!=='info' && flagHot(f)).length : 0;
   const cards = [[changes, t('st_changes')], [camps, t('st_campaigns')], [people, t('st_people', {a: fmtInt(auto)})]];
-  if(attn!=null) cards.push([attn, t('st_attention'), 'focus']);
+  if(attn!=null) cards.push([attn, hot ? t('st_attention_hot', {h: fmtInt(hot)}) : t('st_attention'), hot ? 'focus hot' : 'focus']);
   else cards.push([numOrNull(tot.ad_groups_changed) ?? numOrNull(sm.changed_ad_groups) ?? new Set(rows.filter(c=>adGroupIdentity(c)).map(c=>campaignIdentity(c)+'||'+adGroupIdentity(c))).size, t('st_adgroups')]);
   document.getElementById('statCards').innerHTML = cards.map(([v,l,cls])=>`<div class="stat${cls ? ' '+cls : ''}"><div class="v">${escapeHtml(fmtInt(v))}</div><div class="l">${escapeHtml(l)}</div></div>`).join('');
 }
 function flagWhere(f){ return f.campaign || f.ad_group || f.user || f.account || ''; }
 function flagWhereLong(f){ return [f.account && accountNames().length>1 ? f.account : null, f.campaign, f.ad_group, f.user].filter(Boolean).join(' · '); }
 function countHtml(g){ return `<span class="count ${g.tier==='info' ? 'info' : 'attn'}">${escapeHtml(fmtInt(g.hits))}<span class="sr"> ${escapeHtml(t('flags_sr'))}</span></span>`; }
-function renderFlagCards(){
+function renderFlagCards(ctx){
+  ctx = ctx || p1Ctx();
   const el = document.getElementById('flagCards');
   document.getElementById('threshLink').hidden = !hasFlagData();
   if(!hasFlagData()){ el.innerHTML = `<div class="flag-empty">${escapeHtml(t('flags_nodata'))} <a href="${escapeHtml(buildHash('p3'))}">${escapeHtml(t('tab3'))}</a></div>`; return; }
-  const groups = ruleGroups();
-  if(!groups.length){ el.innerHTML = `<div class="flag-empty">${escapeHtml(t('flags_zero'))} <a href="${escapeHtml(buildHash('p2', 's2'))}">${escapeHtml(t('thr_h'))}</a></div>`; return; }
-  // 2026-11-19: page 1 is a short executive summary. Attention rules: title,
-  // one example and "+N more"; info rules: one compact line. Full lists on page 2.
+  const groups = groupsFrom(ctx.flags);
+  if(!groups.length){ el.innerHTML = `<div class="flag-empty">${escapeHtml(t(ctx.filtered ? 'flags_zero_f' : 'flags_zero'))} <a href="${escapeHtml(buildHash('p2', 's2'))}">${escapeHtml(t('thr_h'))}</a></div>`; return; }
+  // 2026-11-20: one line per rule: what the rule says and how many times it fired; red when any is high.
   const attn = groups.filter(g=>g.tier!=='info'), info = groups.filter(g=>g.tier==='info');
-  let html = attn.map((g,i)=>{
-    const f = g.flags[0], more = Math.max(0, (numOrNull(g.hits) ?? g.flags.length) - 1);
-    const ex = f ? `<li><a href="${escapeHtml(flagHref(f))}"><time>${escapeHtml(fmtShort(f.ts_first))}</time><span>${escapeHtml([flagWhere(f), flagText(f)].filter(Boolean).join(' · '))}</span></a></li>` : '';
-    const moreLink = more ? `<li class="more"><a href="${escapeHtml(hrefAll({rule: g.rule}))}">${escapeHtml(tn('more_n', more))}</a></li>` : '';
-    return `<article class="flag"><span class="no" aria-hidden="true">${String(i+1).padStart(2, '0')}</span><div><h3><a href="${escapeHtml(hrefAll({rule: g.rule}))}" title="${escapeHtml(g.description || '')}">${escapeHtml(g.title)}</a></h3>${ex || moreLink ? `<ul class="ex">${ex}${moreLink}</ul>` : ''}</div>${countHtml(g)}</article>`;
-  }).join('');
-  if(info.length) html += `<div class="flag-info"><span class="fi-h">${escapeHtml(t('info_h'))}</span>${info.map(g=>`<a href="${escapeHtml(hrefAll({rule: g.rule}))}">${escapeHtml(g.title)} <span class="count info">${escapeHtml(fmtInt(g.hits))}</span></a>`).join('')}</div>`;
+  let html = attn.length ? `<div class="rrows">${attn.map(g=>`<a class="rrow${g.hot ? ' hot' : ''}" href="${escapeHtml(hrefAll({rule: g.rule}))}"><span class="rt">${escapeHtml(g.title)}</span>${g.hot ? `<span class="hotpill" title="${escapeHtml(t('hot_title'))}">${escapeHtml(t('hot_n', {n: fmtInt(g.hot)}))}</span>` : '<span></span>'}<span class="rc">${escapeHtml(tn('n_times', g.n)).replace(escapeHtml(fmtInt(g.n)), `<b>${escapeHtml(fmtInt(g.n))}</b>`)}</span></a>`).join('')}</div>` : '';
+  if(info.length) html += `<div class="flag-info"><span class="fi-h">${escapeHtml(t('info_h'))}</span>${info.map(g=>`<a href="${escapeHtml(hrefAll({rule: g.rule}))}">${escapeHtml(g.title)} <span class="count info">${escapeHtml(fmtInt(g.n))}</span></a>`).join('')}</div>`;
   el.innerHTML = html;
 }
-function renderWho(){
+function renderWho(ctx){
+  ctx = ctx || p1Ctx();
   const es = execSummary();
-  const people = (es && Array.isArray(es.people) ? es.people.filter(p=>p && typeof p==='object') : computePeople(rowsAll())).map(p=>({label: String(p.label ?? ''), actor_type: p.actor_type || 'unknown', n: numOrNull(p.changes) || 0}));
+  const people = (!ctx.filtered && es && Array.isArray(es.people) ? es.people.filter(p=>p && typeof p==='object') : computePeople(ctx.rows)).map(p=>({label: String(p.label ?? ''), actor_type: p.actor_type || 'unknown', n: numOrNull(p.changes) || 0}));
   const humans = people.filter(p=>p.actor_type==='human').sort((a,b)=>b.n-a.n), other = people.filter(p=>p.actor_type!=='human');
   const sum = l=> l.reduce((a,p)=>a+p.n, 0);
   const segs = humans.slice(0, 3).map((p,i)=>({label: p.label, n: p.n, color: `var(--s${i+1})`, user: p.label}));
@@ -5041,8 +5094,9 @@ function renderWho(){
   document.getElementById('whoBody').innerHTML = `<div class="wbar" role="img" aria-label="${escapeHtml(aria)}">${segs.filter(s=>s.n>0).map(s=>`<i style="width:${(s.n/total*100).toFixed(2)}%;background:${s.color}"></i>`).join('')}</div>`
     + `<ul class="legend">${segs.map(s=>`<li><span class="sw" style="background:${s.color}" aria-hidden="true"></span>${s.user ? `<a href="${escapeHtml(hrefAll({user: s.user}))}">${escapeHtml(s.label)}</a>` : `<span class="lt">${escapeHtml(s.label)}</span>`}<b>${escapeHtml(fmtInt(s.n))}</b></li>`).join('')}</ul>`;
 }
-function renderBudget(){
-  const es = execSummary(); const b = (es && asObj(es.budget)) || computeBudget(rowsAll());
+function renderBudget(ctx){
+  ctx = ctx || p1Ctx();
+  const es = execSummary(); const b = (!ctx.filtered && es && asObj(es.budget)) || computeBudget(ctx.rows);
   const inc = Math.abs(numOrNull(b.increase_total) || 0), dec = Math.abs(numOrNull(b.decrease_total) || 0);
   const ni = numOrNull(b.increase_count) || 0, nd = numOrNull(b.decrease_count) || 0;
   const el = document.getElementById('budgetBody');
@@ -5051,13 +5105,20 @@ function renderBudget(){
     + `<div class="b alt"><div class="v"><span class="sgn">−</span>${escapeHtml(fmtMoney(dec, b.currency))}</div><div class="l">${escapeHtml(tn('n_decreases', nd))}</div></div></div>`
     + `<a class="more" href="${escapeHtml(hrefAll({category: 'Budget'}))}">${escapeHtml(t('budget_more'))}</a>`;
 }
-function renderStale(){
-  const list = staleList(), d = staleDays(), multi = accountNames().length > 1;
-  document.getElementById('staleSub').textContent = t(list.some(s=>s.basis==='metrics') ? 'stale_sub_m' : 'stale_sub');
+// 2026-11-20: every untouched campaign AND ad group from the stale_entity flags (the card used to show campaigns only).
+function staleItems(ctx){
+  const fl = ctx.flags.filter(f=>f.rule==='stale_entity');
+  if(!fl.length && !Array.isArray(DASH_DATA.flags)) return staleList().map(s=>({account: s.account, campaign: s.campaign, ad_group: null, days: numOrNull(s.days), level: 'campaign'}));
+  return fl.map(f=>({account: f.account, campaign: f.campaign, ad_group: f.fact && f.fact.level==='ad_group' ? f.ad_group : null, days: numOrNull(f.fact && f.fact.days), level: (f.fact && f.fact.level) || 'campaign'}))
+    .sort((a,b)=> (b.days ?? -1) - (a.days ?? -1));
+}
+function renderStale(ctx){
+  ctx = ctx || p1Ctx();
+  const list = staleItems(ctx), d = staleDays(), multi = accountNames().length > 1;
   const el = document.getElementById('staleBody');
   if(!list.length){ el.innerHTML = `<p class="sub" style="margin:0">${escapeHtml(t('stale_none', {d: fmtInt(d)}))}</p>`; return; }
-  el.innerHTML = `<ul class="stale">${list.slice(0, 5).map(s=>`<li><a href="${escapeHtml(hrefAll({account: s.account, campaign: s.campaign}))}">${escapeHtml(s.campaign || '—')}${multi && s.account ? `<small>${escapeHtml(s.account)}</small>` : ''}</a><span class="dpill">${escapeHtml(tn('n_days', numOrNull(s.days) ?? 0))}</span></li>`).join('')}</ul>`
-    + (list.length > 5 ? `<a class="more" href="${escapeHtml(buildHash('p2', 's1'))}">${escapeHtml(tn('n_more', list.length-5))}</a>` : '');
+  el.innerHTML = `<ul class="stale">${list.slice(0, 6).map(s=>`<li><a href="${escapeHtml(hrefAll({account: s.account, campaign: s.campaign}))}">${escapeHtml(s.level==='ad_group' && s.ad_group ? s.ad_group : (s.campaign || '—'))}<small>${escapeHtml(s.level==='ad_group' ? t('stale_adgroup_in', {c: s.campaign || '—'}) : (multi && s.account ? s.account : t('stale_campaign')))}</small></a><span class="dpill">${s.days!=null ? escapeHtml(tn('n_days', s.days)) : '—'}</span></li>`).join('')}</ul>`
+    + (list.length > 6 ? `<a class="more" href="${escapeHtml(buildHash('p2', 's1'))}">${escapeHtml(tn('n_more', list.length-6))}</a>` : '');
 }
 let CAVEATS = [];
 function renderP1Notes(){
@@ -5088,7 +5149,7 @@ function renderCampaignTable(){
       return `<tr class="crow" data-href="${escapeHtml(href)}"><td class="wrapc"><a href="${escapeHtml(href)}">${escapeHtml(r.campaign || '—')}</a></td>${multi ? `<td>${escapeHtml(r.account || '')}</td>` : ''}<td class="num">${escapeHtml(fmtInt(r.changes))}</td><td class="num">${escapeHtml(fmtInt(r.budget_changes ?? 0))}</td><td class="num" title="${escapeHtml(r.last_change ? fmtWall(r.last_change, true) : '')}">${escapeHtml(ago(r))}</td><td class="wrapc">${tags(r) || '<span class="muted">—</span>'}</td></tr>`; }).join('')
   }</tbody></table>${rows.length > LIMIT ? `<button type="button" class="plainbtn morebtn" id="campMore">${escapeHtml(campShowAll ? t('show_less') : t('show_all', {n: fmtInt(rows.length)}))}</button>` : ''}` : `<div class="empty">${escapeHtml(t('no_data'))}</div>`;
   el.querySelectorAll('.th-btn').forEach(b=> b.addEventListener('click', ()=>{ const k = b.dataset.ck; if(campSort.key===k) campSort.dir *= -1; else { campSort.key = k; campSort.dir = k==='campaign' || k==='account' ? 1 : -1; } renderCampaignTable(); const nb = el.querySelector(`.th-btn[data-ck="${k}"]`); if(nb) nb.focus(); }));
-  el.querySelectorAll('tr.crow').forEach(tr=> tr.addEventListener('click', e=>{ if(e.target.closest('a')) return; location.hash = tr.dataset.href; }));
+  el.querySelectorAll('tr.crow').forEach(tr=> tr.addEventListener('click', e=>{ if(e.target.closest('a')) return; navigate(tr.dataset.href); }));
   const mb = document.getElementById('campMore'); if(mb) mb.addEventListener('click', ()=>{ campShowAll = !campShowAll; renderCampaignTable(); const nb = document.getElementById('campMore'); if(nb) nb.focus(); });
 }
 function renderFlagGroups(){
@@ -5140,10 +5201,15 @@ function initSideSpy(){
   mark('s1');
 }
 // ---- routing -----------------------------------------------------------
-let currentPage = null, lastHash = null;
-function replaceHash(h){ try { history.replaceState(null, '', h); } catch(e){ location.hash = h; } lastHash = location.hash; }
+let currentPage = null, lastHash = null, vHash = null;
+// 2026-11-20: previews that sandbox the page block link navigation and history calls;
+// pages switch from our own click handler and fall back to an in-memory hash.
+function curHash(){ return vHash!=null ? vHash : location.hash; }
+function replaceHash(h){ try { history.replaceState(null, '', h); vHash = null; } catch(e){ vHash = h; } lastHash = curHash(); }
+function navigate(h){ try { history.pushState(null, '', h); vHash = null; } catch(e){ vHash = h; } route(); }
 function showPage(pid){
   ['p1','p2','p3'].forEach(id=>{ document.getElementById(id).hidden = id!==pid; });
+  document.body.dataset.page = pid;
   document.querySelectorAll('.tab').forEach(a=>{ if(a.dataset.page===pid) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   const name = t({p1:'tab1', p2:'tab2', p3:'tab3'}[pid]), accs = accountNames();
   document.title = `${name} · ${t('brand')}${accs.length===1 ? ' · '+accs[0] : ''}`;
@@ -5151,10 +5217,10 @@ function showPage(pid){
   currentPage = pid;
 }
 function route(){
-  const r = parseHash(location.hash);
-  const fresh = location.hash !== lastHash;
+  const h = curHash(), r = parseHash(h);
+  const fresh = h !== lastHash;
   if(fresh && Object.keys(r.params).length){ applyDeepLink(r.params); render(); }
-  lastHash = location.hash;
+  lastHash = h;
   const changed = currentPage !== r.page;
   const ae = document.activeElement;
   showPage(r.page);
@@ -5172,10 +5238,18 @@ function initRouting(){
   document.querySelectorAll('#sideList a').forEach(a=>{
     a.setAttribute('href', buildHash('p2', a.dataset.sec));
     // the same section twice: no hashchange, scroll anyway
-    a.addEventListener('click', ()=>{ if(a.getAttribute('href')===location.hash){ const s = document.getElementById(a.dataset.sec); if(s) s.scrollIntoView({block: 'start'}); } });
+    a.addEventListener('click', ()=>{ if(a.getAttribute('href')===curHash()){ const s = document.getElementById(a.dataset.sec); if(s) s.scrollIntoView({block: 'start'}); } });
   });
   document.getElementById('threshLink').setAttribute('href', buildHash('p2', 's2'));
-  window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', ()=>{ vHash = null; route(); });
+  document.addEventListener('click', e=>{
+    const a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+    if(!a || e.button!==0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const h = a.getAttribute('href'); if(!h || h==='#') return;
+    e.preventDefault();
+    if(h==='#main'){ const m = document.getElementById('main'); if(m) m.focus(); return; }
+    navigate(h);
+  }, true);
   route();
 }
 // ---- i18n of the static markup: [data-t] text and [data-ta] attributes ----
@@ -5245,7 +5319,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   renderCoverage();
   initFilters();
   initRuleMatchesConfig();
-  renderHero(); renderStats(); renderFlagCards(); renderWho(); renderBudget(); renderStale(); renderP1Notes();
+  renderP1(); renderP1Notes();
   renderCampaignTable(); renderFlagGroups(); renderThresholds();
   document.getElementById('detailBA').addEventListener('click', e=>{ const b = e.target.closest('[data-open]'); if(b) openDetail(b.dataset.open); });
   window.addEventListener('resize', ()=>{ if(lastMetricLine) drawMetricLine(lastMetricLine); });
@@ -7896,14 +7970,14 @@ check('formatters: short date, period, money, headline number, bold lede numbers
 check('page 1 renders from the new fields: headline, stats with the dark card, rule cards, people, budget, stale', ()=>{
   load('tr');
   renderHero(); renderStats(); renderFlagCards(); renderWho(); renderBudget(); renderStale();
-  assert.ok(html('headline').includes('<em>4</em>')); assert.ok(html('lede').includes('<b>'));
+  assert.ok(html('headline').includes('<em>4</em>')); assert.strictEqual(html('lede'), '', 'page 1 has no lede (2026-11-20: minimal summary)');
   assert.ok(html('metaList').includes('İstanbul') && html('metaList').includes('1 Haz – 6 Ağu 2026'), html('metaList'));
   assert.ok(html('statCards').includes('stat focus') && html('statCards').includes('Kişi · 1 otomasyon'), html('statCards'));
   const fc = html('flagCards');
-  assert.ok(fc.indexOf('budget_jump') < fc.indexOf('stale_entity') && fc.includes('href="#tum?kural=budget_jump"') && fc.includes('href="#tum?durum=F1"'), fc);
+  assert.ok(fc.indexOf('budget_jump') < fc.indexOf('stale_entity') && fc.includes('href="#tum?kural=budget_jump"') && fc.includes('class="rrow') && /<b>\d+<\/b> kez/.test(fc), fc);
   // 2026-11-19: page 1 shows info rules as one compact line; the per-flag campaign link lives in flagHref (used on page 2).
   assert.ok(flagHref(flagList().find(f=>f.rule==='stale_entity')).includes('kampanya=Camp%20Beta'), 'a flag with no change ids links to its campaign');
-  assert.ok(fc.includes('class="count info"') && fc.includes('04.08 14:21'), fc);
+  assert.ok(fc.includes('class="count info"') && !fc.includes('04.08 14:21'), 'one line per rule, no example lines: '+fc);
   assert.ok(html('whoBody').includes('Otomasyon ve Google') && html('whoBody').includes('role="img"'));
   const btxt = html('budgetBody').replace(/<[^>]+>/g, ''); assert.ok(btxt.includes('+₺395') && btxt.includes('−₺50'), btxt);
   assert.ok(html('staleBody').includes('66 gün'));

@@ -3,7 +3,7 @@
 The "never judge" promise becomes a wording rule. A flag is a fact measured
 against a threshold the user sets; the report says "worth a look" ("göz
 atılacak"), shows the fact and the rule that fired, and never says good, bad,
-wrong, risky, error or anomaly, with no red/green.
+wrong, risky, error or anomaly. (Round 13: flags at twice the threshold or a value set back are marked high, in red, on the summary.)
 
 | Area | What changed | Where it shows |
 |---|---|---|
