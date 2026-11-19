@@ -7651,7 +7651,7 @@ def _run_r9_dashboard_cases(td):
         body = body.replace("const DASH_DATA = /*__DASH_DATA__*/null;", "let DASH_DATA = null;", 1)
         harness = ("global.document = { addEventListener: function(){} };\n" + body + "\nconst TWINS = "
                    + json.dumps(twins, ensure_ascii=False) + ";\n" + _JS_R9_DASHBOARD_SUITE)
-        proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=15)
+        proc = subprocess.run(["node", "-"], input=harness, capture_output=True, text=True, timeout=15)
         assert proc.returncode == 0, f"r9 dashboard JS suite failed:\n{proc.stdout}\n{proc.stderr}"
         print(f"[PASS] r9 dashboard JS suite (Node): {proc.stdout.strip()}")
 
@@ -7759,7 +7759,7 @@ def _run_r10_dashboard_cases(td):
         body = re.search(r"<script>(.*?)</script>", DASHBOARD_TEMPLATE, re.S).group(1)
         body = body.replace("const DASH_DATA = /*__DASH_DATA__*/null;", "let DASH_DATA = null;", 1)
         harness = "global.document = { addEventListener: function(){} };\n" + body + "\n" + _JS_R10_DASHBOARD_SUITE
-        proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=15)
+        proc = subprocess.run(["node", "-"], input=harness, capture_output=True, text=True, timeout=15)
         assert proc.returncode == 0, f"r10 dashboard JS suite failed:\n{proc.stdout}\n{proc.stderr}"
         print(f"[PASS] r10 dashboard JS suite (Node): {proc.stdout.strip()}")
 
@@ -8005,7 +8005,7 @@ def _run_r12_ui_cases(td):
         print("[SKIP] r12 UI JS suite (Node not found on PATH)")
         return
     with _test_case("r12 UI JS suite (Node): i18n table, routing, flag filters, deep links, fallbacks, renders"):
-        proc = subprocess.run(["node", "-e", _r12_ui_harness()], capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(["node", "-"], input=_r12_ui_harness(), capture_output=True, text=True, timeout=30)
         assert proc.returncode == 0, f"r12 UI JS suite failed:\n{proc.stdout}\n{proc.stderr}"
         print(f"[PASS] r12 UI JS suite (Node): {proc.stdout.strip()}")
 
@@ -8026,7 +8026,7 @@ def _run_js_rule_matches_regression():
     )
     assert "let DASH_DATA = null;" in body, "DASH_DATA declaration line not found — DASHBOARD_TEMPLATE's opening const may have changed shape"
     harness = "global.document = { addEventListener: function(){} };\n" + body + "\n" + _JS_RULE_MATCHES_TEST_SUITE
-    proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=15)
+    proc = subprocess.run(["node", "-"], input=harness, capture_output=True, text=True, timeout=15)
     assert proc.returncode == 0, f"Rule Matches JS regression suite failed:\n{proc.stdout}\n{proc.stderr}"
     print(f"[PASS] Rule Matches JS regression suite (Node): {proc.stdout.strip()}")
 
@@ -8470,7 +8470,7 @@ def _run_r11_cases(td):
                 "addEventListener(){}, querySelectorAll(){ return []; }, querySelector(){ return null; }, appendChild(){}}; }\n"
                 "global.document = { addEventListener(){}, getElementById(id){ return __els[id] || (__els[id] = __el()); }, "
                 "querySelectorAll(){ return []; }, querySelector(){ return null; }, createElement(){ return __el(); }, body: __el() };\n")
-        proc = subprocess.run(["node", "-e", stub + body + "\n" + _JS_R11_EXPLORER_SUITE], capture_output=True, text=True, timeout=15)
+        proc = subprocess.run(["node", "-"], input=stub + body + "\n" + _JS_R11_EXPLORER_SUITE, capture_output=True, text=True, timeout=15)
         assert proc.returncode == 0, f"r11 explorer JS check failed:\n{proc.stdout}\n{proc.stderr}"
         print(f"[PASS] r11 B-2 (Node): {proc.stdout.strip()}")
 
@@ -8910,7 +8910,7 @@ def _run_round7_cases(td):
         assert m, "unpackChanges() not found in the dashboard template"
         (td / "packed.json").write_text(json.dumps(packed), encoding="utf-8")
         js = m.group(0) + f"\nprocess.stdout.write(JSON.stringify(unpackChanges(JSON.parse(require('fs').readFileSync({json.dumps(str(td / 'packed.json'))}, 'utf8')))));"
-        proc = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, timeout=30)
         assert proc.returncode == 0, f"unpackChanges failed under Node:\n{proc.stderr}"
         assert json.loads(proc.stdout) == many, "unpacked rows differ from the rows that were packed"
         plain, small = len(json.dumps(many)), len(json.dumps(packed))
